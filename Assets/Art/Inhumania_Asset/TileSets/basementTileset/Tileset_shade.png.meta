@@ -1,0 +1,458 @@
+fileFormatVersion: 2
+guid: a231a52baa01e144c93a6cdc8c1b8a86
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 4381684229222350170
+    second: Tileset_shade_0
+  - first:
+      213: 6179032325719643573
+    second: Tileset_shade_1
+  - first:
+      213: -7780604062977992094
+    second: Tileset_shade_2
+  - first:
+      213: -8375786087085214310
+    second: Tileset_shade_3
+  - first:
+      213: -6051541197644317177
+    second: Tileset_shade_4
+  - first:
+      213: -4707062898687937352
+    second: Tileset_shade_5
+  - first:
+      213: -5424608781706489488
+    second: Tileset_shade_6
+  - first:
+      213: 2817418187794529779
+    second: Tileset_shade_7
+  - first:
+      213: -9220805341812085981
+    second: Tileset_shade_8
+  - first:
+      213: -4119995691146790563
+    second: Tileset_shade_9
+  - first:
+      213: 3162468924135156967
+    second: Tileset_shade_10
+  - first:
+      213: -5702876942328999921
+    second: Tileset_shade_11
+  - first:
+      213: 2544196405527500796
+    second: Tileset_shade_12
+  - first:
+      213: -1094124871588044341
+    second: Tileset_shade_13
+  - first:
+      213: 6104009285356593985
+    second: Tileset_shade_14
+  - first:
+      213: -3794470468946365469
+    second: Tileset_shade_15
+  - first:
+      213: 889681056978245857
+    second: Tileset_shade_16
+  - first:
+      213: -4235399868322935752
+    second: Tileset_shade_17
+  - first:
+      213: 8732345228233074882
+    second: Tileset_shade_18
+  - first:
+      213: -5338635162394143085
+    second: Tileset_shade_19
+  - first:
+      213: -1062867512108470888
+    second: Tileset_shade_20
+  - first:
+      213: 8282426287124571393
+    second: Tileset_shade_21
+  - first:
+      213: 6518579848623526502
+    second: Tileset_shade_22
+  - first:
+      213: 4955267244068237193
+    second: Tileset_shade_23
+  - first:
+      213: -1120743572782804630
+    second: Tileset_shade_24
+  - first:
+      213: -324235250319827536
+    second: Tileset_shade_25
+  - first:
+      213: -2058569771155839022
+    second: Tileset_shade_26
+  - first:
+      213: 4163706394645954289
+    second: Tileset_shade_27
+  - first:
+      213: -5619185529600731988
+    second: Tileset_shade_28
+  - first:
+      213: -2447038727457285371
+    second: Tileset_shade_29
+  - first:
+      213: 5779954286477336418
+    second: Tileset_shade_30
+  - first:
+      213: 300272051625085748
+    second: Tileset_shade_31
+  - first:
+      213: 4424865055186854178
+    second: Tileset_shade_32
+  - first:
+      213: -1138268683108805147
+    second: Tileset_shade_33
+  - first:
+      213: -204237274994324600
+    second: Tileset_shade_34
+  - first:
+      213: -806456606021934940
+    second: Tileset_shade_35
+  - first:
+      213: -3745124887775890501
+    second: Tileset_shade_36
+  - first:
+      213: 1605857114694471355
+    second: Tileset_shade_37
+  - first:
+      213: 5348293150278655393
+    second: Tileset_shade_38
+  - first:
+      213: 2548250393410344506
+    second: Tileset_shade_39
+  - first:
+      213: 8283070853893881487
+    second: Tileset_shade_40
+  - first:
+      213: -4012717074755709336
+    second: Tileset_shade_41
+  - first:
+      213: 8295161150087350481
+    second: Tileset_shade_42
+  - first:
+      213: -5423400690083539777
+    second: Tileset_shade_43
+  - first:
+      213: 7082409275256854866
+    second: Tileset_shade_44
+  - first:
+      213: 9223042545584439546
+    second: Tileset_shade_45
+  - first:
+      213: -8550117386409612507
+    second: Tileset_shade_46
+  - first:
+      213: 3748882374234523519
+    second: Tileset_shade_47
+  - first:
+      213: -6583094797609887534
+    second: Tileset_shade_48
+  - first:
+      213: 7929128487363372230
+    second: Tileset_shade_49
+  - first:
+      213: 5256165549087909391
+    second: Tileset_shade_50
+  - first:
+      213: -7147926877608206906
+    second: Tileset_shade_51
+  - first:
+      213: 353015679219549568
+    second: Tileset_shade_52
+  - first:
+      213: -4518558176583771185
+    second: Tileset_shade_53
+  - first:
+      213: -5366105445898524596
+    second: Tileset_shade_54
+  - first:
+      213: -55941965681945287
+    second: Tileset_shade_55
+  - first:
+      213: -8292917686099044458
+    second: Tileset_shade_56
+  - first:
+      213: -7144338217550534569
+    second: Tileset_shade_57
+  - first:
+      213: 2974745365914216258
+    second: Tileset_shade_58
+  - first:
+      213: 4479714289711406141
+    second: Tileset_shade_59
+  - first:
+      213: 4424809498962094034
+    second: Tileset_shade_60
+  - first:
+      213: -7585611322227925992
+    second: Tileset_shade_61
+  - first:
+      213: 8014665674955439545
+    second: Tileset_shade_62
+  - first:
+      213: -2447476545268542224
+    second: Tileset_shade_63
+  - first:
+      213: 876827435123928208
+    second: Tileset_shade_64
+  - first:
+      213: 2582173151482880905
+    second: Tileset_shade_65
+  - first:
+      213: 9168085618912044088
+    second: Tileset_shade_66
+  - first:
+      213: 8554218508776877607
+    second: Tileset_shade_67
+  - first:
+      213: 6811290310227649212
+    second: Tileset_shade_68
+  - first:
+      213: -6707476289236273242
+    second: Tileset_shade_69
+  - first:
+      213: -3258568545286604207
+    second: Tileset_shade_70
+  - first:
+      213: 1576818020147938787
+    second: Tileset_shade_71
+  - first:
+      213: 2558624925060233985
+    second: Tileset_shade_72
+  - first:
+      213: -3217125547861620538
+    second: Tileset_shade_73
+  - first:
+      213: 3912309986779384473
+    second: Tileset_shade_74
+  - first:
+      213: 4926988958917312117
+    second: Tileset_shade_75
+  - first:
+      213: 5930400866433403211
+    second: Tileset_shade_76
+  - first:
+      213: -4620223457127815131
+    second: Tileset_shade_77
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 0
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 320
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 8192
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: Tileset_shade_0
+      rect:
+        serializedVersion: 2
+        x: 320
+        y: 0
+        width: 320
+        height: 320
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a5dbab0679edecc30800000000000000
+      internalID: 4381684229222350170
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Tileset_shade_1
+      rect:
+        serializedVersion: 2
+        x: 640
+        y: 0
+        width: 320
+        height: 320
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5b5dc2e892550c550800000000000000
+      internalID: 6179032325719643573
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Tileset_shade_2
+      rect:
+        serializedVersion: 2
+        x: 960
+        y: 0
+        width: 320
+        height: 320
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 26a5c3004ddb50490800000000000000
+      internalID: -7780604062977992094
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Tileset_shade_3
+      rect:
+        serializedVersion: 2
+        x: 1280
+        y: 0
+        width: 320
+        height: 320
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a9570ac3eea33cb80800000000000000
+      internalID: -8375786087085214310
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: a88e2543902cba147a978d0a84e2af15
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries:
+      - key: SpriteEditor.SliceSettings
+        value: '{"sliceOnImport":false,"gridCellCount":{"x":1.0,"y":1.0},"gridSpriteSize":{"x":320.0,"y":320.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.0,"y":0.5},"pivotPixels":{"x":0.0,"y":0.0},"autoSlicingMethod":0,"spriteAlignment":4,"pivotUnitMode":0,"slicingType":1,"keepEmptyRects":false,"isAlternate":false}'
+    nameFileIdTable:
+      Tileset_shade_0: 4381684229222350170
+      Tileset_shade_1: 6179032325719643573
+      Tileset_shade_2: -7780604062977992094
+      Tileset_shade_3: -8375786087085214310
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

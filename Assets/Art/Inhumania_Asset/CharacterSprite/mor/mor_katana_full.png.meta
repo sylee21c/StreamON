@@ -1,0 +1,667 @@
+fileFormatVersion: 2
+guid: 8938dc79c56bce342a84a88c6bc05678
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -7410114259386376518
+    second: z_katana_full_0
+  - first:
+      213: 4226960698011175007
+    second: z_katana_full_1
+  - first:
+      213: 3652603025850470808
+    second: z_katana_full_2
+  - first:
+      213: 6155871114237371301
+    second: z_katana_full_3
+  - first:
+      213: -7661981128636819931
+    second: z_katana_full_4
+  - first:
+      213: -353693140777056341
+    second: z_katana_full_5
+  - first:
+      213: -3419536366846979215
+    second: z_katana_full_6
+  - first:
+      213: -7980002009592888629
+    second: z_katana_full_7
+  - first:
+      213: 5319100448702587229
+    second: z_katana_full_8
+  - first:
+      213: 3397143817944744734
+    second: z_katana_full_9
+  - first:
+      213: -3206226722294092854
+    second: z_katana_full_10
+  - first:
+      213: 3781335865454874763
+    second: z_katana_full_11
+  - first:
+      213: -7596288491757742678
+    second: z_katana_full_12
+  - first:
+      213: -5499615729763889930
+    second: z_katana_full_13
+  - first:
+      213: 720002460537090727
+    second: z_katana_full_14
+  - first:
+      213: 4277871117888625651
+    second: z_katana_full_15
+  - first:
+      213: -7651687431843154533
+    second: z_katana_full_16
+  - first:
+      213: 4081441125097119178
+    second: z_katana_full_17
+  - first:
+      213: 957087010641705119
+    second: z_katana_full_18
+  - first:
+      213: 1889664083060976873
+    second: z_katana_full_19
+  - first:
+      213: 9149082172268448385
+    second: z_katana_full_20
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 0
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 16
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: z_katana_full_0
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 50
+        height: 64
+      alignment: 9
+      pivot: {x: 0.5, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: abed730775cf92990800000000000000
+      internalID: -7410114259386376518
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_1
+      rect:
+        serializedVersion: 2
+        x: 93
+        y: 0
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0.5, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f584e740c5e29aa30800000000000000
+      internalID: 4226960698011175007
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_2
+      rect:
+        serializedVersion: 2
+        x: 200
+        y: 0
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0.5, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 89195558917a0b230800000000000000
+      internalID: 3652603025850470808
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_3
+      rect:
+        serializedVersion: 2
+        x: 303
+        y: 0
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0.45, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5a3e437c92c0e6550800000000000000
+      internalID: 6155871114237371301
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_4
+      rect:
+        serializedVersion: 2
+        x: 409
+        y: 0
+        width: 85
+        height: 65
+      alignment: 9
+      pivot: {x: 0.28, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5261bd722cc2ba590800000000000000
+      internalID: -7661981128636819931
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_5
+      rect:
+        serializedVersion: 2
+        x: 518
+        y: 0
+        width: 76
+        height: 65
+      alignment: 9
+      pivot: {x: 0.2, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ba7cd7066fd671bf0800000000000000
+      internalID: -353693140777056341
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_7
+      rect:
+        serializedVersion: 2
+        x: 718
+        y: 0
+        width: 70
+        height: 64
+      alignment: 9
+      pivot: {x: 0.2, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bc2005fb376514190800000000000000
+      internalID: -7980002009592888629
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_8
+      rect:
+        serializedVersion: 2
+        x: 1115
+        y: 0
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0.55, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d51e9812dad31d940800000000000000
+      internalID: 5319100448702587229
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_9
+      rect:
+        serializedVersion: 2
+        x: 1214
+        y: 0
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0.56, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e13c287bd44152f20800000000000000
+      internalID: 3397143817944744734
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_10
+      rect:
+        serializedVersion: 2
+        x: 1314
+        y: 0
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0.56, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: acbab4c88c13183d0800000000000000
+      internalID: -3206226722294092854
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_11
+      rect:
+        serializedVersion: 2
+        x: 1423
+        y: 0
+        width: 74
+        height: 97
+      alignment: 9
+      pivot: {x: 0.3, y: 0.03}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b80d1ec6fe00a7430800000000000000
+      internalID: 3781335865454874763
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_12
+      rect:
+        serializedVersion: 2
+        x: 1525
+        y: 0
+        width: 74
+        height: 64
+      alignment: 9
+      pivot: {x: 0.24, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: aa554651ddf849690800000000000000
+      internalID: -7596288491757742678
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_13
+      rect:
+        serializedVersion: 2
+        x: 1628
+        y: 0
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0.25, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6fcc54ac1a07da3b0800000000000000
+      internalID: -5499615729763889930
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_14
+      rect:
+        serializedVersion: 2
+        x: 1729
+        y: 0
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0.25, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7a278b15c66fdf900800000000000000
+      internalID: 720002460537090727
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_15
+      rect:
+        serializedVersion: 2
+        x: 1820
+        y: 0
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0.35, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3fb97a8dd1d0e5b30800000000000000
+      internalID: 4277871117888625651
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_16
+      rect:
+        serializedVersion: 2
+        x: 1920
+        y: 0
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0.37, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b95faa432debfc590800000000000000
+      internalID: -7651687431843154533
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_17
+      rect:
+        serializedVersion: 2
+        x: 619
+        y: 0
+        width: 70
+        height: 64
+      alignment: 9
+      pivot: {x: 0.2, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: acd9511341134a830800000000000000
+      internalID: 4081441125097119178
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_18
+      rect:
+        serializedVersion: 2
+        x: 808
+        y: 0
+        width: 93
+        height: 64
+      alignment: 9
+      pivot: {x: 0.37, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f987078b091484d00800000000000000
+      internalID: 957087010641705119
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_19
+      rect:
+        serializedVersion: 2
+        x: 907
+        y: 0
+        width: 77
+        height: 64
+      alignment: 9
+      pivot: {x: 0.5, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9ece9afb87f693a10800000000000000
+      internalID: 1889664083060976873
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: z_katana_full_20
+      rect:
+        serializedVersion: 2
+        x: 1006
+        y: 0
+        width: 68
+        height: 64
+      alignment: 9
+      pivot: {x: 0.57, y: 0.04}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 18a8be203c118fe70800000000000000
+      internalID: 9149082172268448385
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 0f5b7ff68a32b9743a91f7987354b113
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      z_katana_full_0: -7410114259386376518
+      z_katana_full_1: 4226960698011175007
+      z_katana_full_10: -3206226722294092854
+      z_katana_full_11: 3781335865454874763
+      z_katana_full_12: -7596288491757742678
+      z_katana_full_13: -5499615729763889930
+      z_katana_full_14: 720002460537090727
+      z_katana_full_15: 4277871117888625651
+      z_katana_full_16: -7651687431843154533
+      z_katana_full_17: 4081441125097119178
+      z_katana_full_18: 957087010641705119
+      z_katana_full_19: 1889664083060976873
+      z_katana_full_2: 3652603025850470808
+      z_katana_full_20: 9149082172268448385
+      z_katana_full_3: 6155871114237371301
+      z_katana_full_4: -7661981128636819931
+      z_katana_full_5: -353693140777056341
+      z_katana_full_6: -3419536366846979215
+      z_katana_full_7: -7980002009592888629
+      z_katana_full_8: 5319100448702587229
+      z_katana_full_9: 3397143817944744734
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
