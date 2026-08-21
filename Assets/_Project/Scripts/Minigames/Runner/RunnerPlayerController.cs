@@ -28,7 +28,14 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private int maxHealth = 3;
         [SerializeField] private float invincibilitySeconds = 1f;
 
-        public int MaxHealth => maxHealth;
+        [Header("Campaign Skill Scaling")]
+        [SerializeField, Min(1)] private int maximumEffectiveSkillLevel = 10;
+        [SerializeField, Min(1)] private int healthStatLevelsPerBonusHealth = 2;
+        [SerializeField, Min(0)] private int maximumHealthStatBonusHealth = 4;
+        [SerializeField, Min(0.05f)] private float minimumAttackCooldown = 0.38f;
+        [SerializeField, Min(0f)] private float maximumAttackRangeBonus = 1.25f;
+
+        public int MaxHealth => _runtimeMaxHealth > 0 ? _runtimeMaxHealth : maxHealth;
         public int CurrentHealth { get; private set; }
 
         private Rigidbody2D _body;
@@ -44,6 +51,9 @@ namespace StreamOn.Minigames.Runner
         private bool _isRolling;
         private Vector2 _standingColliderSize;
         private Vector2 _standingColliderOffset;
+        private int _runtimeMaxHealth;
+        private float _runtimeAttackCooldown;
+        private float _runtimeAttackMaximumRange;
 
         private static readonly int GroundedHash = Animator.StringToHash("Grounded");
         private static readonly int JumpHash = Animator.StringToHash("Jump");
@@ -67,6 +77,7 @@ namespace StreamOn.Minigames.Runner
             _standingColliderSize = box.size;
             _standingColliderOffset = box.offset;
             _startPosition = transform.position;
+            ConfigureForSkill(1, 1);
         }
 
         private void Update()
@@ -140,7 +151,7 @@ namespace StreamOn.Minigames.Runner
         {
             transform.position = _startPosition;
             _body.linearVelocity = Vector2.zero;
-            CurrentHealth = maxHealth;
+            CurrentHealth = MaxHealth;
             _invincibleUntil = 0f;
             _attackReadyAt = 0f;
             _jumpInProgress = false;
@@ -150,6 +161,18 @@ namespace StreamOn.Minigames.Runner
             animator.Update(0f);
             animator.SetBool(DeadHash, false);
             animator.SetBool(GroundedHash, true);
+        }
+
+        public void ConfigureForSkill(int gameSkill, int healthStat)
+        {
+            int maximumIndex = Mathf.Max(1, maximumEffectiveSkillLevel - 1);
+            int skillIndex = Mathf.Clamp(gameSkill - 1, 0, maximumIndex);
+            float progress = skillIndex / (float)maximumIndex;
+            int healthBonus = Mathf.Min(maximumHealthStatBonusHealth,
+                Mathf.Max(0, healthStat - 1) / Mathf.Max(1, healthStatLevelsPerBonusHealth));
+            _runtimeMaxHealth = maxHealth + healthBonus;
+            _runtimeAttackCooldown = Mathf.Lerp(attackCooldown, Mathf.Min(attackCooldown, minimumAttackCooldown), progress);
+            _runtimeAttackMaximumRange = attackMaximumRange + maximumAttackRangeBonus * progress;
         }
 
         private void OnTriggerEnter2D(Collider2D other)
@@ -191,7 +214,7 @@ namespace StreamOn.Minigames.Runner
 
         private void Attack()
         {
-            _attackReadyAt = Time.time + attackCooldown;
+            _attackReadyAt = Time.time + _runtimeAttackCooldown;
             animator.SetTrigger(AttackHash);
 
             RunnerObstacle bestTarget = null;
@@ -200,7 +223,7 @@ namespace StreamOn.Minigames.Runner
             {
                 if (obstacle.ObstacleType != RunnerObstacleType.Enemy || obstacle.IsAvailable) continue;
                 float distance = obstacle.transform.position.x - transform.position.x;
-                if (distance < attackMinimumRange || distance > attackMaximumRange || distance >= bestDistance) continue;
+                if (distance < attackMinimumRange || distance > _runtimeAttackMaximumRange || distance >= bestDistance) continue;
                 bestTarget = obstacle;
                 bestDistance = distance;
             }

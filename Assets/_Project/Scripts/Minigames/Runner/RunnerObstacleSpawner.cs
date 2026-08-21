@@ -25,7 +25,11 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private float minimumSpawnDelay = 1.4f;
         [SerializeField] private float maximumSpawnDelay = 2.6f;
 
+        [Header("Campaign Difficulty")]
+        [SerializeField, Range(0.25f, 1f)] private float minimumSpawnDelayMultiplier = 0.7f;
+
         private float _timer;
+        private float _spawnDelayMultiplier = 1f;
 
         private void Awake()
         {
@@ -40,7 +44,7 @@ namespace StreamOn.Minigames.Runner
             _timer -= Time.deltaTime;
             if (_timer > 0f) return;
             SpawnAvailable();
-            _timer = Random.Range(minimumSpawnDelay, maximumSpawnDelay);
+            _timer = Random.Range(minimumSpawnDelay, maximumSpawnDelay) * _spawnDelayMultiplier;
         }
 
         public void ResetRun()
@@ -48,7 +52,12 @@ namespace StreamOn.Minigames.Runner
             DeactivatePool(jumpObstacles);
             DeactivatePool(rollObstacles);
             DeactivatePool(enemyObstacles);
-            _timer = initialSpawnDelay;
+            _timer = initialSpawnDelay * _spawnDelayMultiplier;
+        }
+
+        public void ConfigureDifficulty(float normalizedDifficulty)
+        {
+            _spawnDelayMultiplier = Mathf.Lerp(1f, minimumSpawnDelayMultiplier, Mathf.Clamp01(normalizedDifficulty));
         }
 
         private void SpawnAvailable()

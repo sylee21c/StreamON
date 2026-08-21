@@ -1,0 +1,71 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 55ce2dc1780b40289aa2795f85b87431, type: 3}
+  m_Name: RunnerBroadcastGrowthSettings
+  m_EditorClassIdentifier: Assembly-CSharp::StreamOn.Minigames.Runner.RunnerBroadcastGrowthSettings
+  baseDiscoveryViewers: 2
+  followerNotificationRate: 0.08
+  viewersPerHypePoint: 0.12
+  viewersPerGameSkill: 0.45
+  viewersPerTalkingSkill: 0.8
+  viewerUpdateInterval: 5
+  viewerAdjustmentRate: 0.38
+  viewerRandomVariation: 0.12
+  idleViewerFluctuationChance: 0.55
+  idleFluctuationMaximumViewers: 50
+  startingHype: 35
+  restingHype: 30
+  hypeReturnPerSecond: 0.08
+  obstacleClearedHype: 1.5
+  enemyDefeatedHype: 5
+  attackMissedHype: -2.5
+  playerHitHype: -9
+  lowHealthDramaHype: 3
+  completedBroadcastHype: 8
+  defeatedHype: -12
+  baseChatters: 1.2
+  chattersPerViewerSquareRoot: 1.08
+  maximumSimulatedChatters: 40
+  chatSpeedPerViewerLog: 0.28
+  minimumChatDelayMultiplier: 0.38
+  smallAudienceEventReactionChance: 0.16
+  largeAudienceEventReactionChance: 0.88
+  viewersForMaximumChatActivity: 500
+  smallAudienceEventCooldown: 4.5
+  largeAudienceEventCooldown: 0.75
+  baseFollowConversion: 0.08
+  followConversionPerRatingPoint: 0.025
+  followConversionPerTalkingLevel: 0.01
+  completionFollowBonus: 0.03
+  maximumFollowConversion: 0.4
+  unfollowRatingThreshold: 2.5
+  unfollowRatePerMissingRatingPoint: 0.03
+  gameplayRatingWeight: 0.4
+  survivalRatingWeight: 0.2
+  safetyRatingWeight: 0.15
+  combatRatingWeight: 0.15
+  hostingRatingWeight: 0.1
+  wonPerViewerRatingPoint: 50
+  donationBonusPerTalkingLevel: 0.08
+  donationRandomVariation: 0.15
+  minimumViewersForDonation: 1
+  liveDonationCooldown: 9
+  obstacleClearDonationChance: 0.025
+  enemyDefeatDonationChance: 0.16
+  tilePickupDonationChance: 0.018
+  tileStageClearDonationChance: 0.2
+  donationChancePerTalkingLevel: 0.12
+  smallDonationWon: 1000
+  mediumDonationWon: 5000
+  largeDonationWon: 10000
+  mediumDonationChance: 0.22
+  largeDonationChance: 0.05

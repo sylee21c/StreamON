@@ -39,6 +39,7 @@ namespace StreamOn.EditorTools
             scene.name = "BroadcastRunner";
 
             TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/TextMesh Pro/Examples & Extras/Fonts/Galmuri14 SDF.asset");
+            RunnerCampaignSettings campaignSettings = AssetDatabase.LoadAssetAtPath<RunnerCampaignSettings>("Assets/_Project/Settings/RunnerCampaignSettings.asset");
             Sprite uiSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
             Sprite[] runFrames = LoadSprites(RunSpritePath);
             Sprite[] jumpFrames = LoadSprites(JumpSpritePath);
@@ -54,6 +55,8 @@ namespace StreamOn.EditorTools
             RunnerGameManager manager = new GameObject("Runner Game Manager").AddComponent<RunnerGameManager>();
             SceneManager.MoveGameObjectToScene(manager.gameObject, scene);
             manager.transform.SetParent(systems.transform);
+            RunnerCampaignController campaign = manager.gameObject.AddComponent<RunnerCampaignController>();
+            Set(campaign, "settings", campaignSettings);
             RunnerObstacleSpawner spawner = new GameObject("Obstacle Spawner").AddComponent<RunnerObstacleSpawner>();
             SceneManager.MoveGameObjectToScene(spawner.gameObject, scene);
             spawner.transform.SetParent(systems.transform);
@@ -155,7 +158,7 @@ namespace StreamOn.EditorTools
             eventSystem.AddComponent<EventSystem>();
             eventSystem.AddComponent<InputSystemUIInputModule>();
 
-            Set(manager, "player", player); Set(manager, "spawner", spawner); Set(manager, "chat", chat); Set(manager, "hud", hud);
+            Set(manager, "player", player); Set(manager, "spawner", spawner); Set(manager, "chat", chat); Set(manager, "hud", hud); Set(manager, "campaign", campaign);
             Set(player, "gameManager", manager); Set(player, "animator", animator); Set(player, "groundCheck", groundCheck.transform); Set(player, "groundLayer", (LayerMask)(1 << 6));
             Set(spawner, "gameManager", manager);
             Set(spawner, "spawnPoint", spawnPoint);
@@ -169,6 +172,7 @@ namespace StreamOn.EditorTools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Debug.Log($"STREAM ON runner scene created: {ScenePath}");
+            EditorApplication.delayCall += StreamOn.Editor.SharedLiveChatPrefabBuilder.RefreshScenes;
         }
 
         private static Sprite[] LoadSprites(string path) => AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().OrderBy(FrameIndex).ToArray();

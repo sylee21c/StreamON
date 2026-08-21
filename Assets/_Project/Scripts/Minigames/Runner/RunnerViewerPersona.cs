@@ -63,6 +63,39 @@ namespace StreamOn.Minigames.Runner
             "문장 끝을 짧게 끊는다.", "가끔 ㅋㅋ를 붙이되 남발하지 않는다.", "이모티콘 없이 담백하게 말한다.",
             "가끔 의문형으로 반응한다.", "맞춤법을 완벽히 지키지 않아도 된다.", "짧은 감탄사를 자주 쓴다."
         };
+        private static readonly string[] NaturalNamePrefixes =
+        {
+            "졸린", "느긋한", "말랑한", "수상한", "조용한", "급한", "작은", "대충사는",
+            "퇴근한", "길잃은", "배부른", "심심한", "흔들리는", "납작한", "새벽의", "비오는날"
+        };
+        private static readonly string[] NaturalNameNouns =
+        {
+            "만두", "두부", "문어", "주먹밥", "토끼", "장갑", "주전자", "도토리", "식빵", "고등어",
+            "우산", "쿠키", "오리", "선인장", "복숭아", "라면", "펭귄", "비둘기", "참새", "양말"
+        };
+        private static readonly string[] NaturalPhraseNames =
+        {
+            "집가면서봄", "닉네임고민중", "오늘만보고감", "한판만더본다", "겜은잘모름", "밥식는중",
+            "출근하기싫음", "조용히보는중", "방금들어옴", "누워서보는사람", "일단켜놓음", "내일은진짜잠"
+        };
+        private static readonly string[] NaturalShortNames =
+        {
+            "구르릉", "모구리", "두부둡", "몽실쿵", "부릉밤", "토독이", "냐루", "오모리",
+            "해파링", "푸릇", "물컹", "차차롱", "보도독", "무니", "라로", "콩구리"
+        };
+        private static readonly string[] NaturalEnglishNames =
+        {
+            "mango", "mint", "noon", "river", "dodo", "mocha", "zero", "cloud",
+            "soda", "biscuit", "podo", "mumu", "slow", "tiny", "blue", "lime"
+        };
+        private static readonly string[] NaturalCuratedNames =
+        {
+            "고장난토스터", "우산없는날", "낮잠실패", "계란말이끝부분", "복숭아국물", "마른오징어",
+            "한입만먹음", "안자고뭐함", "퇴근은언제", "돌아온김씨", "물먹는수달", "라면국물연구소",
+            "대충지은아이디", "오늘도눕는다", "닉변예정", "말랑복숭", "구불감자", "자다깬참새",
+            "이름없는주전자", "보라색양말", "김치말이두부", "새벽두시반", "아직안잠", "겜보다밥",
+            "MintRice", "cloud_37", "oo0oo", "qwer782", "mumu12", "BluePodo", "ramen404", "noon_ing"
+        };
 
         public static RunnerViewerData Create(RunnerViewerPersonaData persona, int index, HashSet<string> usedNicknames)
         {
@@ -97,20 +130,81 @@ namespace StreamOn.Minigames.Runner
         }
         private static string PickUniqueNickname(string[] values, int index, string fallback, HashSet<string> used)
         {
-            if (values != null && values.Length > 0)
+            // Real chat rosters mix arbitrary handles, generated lounge names, phrases,
+            // English IDs, and only an occasional role/fandom name. Persona-specific
+            // pools remain available, but no longer define nearly every viewer's name.
+            if (UnityEngine.Random.value < 0.82f)
             {
-                int start = UnityEngine.Random.Range(0, values.Length);
-                for (int offset = 0; offset < values.Length; offset++)
-                {
-                    string candidate = values[(start + index + offset) % values.Length];
-                    if (!string.IsNullOrWhiteSpace(candidate) && used.Add(candidate)) return candidate;
-                }
+                string natural = PickNaturalNickname(used);
+                if (!string.IsNullOrWhiteSpace(natural)) return natural;
             }
-            string baseNickname = string.IsNullOrWhiteSpace(fallback) ? "익명시청자" : fallback;
-            string nickname = baseNickname;
-            int suffix = 2;
-            while (!used.Add(nickname)) nickname = baseNickname + suffix++;
-            return nickname;
+
+            string provided = PickProvidedNickname(values, index, used);
+            if (!string.IsNullOrWhiteSpace(provided)) return provided;
+
+            string generated = PickNaturalNickname(used);
+            if (!string.IsNullOrWhiteSpace(generated)) return generated;
+
+            string baseNickname = string.IsNullOrWhiteSpace(fallback) ? "익명" : fallback;
+            for (int suffix = 2; suffix < 10000; suffix++)
+            {
+                string candidate = baseNickname + suffix;
+                if (used.Add(candidate)) return candidate;
+            }
+            return baseNickname + UnityEngine.Random.Range(10000, 99999);
+        }
+
+        private static string PickProvidedNickname(string[] values, int index, HashSet<string> used)
+        {
+            if (values == null || values.Length == 0) return null;
+            int start = UnityEngine.Random.Range(0, values.Length);
+            for (int offset = 0; offset < values.Length; offset++)
+            {
+                string candidate = values[(start + index + offset) % values.Length];
+                if (!string.IsNullOrWhiteSpace(candidate) && used.Add(candidate)) return candidate;
+            }
+            return null;
+        }
+
+        private static string PickNaturalNickname(HashSet<string> used)
+        {
+            for (int attempt = 0; attempt < 32; attempt++)
+            {
+                int style = UnityEngine.Random.Range(0, 100);
+                string candidate;
+                if (style < 24)
+                {
+                    candidate = PickRandom(NaturalCuratedNames);
+                }
+                else if (style < 45)
+                {
+                    candidate = PickRandom(NaturalNamePrefixes) + PickRandom(NaturalNameNouns);
+                }
+                else if (style < 58)
+                {
+                    candidate = PickRandom(NaturalNamePrefixes) + " " + PickRandom(NaturalNameNouns)
+                        + " " + UnityEngine.Random.Range(10, 999999);
+                }
+                else if (style < 72)
+                {
+                    candidate = PickRandom(NaturalPhraseNames);
+                }
+                else if (style < 83)
+                {
+                    candidate = PickRandom(NaturalShortNames);
+                }
+                else if (style < 95)
+                {
+                    candidate = PickRandom(NaturalEnglishNames) + UnityEngine.Random.Range(0, 9999);
+                }
+                else
+                {
+                    candidate = PickRandom(NaturalNameNouns) + PickRandom(new[] { "먹는중", "좋아함", "수집중", "보고감", "한접시" });
+                }
+
+                if (used.Add(candidate)) return candidate;
+            }
+            return null;
         }
         private static string PickRandom(string[] values) => values[UnityEngine.Random.Range(0, values.Length)];
         private static float Vary(float value) => Mathf.Clamp01(value + UnityEngine.Random.Range(-0.12f, 0.12f));

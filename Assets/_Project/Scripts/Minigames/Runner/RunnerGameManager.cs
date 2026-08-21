@@ -4,6 +4,7 @@ using UnityEngine;
 namespace StreamOn.Minigames.Runner
 {
     public enum RunnerGameState { Ready, Playing, GameOver }
+    public enum RunnerRunEndReason { None, PlayerDefeated, TimeLimitCompleted }
 
     public sealed class RunnerGameManager : MonoBehaviour
     {
@@ -13,12 +14,24 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private RunnerGroundLooper groundLooper;
         [SerializeField] private RunnerChatController chat;
         [SerializeField] private RunnerHUD hud;
+        [SerializeField] private RunnerCampaignController campaign;
+        [SerializeField] private RunnerBroadcastAudienceController audience;
 
         [Header("Run Balance")]
-        [SerializeField] private float startingSpeed = 5.5f;
-        [SerializeField] private float maximumSpeed = 12f;
-        [SerializeField] private float speedGainPerSecond = 0.08f;
+        [SerializeField] private float startingSpeed = 8f;
+        [SerializeField] private float maximumSpeed = 20f;
+        [SerializeField] private float speedGainPerSecond = 0.25f;
         [SerializeField] private float scorePerSecond = 10f;
+
+        [Header("Broadcast Retry Rules")]
+        [SerializeField, Min(0f)] private float gameOverTimePenaltySeconds = 8f;
+
+        [Header("Campaign Difficulty")]
+        [SerializeField, Min(1)] private int daysToMaximumDifficulty = 15;
+        [SerializeField, Min(0f)] private float maximumStartingSpeedBonus = 3f;
+        [SerializeField, Min(0f)] private float maximumSpeedLimitBonus = 4f;
+        [SerializeField, Min(1)] private int maximumEffectiveGameSkill = 10;
+        [SerializeField, Range(0f, 0.5f)] private float scoreBonusPerGameSkill = 0.08f;
 
         public RunnerGameState State { get; private set; } = RunnerGameState.Ready;
         public float WorldSpeed { get; private set; }
@@ -27,50 +40,146 @@ namespace StreamOn.Minigames.Runner
         public float ElapsedSeconds { get; private set; }
         public int EnemiesDefeated { get; private set; }
         public int HitsTaken { get; private set; }
+        public float BroadcastDurationSeconds { get; private set; } = 90f;
+        public float BroadcastSecondsRemaining { get; private set; }
+        public float BroadcastElapsedSeconds { get; private set; }
+        public bool BroadcastActive => _broadcastActive;
+        public bool IsFinalAttempt => _broadcastActive && BroadcastSecondsRemaining <= 0f;
+        public bool CanRestartAttempt => _broadcastActive && State == RunnerGameState.GameOver
+            && BroadcastSecondsRemaining > 0f;
+        public int AttemptsPlayed { get; private set; }
+        public RunnerRunEndReason LastEndReason { get; private set; }
+        public RunnerBroadcastResult BroadcastResult { get; private set; }
         public event Action<float> SpeedChanged;
 
         private float _rawScore;
+        private float _runStartingSpeed;
+        private float _runMaximumSpeed;
+        private float _runScoreMultiplier = 1f;
+        private bool _broadcastActive;
+        private int _bestAttemptScore;
+
+        private void Awake()
+        {
+            _runStartingSpeed = startingSpeed;
+            _runMaximumSpeed = maximumSpeed;
+            if (campaign == null) campaign = GetComponent<RunnerCampaignController>();
+            if (audience == null) audience = GetComponent<RunnerBroadcastAudienceController>();
+            if (audience == null) audience = gameObject.AddComponent<RunnerBroadcastAudienceController>();
+        }
 
         private void Start()
         {
-            HighScore = PlayerPrefs.GetInt("Runner.HighScore", 0);
-            BeginRun();
+            HighScore = RunnerUserSettingsStore.Load().runnerHighScore;
+            if (campaign != null) campaign.Initialize(this);
+            else BeginRun();
         }
 
         private void Update()
         {
+            if (_broadcastActive)
+            {
+                BroadcastElapsedSeconds += Time.deltaTime;
+                BroadcastSecondsRemaining = Mathf.Max(0f, BroadcastSecondsRemaining - Time.deltaTime);
+                if (State == RunnerGameState.GameOver)
+                {
+                    hud.SetScore(Score, HighScore, WorldSpeed, BroadcastSecondsRemaining);
+                    hud.SetRetryAvailable(CanRestartAttempt, BroadcastSecondsRemaining);
+                    if (BroadcastSecondsRemaining <= 0f) FinishBroadcast();
+                }
+            }
             if (State != RunnerGameState.Playing) return;
-            WorldSpeed = Mathf.Min(maximumSpeed, WorldSpeed + speedGainPerSecond * Time.deltaTime);
+            WorldSpeed = Mathf.Min(_runMaximumSpeed, WorldSpeed + speedGainPerSecond * Time.deltaTime);
             ElapsedSeconds += Time.deltaTime;
-            _rawScore += scorePerSecond * Time.deltaTime * (WorldSpeed / startingSpeed);
+            _rawScore += scorePerSecond * _runScoreMultiplier * Time.deltaTime * (WorldSpeed / _runStartingSpeed);
             Score = Mathf.FloorToInt(_rawScore);
-            hud.SetScore(Score, HighScore, WorldSpeed);
+            hud.SetScore(Score, HighScore, WorldSpeed, BroadcastSecondsRemaining);
             SpeedChanged?.Invoke(WorldSpeed);
         }
 
         public void BeginRun()
         {
+            _broadcastActive = true;
+            AttemptsPlayed = 0;
+            _bestAttemptScore = 0;
+            ElapsedSeconds = 0f;
+            EnemiesDefeated = 0;
+            HitsTaken = 0;
+            LastEndReason = RunnerRunEndReason.None;
+            BroadcastResult = null;
+            BroadcastElapsedSeconds = 0f;
+            BroadcastSecondsRemaining = BroadcastDurationSeconds;
+            if (campaign != null && campaign.IsActive)
+                audience.BeginBroadcast(campaign.Followers, campaign.GameSkill, campaign.TalkingSkill);
+            chat.ResetChat();
+            BeginAttempt(false);
+        }
+
+        private void BeginAttempt(bool isRetry)
+        {
             State = RunnerGameState.Playing;
-            WorldSpeed = startingSpeed;
+            AttemptsPlayed++;
+            WorldSpeed = _runStartingSpeed;
+            _rawScore = 0f;
+            Score = 0;
+            LastEndReason = RunnerRunEndReason.None;
+            groundLooper?.ResetTiles();
+            spawner.ResetRun();
+            player.ResetPlayer();
+            hud.ShowGameOver(false);
+            hud.SetScore(0, HighScore, WorldSpeed, BroadcastSecondsRemaining);
+            hud.SetHealth(player.CurrentHealth, player.MaxHealth);
+            hud.SetRetryAvailable(true, BroadcastSecondsRemaining);
+            if (isRetry) chat.ResumeRunChat();
+            else chat.React(RunnerChatEvent.RunStarted);
+        }
+
+        public void PrepareCampaignDay()
+        {
+            State = RunnerGameState.Ready;
+            WorldSpeed = 0f;
             _rawScore = 0f;
             Score = 0;
             ElapsedSeconds = 0f;
             EnemiesDefeated = 0;
             HitsTaken = 0;
+            LastEndReason = RunnerRunEndReason.None;
+            _broadcastActive = false;
+            AttemptsPlayed = 0;
+            _bestAttemptScore = 0;
+            BroadcastElapsedSeconds = 0f;
+            BroadcastSecondsRemaining = BroadcastDurationSeconds;
             groundLooper?.ResetTiles();
             spawner.ResetRun();
             player.ResetPlayer();
             hud.ShowGameOver(false);
-            hud.SetScore(0, HighScore, WorldSpeed);
+            hud.SetScore(0, HighScore, 0f);
             hud.SetHealth(player.CurrentHealth, player.MaxHealth);
             chat.ResetChat();
-            chat.React(RunnerChatEvent.RunStarted);
+        }
+
+        public void ConfigureCampaignRun(int day, int gameSkill, int healthStat, float broadcastDurationSeconds,
+            float gameOverPenaltySeconds = 8f)
+        {
+            int dayIndex = Mathf.Max(0, day - 1);
+            int skillIndex = Mathf.Clamp(gameSkill - 1, 0, Mathf.Max(0, maximumEffectiveGameSkill - 1));
+            float difficulty = Mathf.Clamp01(dayIndex / (float)Mathf.Max(1, daysToMaximumDifficulty));
+            _runStartingSpeed = startingSpeed + maximumStartingSpeedBonus * difficulty;
+            _runMaximumSpeed = maximumSpeed + maximumSpeedLimitBonus * difficulty;
+            _runScoreMultiplier = 1f + skillIndex * scoreBonusPerGameSkill;
+            BroadcastDurationSeconds = Mathf.Max(1f, broadcastDurationSeconds);
+            BroadcastSecondsRemaining = BroadcastDurationSeconds;
+            gameOverTimePenaltySeconds = Mathf.Max(0f, gameOverPenaltySeconds);
+            player.ConfigureForSkill(gameSkill, healthStat);
+            spawner.ConfigureDifficulty(difficulty);
+            audience.Configure(campaign != null ? campaign.GrowthSettings : null, this, chat);
         }
 
         public void OnObstacleCleared(RunnerObstacleType obstacleType)
         {
             if (State != RunnerGameState.Playing) return;
-            _rawScore += 25f;
+            _rawScore += 25f * _runScoreMultiplier;
+            audience?.OnObstacleCleared();
             chat.React(obstacleType == RunnerObstacleType.Roll
                 ? RunnerChatEvent.PlayerRolled
                 : RunnerChatEvent.ObstacleCleared);
@@ -80,50 +189,97 @@ namespace StreamOn.Minigames.Runner
         {
             if (State != RunnerGameState.Playing) return;
             HitsTaken++;
+            audience?.OnPlayerHit(player.CurrentHealth <= 1);
             chat.React(player.CurrentHealth <= 1 ? RunnerChatEvent.LowHealth : RunnerChatEvent.PlayerHit);
             hud.SetHealth(player.CurrentHealth, player.MaxHealth);
-            if (player.CurrentHealth <= 0) EndRun();
+            if (player.CurrentHealth <= 0) EndRun(RunnerRunEndReason.PlayerDefeated);
         }
 
         public void OnPlayerJumped() => chat.React(RunnerChatEvent.PlayerJumped);
 
-        public void OnAttackMissed() => chat.React(RunnerChatEvent.AttackMissed);
+        public void OnAttackMissed()
+        {
+            audience?.OnAttackMissed();
+            chat.React(RunnerChatEvent.AttackMissed);
+        }
 
         public void OnEnemyDefeated()
         {
             if (State != RunnerGameState.Playing) return;
             EnemiesDefeated++;
-            _rawScore += 75f;
+            _rawScore += 75f * _runScoreMultiplier;
+            audience?.OnEnemyDefeated();
             chat.React(RunnerChatEvent.EnemyDefeated);
         }
 
         public void OnEnemyEscaped() => player.ReceiveHit();
 
-        public void EndRun()
+        public void EndRun() => EndRun(RunnerRunEndReason.PlayerDefeated);
+
+        public void EndRun(RunnerRunEndReason reason)
         {
             if (State == RunnerGameState.GameOver) return;
             State = RunnerGameState.GameOver;
+            LastEndReason = reason;
+            _bestAttemptScore = Mathf.Max(_bestAttemptScore, Score);
             bool isNewHighScore = Score > HighScore;
             if (isNewHighScore)
             {
                 HighScore = Score;
-                PlayerPrefs.SetInt("Runner.HighScore", HighScore);
-                PlayerPrefs.Save();
+                RunnerUserSettingsData userSettings = RunnerUserSettingsStore.Load();
+                userSettings.runnerHighScore = HighScore;
+                RunnerUserSettingsStore.Save(userSettings);
             }
-            chat.BeginGameOverChat(isNewHighScore);
-            hud.SetScore(Score, HighScore, WorldSpeed);
+            if (reason == RunnerRunEndReason.PlayerDefeated)
+            {
+                audience?.OnAttemptDefeated();
+                BroadcastSecondsRemaining = Mathf.Max(0f, BroadcastSecondsRemaining - gameOverTimePenaltySeconds);
+            }
+            else if (reason == RunnerRunEndReason.TimeLimitCompleted)
+                BroadcastSecondsRemaining = 0f;
+            chat.BeginRunEndedChat(isNewHighScore, false);
+            hud.SetScore(Score, HighScore, WorldSpeed, Mathf.Max(0f, BroadcastSecondsRemaining));
             hud.ShowGameOver(true);
+            hud.SetRetryAvailable(CanRestartAttempt, BroadcastSecondsRemaining);
+            if (BroadcastSecondsRemaining <= 0f) FinishBroadcast();
+        }
+
+        private void FinishBroadcast()
+        {
+            if (!_broadcastActive) return;
+            _broadcastActive = false;
+            State = RunnerGameState.GameOver;
+            LastEndReason = RunnerRunEndReason.TimeLimitCompleted;
+            Score = Mathf.Max(Score, _bestAttemptScore);
+            _rawScore = Score;
+            if (campaign != null && campaign.IsActive)
+                BroadcastResult = audience?.FinishBroadcast(Score, campaign.CurrentTargetScore, HitsTaken, EnemiesDefeated,
+                    BroadcastElapsedSeconds, BroadcastDurationSeconds, true);
+            chat.BeginRunEndedChat(Score > HighScore, true);
+            hud.SetScore(Score, HighScore, WorldSpeed, 0f);
+            hud.SetRetryAvailable(false, 0f);
+            if (campaign != null && campaign.IsActive)
+            {
+                hud.ShowGameOver(false);
+                campaign.HandleRunEnded();
+            }
+            else hud.ShowGameOver(true);
         }
 
         public void RestartRun()
         {
-            if (State == RunnerGameState.GameOver) BeginRun();
+            if (State != RunnerGameState.GameOver) return;
+            if (CanRestartAttempt) BeginAttempt(true);
+            else if (!_broadcastActive && (campaign == null || !campaign.IsActive)) BeginRun();
         }
+
+        public void NotifyChat(RunnerChatEvent chatEvent) => chat?.React(chatEvent);
 
         public RunnerChatSnapshot CreateChatSnapshot(string events)
         {
-            return new RunnerChatSnapshot
+            RunnerChatSnapshot snapshot = new RunnerChatSnapshot
             {
+                gameTitle = "러너",
                 gameState = State.ToString(),
                 events = events,
                 score = Score,
@@ -133,8 +289,36 @@ namespace StreamOn.Minigames.Runner
                 maxHealth = player != null ? player.MaxHealth : 0,
                 enemiesDefeated = EnemiesDefeated,
                 hitsTaken = HitsTaken,
-                elapsedSeconds = ElapsedSeconds
+                elapsedSeconds = ElapsedSeconds,
+                broadcastSecondsRemaining = BroadcastSecondsRemaining,
+                broadcastDurationSeconds = BroadcastDurationSeconds,
+                runEndReason = LastEndReason.ToString()
             };
+            if (campaign != null && campaign.IsActive)
+            {
+                snapshot.campaignDay = campaign.Day;
+                snapshot.campaignMaximumDays = campaign.MaximumDays;
+                snapshot.campaignEndless = campaign.IsEndless;
+                snapshot.subscribers = campaign.Subscribers;
+                snapshot.mental = campaign.Mental;
+                snapshot.gameSkill = campaign.GameSkill;
+                snapshot.talkingSkill = campaign.TalkingSkill;
+                snapshot.healthStat = campaign.HealthStat;
+                snapshot.targetScore = campaign.CurrentTargetScore;
+                snapshot.campaignBestScore = campaign.BestBroadcastScore;
+                snapshot.selectedDayAction = campaign.LastSelectedAction;
+            }
+            if (audience != null)
+            {
+                snapshot.currentViewers = audience.CurrentViewers;
+                snapshot.chattingViewers = audience.ChattingViewers;
+                snapshot.peakViewers = audience.PeakViewers;
+                snapshot.totalVisitors = audience.TotalVisitors;
+                snapshot.broadcastHype = audience.Hype;
+                snapshot.broadcastRating = BroadcastResult != null ? BroadcastResult.finalRating : 0f;
+                snapshot.donationWon = BroadcastResult != null ? BroadcastResult.donationWon : 0;
+            }
+            return snapshot;
         }
     }
 }

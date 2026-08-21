@@ -1,0 +1,114 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9dbf12a1c57943289b214545e7e8e61e, type: 3}
+  m_Name: RunnerCampaignSettings
+  m_EditorClassIdentifier: Assembly-CSharp::StreamOn.Minigames.Runner.RunnerCampaignSettings
+  lengthMode: 0
+  fixedMaximumDays: 7
+  startingSubscribers: 0
+  startingMental: 70
+  startingGameSkill: 1
+  startingTalkingSkill: 1
+  startingHealthStat: 1
+  maximumMental: 100
+  maximumGameSkill: 3
+  maximumTalkingSkill: 3
+  maximumHealthStat: 3
+  experienceForLevel2: 100
+  experienceForLevel3: 150
+  dayActions:
+  - id: game_training
+    displayName: 게임 훈련
+    description: 게임 경험치 +40 / 멘탈 -6
+    gameSkillDelta: 40
+    talkingSkillDelta: 0
+    healthStatDelta: 0
+    mentalDelta: -6
+    subscriberDelta: 0
+    buttonColor: {r: 0.18, g: 0.72, b: 0.64, a: 1}
+    roomPosition: {x: -3.5, y: 0.6, z: 2.4}
+    roomScale: {x: 1.5, y: 1.2, z: 0.8}
+    roomColor: {r: 0.18, g: 0.72, b: 0.64, a: 1}
+    roomPrefab: {fileID: 0}
+  - id: talking_training
+    displayName: 소통 연습
+    description: 소통 경험치 +40 / 멘탈 -4
+    gameSkillDelta: 0
+    talkingSkillDelta: 40
+    healthStatDelta: 0
+    mentalDelta: -4
+    subscriberDelta: 0
+    buttonColor: {r: 0.35, g: 0.55, b: 0.92, a: 1}
+    roomPosition: {x: 3.5, y: 0.7, z: 2.4}
+    roomScale: {x: 1.3, y: 1.4, z: 0.7}
+    roomColor: {r: 0.35, g: 0.55, b: 0.92, a: 1}
+    roomPrefab: {fileID: 0}
+  - id: rest
+    displayName: 휴식
+    description: 멘탈 +28
+    gameSkillDelta: 0
+    talkingSkillDelta: 0
+    healthStatDelta: 0
+    mentalDelta: 28
+    subscriberDelta: 0
+    buttonColor: {r: 0.66, g: 0.45, b: 0.8, a: 1}
+    roomPosition: {x: 3.4, y: 0.5, z: -2.7}
+    roomScale: {x: 2.2, y: 1, z: 1.2}
+    roomColor: {r: 0.66, g: 0.45, b: 0.8, a: 1}
+    roomPrefab: {fileID: 0}
+  - id: health_training
+    displayName: 체력 단련
+    description: 체력 경험치 +40 / 멘탈 -5 / 레벨업 시 방송 시간 증가
+    gameSkillDelta: 0
+    talkingSkillDelta: 0
+    healthStatDelta: 40
+    mentalDelta: -5
+    subscriberDelta: 0
+    buttonColor: {r: 0.88, g: 0.48, b: 0.28, a: 1}
+    roomPosition: {x: -3.4, y: 0.25, z: -2.5}
+    roomScale: {x: 2.2, y: 0.5, z: 1.5}
+    roomColor: {r: 0.88, g: 0.48, b: 0.28, a: 1}
+    roomPrefab: {fileID: 0}
+  firstDayTargetScore: 350
+  targetScoreIncreasePerDay: 120
+  maximumTargetScore: 1550
+  resultDelay: 1.4
+  baseBroadcastSeconds: 90
+  minimumBroadcastSeconds: 90
+  maximumBroadcastSeconds: 120
+  secondsPerHealthStatLevel: 15
+  gameOverTimePenaltySeconds: 8
+  broadcastGrowthSettings: {fileID: 11400000, guid: af962f6fba2d418eaa50113295cd3263, type: 2}
+  successBaseSubscriberGain: 10
+  failureBaseSubscriberLoss: 16
+  failureSubscriberLossIncreasePerDay: 2
+  maximumFailureScalingDay: 50
+  scorePerSubscriber: 65
+  subscriberGainPerEnemy: 3
+  subscriberPenaltyPerHit: 2
+  subscriberGainPerTalkingLevel: 3
+  maximumEffectiveTalkingLevel: 10
+  successMentalChange: -7
+  failureMentalChange: -17
+  mentalPenaltyPerHit: 2
+  minimumSubscribersToStartBroadcast: 0
+  minimumMentalToStartBroadcast: 1
+  enableAutomaticSave: 1
+  saveSlotCount: 3
+  saveFolderName: Saves
+  playerPrefsSaveKey: StreamOn.RunnerCampaign.Save.v1
+  maximumStoredDayRecords: 100
+  useThreeDimensionalRoomFlow: 1
+  roomSceneName: StreamerRoom
+  broadcastSceneName: BroadcastRunner
+  runnerSceneName: BroadcastRunner
+  tileArenaSceneName: TileArena
