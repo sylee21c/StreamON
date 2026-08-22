@@ -29,7 +29,6 @@ Material:
   - RayTracingPrepass
   - DepthOnly
   - SHADOWCASTER
-  - MOTIONVECTORS
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3

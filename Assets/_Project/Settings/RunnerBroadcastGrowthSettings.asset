@@ -22,16 +22,33 @@ MonoBehaviour:
   viewerRandomVariation: 0.12
   idleViewerFluctuationChance: 0.55
   idleFluctuationMaximumViewers: 50
-  startingHype: 35
-  restingHype: 30
-  hypeReturnPerSecond: 0.08
-  obstacleClearedHype: 1.5
-  enemyDefeatedHype: 5
-  attackMissedHype: -2.5
-  playerHitHype: -9
-  lowHealthDramaHype: 3
+  startingHype: 50
+  restingHype: 50
+  hypeReturnPerSecond: 0
+  heatGainBonusPerTalkingLevel: 0.18
+  heatPenaltyReductionPerTalkingLevel: 0.14
+  newHighScoreHype: 8
+  viewerExitDuration: 3.2
+  performanceWindowSeconds: 12
+  performanceEvaluationInterval: 0.5
+  goodStateMistakeFreeSeconds: 8
+  goodStateMinimumSuccesses: 3
+  poorStateMinimumMistakes: 2
+  poorStateMaximumSuccessesPerMistake: 0.75
+  minimumSuccessSampleSpacing: 0.75
+  minimumMistakeSampleSpacing: 0.35
+  goodStateHeatStepInterval: 3
+  poorStateHeatStepInterval: 2
+  eventHeatChangePerSecond: 3
+  maximumBufferedHeatChange: 20
   completedBroadcastHype: 8
-  defeatedHype: -12
+  correctModerationHype: 7
+  wrongModerationHype: -14
+  fraternizationOngoingHype: -1.4
+  slowFraternizationResolutionHype: 3
+  quickFraternizationResolutionHype: 9
+  quickFraternizationResponseSeconds: 6
+  slowFraternizationResponseSeconds: 32
   baseChatters: 1.2
   chattersPerViewerSquareRoot: 1.08
   maximumSimulatedChatters: 40
@@ -49,6 +66,8 @@ MonoBehaviour:
   maximumFollowConversion: 0.4
   unfollowRatingThreshold: 2.5
   unfollowRatePerMissingRatingPoint: 0.03
+  lowHeatUnfollowThreshold: 28
+  lowHeatUnfollowRate: 0.025
   gameplayRatingWeight: 0.4
   survivalRatingWeight: 0.2
   safetyRatingWeight: 0.15
@@ -59,6 +78,15 @@ MonoBehaviour:
   donationRandomVariation: 0.15
   minimumViewersForDonation: 1
   liveDonationCooldown: 9
+  enableAmbientDonations: 1
+  ambientDonationMinimumInterval: 12
+  ambientDonationMaximumInterval: 24
+  ambientDonationMessages:
+  - "\uBC29\uC1A1 \uC7AC\uBC0C\uAC8C \uBCF4\uACE0 \uC788\uC5B4\uC694 \u314B\u314B"
+  - "\uC624\uB298\uB3C4 \uBC29\uC1A1 \uD30C\uC774\uD305!"
+  - "\uCEE4\uD53C\uAC12 \uBCF4\uD0DC\uACE0 \uAC11\uB2C8\uB2E4"
+  - "\uC870\uC6A9\uD788 \uBCF4\uB2E4\uAC00 \uD55C \uBC88 \uC3E9\uB2C8\uB2E4"
+  - "\uACC4\uC18D \uAC00\uBCF4\uC790\uACE0"
   obstacleClearDonationChance: 0.025
   enemyDefeatDonationChance: 0.16
   tilePickupDonationChance: 0.018

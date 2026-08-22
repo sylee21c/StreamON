@@ -16,6 +16,8 @@ namespace StreamOn.Minigames.Runner
     public sealed class RunnerWitPrompt
     {
         [TextArea(1, 3)] public string viewerMessage;
+        [Tooltip("켜져 있으면 답변하지 않고 넘기는 것이 올바른 반응입니다.")]
+        public bool ignoreIsCorrect;
         public List<RunnerWitChoice> choices = new List<RunnerWitChoice>();
     }
 
@@ -46,6 +48,7 @@ namespace StreamOn.Minigames.Runner
     public sealed class RunnerGeneratedWitPrompt
     {
         public string viewerMessage;
+        public bool shouldIgnore;
         public RunnerGeneratedWitChoice[] choices = Array.Empty<RunnerGeneratedWitChoice>();
     }
 

@@ -26,6 +26,9 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private GameObject gameSelectionPanel;
         [SerializeField] private Button runnerGameButton;
         [SerializeField] private Button tileArenaGameButton;
+        [SerializeField] private Button plasticKnightmareGameButton;
+        [SerializeField, Min(0.2f)] private float activityGaugeAnimationSeconds = 1.2f;
+        [SerializeField, Min(0f)] private float activityResultHoldSeconds = 0.55f;
         [SerializeField, Min(0.1f)] private float fadeDuration = 0.65f;
         [SerializeField, Min(0.5f)] private float interactionDistance = 2.4f;
 
@@ -48,6 +51,7 @@ namespace StreamOn.Minigames.Runner
             AudioListener.volume = RunnerUserSettingsStore.Load().masterVolume;
             if (runnerGameButton != null) runnerGameButton.onClick.AddListener(SelectRunnerGame);
             if (tileArenaGameButton != null) tileArenaGameButton.onClick.AddListener(SelectTileArenaGame);
+            if (plasticKnightmareGameButton != null) plasticKnightmareGameButton.onClick.AddListener(SelectPlasticKnightmareGame);
             if (transitionFade != null)
             {
                 transitionFade.alpha = 0f;
@@ -71,7 +75,11 @@ namespace StreamOn.Minigames.Runner
             _save.gameSkill = Mathf.Clamp(_save.gameSkill, 1, settings.maximumGameSkill);
             _save.talkingSkill = Mathf.Clamp(_save.talkingSkill, 1, settings.maximumTalkingSkill);
             _save.healthStat = Mathf.Clamp(_save.healthStat > 0 ? _save.healthStat : settings.startingHealthStat, 1, settings.maximumHealthStat);
-            _save.mental = Mathf.Clamp(_save.mental, settings.minimumMentalToStartBroadcast, settings.maximumMental);
+            _save.mentalLevel = Mathf.Clamp(_save.mentalLevel > 0 ? _save.mentalLevel : settings.startingMentalLevel, 1, settings.maximumMentalLevel);
+            _save.pcLevel = Mathf.Clamp(_save.pcLevel, 1, 3);
+            _save.microphoneLevel = Mathf.Clamp(_save.microphoneLevel, 1, 3);
+            _save.fitnessLevel = Mathf.Clamp(_save.fitnessLevel, 1, 3);
+            _save.interiorLevel = Mathf.Clamp(_save.interiorLevel, 1, 3);
             if (_save.awaitingAdvance)
             {
                 _save.day++;
@@ -83,6 +91,12 @@ namespace StreamOn.Minigames.Runner
             SetPlayerLocked(false);
             if (_slotPanel != null) _slotPanel.SetActive(false);
             RefreshStatus();
+            if (_save.broadcastSessionActive || RunnerBroadcastSessionStore.OpenGameSelectionOnRoomLoad)
+            {
+                RunnerBroadcastSessionStore.BeginOrResume(settings, _save);
+                RunnerBroadcastSessionStore.OpenGameSelectionOnRoomLoad = false;
+                ShowGameSelection(false);
+            }
         }
 
         private void Update()
@@ -137,20 +151,24 @@ namespace StreamOn.Minigames.Runner
                 _notice = "이 오브젝트의 Action ID가 설정 에셋과 연결되지 않았습니다.";
                 return;
             }
+            StatProgress previousMental = new StatProgress(_save.mentalLevel, _save.mentalExperience);
+            StatProgress previousGame = new StatProgress(_save.gameSkill, _save.gameSkillExperience);
+            StatProgress previousTalking = new StatProgress(_save.talkingSkill, _save.talkingSkillExperience);
+            StatProgress previousHealth = new StatProgress(_save.healthStat, _save.healthStatExperience);
             settings.AddStatExperience(ref _save.gameSkill, ref _save.gameSkillExperience,
                 action.gameSkillDelta, settings.maximumGameSkill);
             settings.AddStatExperience(ref _save.talkingSkill, ref _save.talkingSkillExperience,
                 action.talkingSkillDelta, settings.maximumTalkingSkill);
             settings.AddStatExperience(ref _save.healthStat, ref _save.healthStatExperience,
                 action.healthStatDelta, settings.maximumHealthStat);
-            _save.mental = Mathf.Clamp(_save.mental + action.mentalDelta, settings.minimumMentalToStartBroadcast, settings.maximumMental);
+            settings.AddStatExperience(ref _save.mentalLevel, ref _save.mentalExperience,
+                action.mentalExperienceDelta, settings.maximumMentalLevel);
             _save.subscribers = Mathf.Max(settings.minimumSubscribersToStartBroadcast, _save.subscribers + action.subscriberDelta);
             _save.selectedAction = action.displayName;
             _save.broadcastPending = true;
             RunnerCampaignSaveStore.Save(settings, _save);
-            _notice = $"{action.displayName} 완료! 방송할 게임을 선택하세요.";
-            RefreshStatus();
-            ShowGameSelection(true);
+            StartCoroutine(ShowActivityResultThenGameSelection(action, previousMental,
+                previousGame, previousTalking, previousHealth));
         }
 
         public void SelectRunnerGame() => LoadSelectedGame("runner",
@@ -158,10 +176,14 @@ namespace StreamOn.Minigames.Runner
 
         public void SelectTileArenaGame() => LoadSelectedGame("tile_arena", settings.tileArenaSceneName);
 
+        public void SelectPlasticKnightmareGame() => LoadSelectedGame("plastic_knightmare",
+            settings.plasticKnightmareMenuSceneName);
+
         private void LoadSelectedGame(string gameId, string sceneName)
         {
             if (_save == null || string.IsNullOrWhiteSpace(sceneName)) return;
             _save.selectedBroadcastGame = gameId;
+            RunnerBroadcastSessionStore.ApplyToSave(_save);
             RunnerCampaignSaveStore.Save(settings, _save, true);
             SceneManager.LoadScene(sceneName);
         }
@@ -186,9 +208,59 @@ namespace StreamOn.Minigames.Runner
             if (_transitioning) yield break;
             _transitioning = true;
             SetPlayerLocked(true);
+            yield return FadeToGameSelectionCore();
+            _transitioning = false;
+        }
+
+        private IEnumerator ShowActivityResultThenGameSelection(RunnerCampaignActionDefinition action,
+            StatProgress previousMental, StatProgress previousGame, StatProgress previousTalking, StatProgress previousHealth)
+        {
+            if (_transitioning) yield break;
+            _transitioning = true;
+            SetPlayerLocked(true);
+            _notice = BuildActivityResultNotice(action);
+            if (promptText != null) promptText.text = _notice;
+            if (statusText != null)
+                statusText.text = $"DAY {_save.day}    팔로워 {_save.subscribers:N0}    보유금 {_save.cash:N0}원";
+            if (statGaugePanel != null) statGaugePanel.SetActive(true);
+
+            float fromGame = TotalExperience(previousGame);
+            float fromTalking = TotalExperience(previousTalking);
+            float fromHealth = TotalExperience(previousHealth);
+            float fromMental = TotalExperience(previousMental);
+            float toGame = TotalExperience(new StatProgress(_save.gameSkill, _save.gameSkillExperience));
+            float toTalking = TotalExperience(new StatProgress(_save.talkingSkill, _save.talkingSkillExperience));
+            float toHealth = TotalExperience(new StatProgress(_save.healthStat, _save.healthStatExperience));
+            float toMental = TotalExperience(new StatProgress(_save.mentalLevel, _save.mentalExperience));
+            float startedAt = Time.unscaledTime;
+            float duration = Mathf.Max(0.2f, activityGaugeAnimationSeconds);
+            while (Time.unscaledTime - startedAt < duration)
+            {
+                float t = Mathf.SmoothStep(0f, 1f, (Time.unscaledTime - startedAt) / duration);
+                SetGaugeFromTotal(mentalGauge, Mathf.Lerp(fromMental, toMental, t), settings.maximumMentalLevel);
+                SetGaugeFromTotal(gameSkillGauge, Mathf.Lerp(fromGame, toGame, t), settings.maximumGameSkill);
+                SetGaugeFromTotal(talkingSkillGauge, Mathf.Lerp(fromTalking, toTalking, t), settings.maximumTalkingSkill);
+                SetGaugeFromTotal(healthGauge, Mathf.Lerp(fromHealth, toHealth, t), settings.maximumHealthStat);
+                yield return null;
+            }
+            RefreshStatus();
+            if (activityResultHoldSeconds > 0f) yield return new WaitForSecondsRealtime(activityResultHoldSeconds);
+            yield return FadeToGameSelectionCore();
+            _transitioning = false;
+        }
+
+        private IEnumerator FadeToGameSelectionCore()
+        {
+            if (gameSelectionPanel == null)
+            {
+                SelectRunnerGame();
+                yield break;
+            }
             if (transitionFade != null)
             {
+                transitionFade.transform.SetAsLastSibling();
                 transitionFade.blocksRaycasts = true;
+                transitionFade.interactable = true;
                 float startedAt = Time.unscaledTime;
                 while (transitionFade.alpha < 1f)
                 {
@@ -197,7 +269,59 @@ namespace StreamOn.Minigames.Runner
                 }
             }
             gameSelectionPanel.SetActive(true);
-            _transitioning = false;
+            if (transitionFade != null)
+            {
+                float startedAt = Time.unscaledTime;
+                float startAlpha = transitionFade.alpha;
+                while (transitionFade.alpha > 0f)
+                {
+                    transitionFade.alpha = Mathf.Lerp(startAlpha, 0f,
+                        (Time.unscaledTime - startedAt) / Mathf.Max(0.1f, fadeDuration));
+                    yield return null;
+                }
+                transitionFade.alpha = 0f;
+                transitionFade.blocksRaycasts = false;
+                transitionFade.interactable = false;
+            }
+        }
+
+        private string BuildActivityResultNotice(RunnerCampaignActionDefinition action)
+        {
+            List<string> gains = new List<string>();
+            if (action.gameSkillDelta != 0) gains.Add($"게임 경험치 +{action.gameSkillDelta}");
+            if (action.talkingSkillDelta != 0) gains.Add($"소통 경험치 +{action.talkingSkillDelta}");
+            if (action.healthStatDelta != 0) gains.Add($"체력 경험치 +{action.healthStatDelta}");
+            if (action.mentalExperienceDelta != 0) gains.Add($"멘탈 경험치 +{action.mentalExperienceDelta}");
+            return $"{action.displayName} 완료!  {string.Join("  ·  ", gains)}";
+        }
+
+        private float TotalExperience(StatProgress state)
+        {
+            if (state.level <= 1) return Mathf.Max(0, state.experience);
+            float total = settings.ExperienceRequiredForLevel(1);
+            if (state.level == 2) return total + Mathf.Max(0, state.experience);
+            return total + settings.ExperienceRequiredForLevel(2);
+        }
+
+        private void SetGaugeFromTotal(RunnerStatGauge gauge, float totalExperience, int maximumLevel)
+        {
+            if (gauge == null) return;
+            int levelTwoRequirement = settings.ExperienceRequiredForLevel(1);
+            int levelThreeRequirement = settings.ExperienceRequiredForLevel(2);
+            if (maximumLevel <= 1 || totalExperience >= levelTwoRequirement + levelThreeRequirement)
+                gauge.SetNormalizedLevelProgress(maximumLevel, 1f, maximumLevel);
+            else if (totalExperience >= levelTwoRequirement)
+                gauge.SetNormalizedLevelProgress(2,
+                    (totalExperience - levelTwoRequirement) / Mathf.Max(1f, levelThreeRequirement), maximumLevel);
+            else
+                gauge.SetNormalizedLevelProgress(1, totalExperience / Mathf.Max(1f, levelTwoRequirement), maximumLevel);
+        }
+
+        private readonly struct StatProgress
+        {
+            public readonly int level;
+            public readonly int experience;
+            public StatProgress(int level, int experience) { this.level = level; this.experience = experience; }
         }
 
         public bool ManualSave() => _save != null && RunnerCampaignSaveStore.Save(settings, _save, true);
@@ -294,13 +418,14 @@ namespace StreamOn.Minigames.Runner
             if (player != null && player.TryGetComponent(out RunnerRoomPlayerController controller)) controller.InputLocked = locked;
         }
 
-        private void RefreshStatus()
+        public void RefreshStatus()
         {
             if (_save == null) return;
             if (statusText != null)
-                statusText.text = $"DAY {_save.day}    팔로워 {_save.subscribers:N0}    누적 후원 {_save.lifetimeDonations:N0}원";
+                statusText.text = $"DAY {_save.day}    팔로워 {_save.subscribers:N0}    보유금 {_save.cash:N0}원";
             if (statGaugePanel != null) statGaugePanel.SetActive(true);
-            mentalGauge?.SetValue(_save.mental, settings.maximumMental);
+            mentalGauge?.SetLevelProgress(_save.mentalLevel, _save.mentalExperience,
+                settings.ExperienceRequiredForLevel(_save.mentalLevel), settings.maximumMentalLevel);
             gameSkillGauge?.SetLevelProgress(_save.gameSkill, _save.gameSkillExperience,
                 settings.ExperienceRequiredForLevel(_save.gameSkill), settings.maximumGameSkill);
             talkingSkillGauge?.SetLevelProgress(_save.talkingSkill, _save.talkingSkillExperience,

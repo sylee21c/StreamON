@@ -15,24 +15,26 @@ MonoBehaviour:
   lengthMode: 0
   fixedMaximumDays: 7
   startingSubscribers: 0
-  startingMental: 70
+  startingMentalLevel: 1
   startingGameSkill: 1
   startingTalkingSkill: 1
   startingHealthStat: 1
-  maximumMental: 100
+  maximumMentalLevel: 3
   maximumGameSkill: 3
   maximumTalkingSkill: 3
   maximumHealthStat: 3
   experienceForLevel2: 100
   experienceForLevel3: 150
+  hypeGainBonusPerMentalLevel: 0.15
+  hypePenaltyReductionPerMentalLevel: 0.15
   dayActions:
   - id: game_training
     displayName: 게임 훈련
-    description: 게임 경험치 +40 / 멘탈 -6
+    description: 게임 경험치 +40
     gameSkillDelta: 40
     talkingSkillDelta: 0
     healthStatDelta: 0
-    mentalDelta: -6
+    mentalExperienceDelta: 0
     subscriberDelta: 0
     buttonColor: {r: 0.18, g: 0.72, b: 0.64, a: 1}
     roomPosition: {x: -3.5, y: 0.6, z: 2.4}
@@ -41,11 +43,11 @@ MonoBehaviour:
     roomPrefab: {fileID: 0}
   - id: talking_training
     displayName: 소통 연습
-    description: 소통 경험치 +40 / 멘탈 -4
+    description: 소통 경험치 +40
     gameSkillDelta: 0
     talkingSkillDelta: 40
     healthStatDelta: 0
-    mentalDelta: -4
+    mentalExperienceDelta: 0
     subscriberDelta: 0
     buttonColor: {r: 0.35, g: 0.55, b: 0.92, a: 1}
     roomPosition: {x: 3.5, y: 0.7, z: 2.4}
@@ -54,11 +56,11 @@ MonoBehaviour:
     roomPrefab: {fileID: 0}
   - id: rest
     displayName: 휴식
-    description: 멘탈 +28
+    description: 멘탈 경험치 +40
     gameSkillDelta: 0
     talkingSkillDelta: 0
     healthStatDelta: 0
-    mentalDelta: 28
+    mentalExperienceDelta: 40
     subscriberDelta: 0
     buttonColor: {r: 0.66, g: 0.45, b: 0.8, a: 1}
     roomPosition: {x: 3.4, y: 0.5, z: -2.7}
@@ -67,11 +69,11 @@ MonoBehaviour:
     roomPrefab: {fileID: 0}
   - id: health_training
     displayName: 체력 단련
-    description: 체력 경험치 +40 / 멘탈 -5 / 레벨업 시 방송 시간 증가
+    description: 체력 경험치 +40 / 레벨업 시 방송 시간 증가
     gameSkillDelta: 0
     talkingSkillDelta: 0
     healthStatDelta: 40
-    mentalDelta: -5
+    mentalExperienceDelta: 0
     subscriberDelta: 0
     buttonColor: {r: 0.88, g: 0.48, b: 0.28, a: 1}
     roomPosition: {x: -3.4, y: 0.25, z: -2.5}
@@ -82,12 +84,33 @@ MonoBehaviour:
   targetScoreIncreasePerDay: 120
   maximumTargetScore: 1550
   resultDelay: 1.4
-  baseBroadcastSeconds: 90
-  minimumBroadcastSeconds: 90
-  maximumBroadcastSeconds: 120
-  secondsPerHealthStatLevel: 15
+  baseBroadcastSeconds: 300
+  minimumBroadcastSeconds: 300
+  maximumBroadcastSeconds: 600
+  secondsPerHealthStatLevel: 60
   gameOverTimePenaltySeconds: 8
   broadcastGrowthSettings: {fileID: 11400000, guid: af962f6fba2d418eaa50113295cd3263, type: 2}
+  pcUpgradeCosts:
+  - 0
+  - 5000
+  - 15000
+  microphoneUpgradeCosts:
+  - 0
+  - 4000
+  - 12000
+  fitnessUpgradeCosts:
+  - 0
+  - 3500
+  - 10000
+  interiorUpgradeCosts:
+  - 0
+  - 3000
+  - 9000
+  scoreBonusPerPcUpgrade: 0.06
+  followerConversionBonusPerMicrophoneUpgrade: 0.008
+  donationBonusPerMicrophoneUpgrade: 0.08
+  broadcastSecondsPerFitnessUpgrade: 30
+  startingViewersPerInteriorUpgrade: 2
   successBaseSubscriberGain: 10
   failureBaseSubscriberLoss: 16
   failureSubscriberLossIncreasePerDay: 2
@@ -97,11 +120,7 @@ MonoBehaviour:
   subscriberPenaltyPerHit: 2
   subscriberGainPerTalkingLevel: 3
   maximumEffectiveTalkingLevel: 10
-  successMentalChange: -7
-  failureMentalChange: -17
-  mentalPenaltyPerHit: 2
   minimumSubscribersToStartBroadcast: 0
-  minimumMentalToStartBroadcast: 1
   enableAutomaticSave: 1
   saveSlotCount: 3
   saveFolderName: Saves

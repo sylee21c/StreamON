@@ -21,6 +21,8 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private TMP_Text feedbackText;
         [SerializeField] private Button[] choiceButtons;
         [SerializeField] private TMP_Text[] choiceLabels;
+        [SerializeField] private Button ignoreButton;
+        [SerializeField] private TMP_Text ignoreLabel;
 
         private RunnerBroadcastAudienceController _runnerAudience;
         private TileArenaChatAdapter _tileAudience;
@@ -29,6 +31,7 @@ namespace StreamOn.Minigames.Runner
         private float _nextPromptAt;
         private List<RunnerWitChoice> _visibleChoices;
         private bool _answered;
+        private bool _currentIgnoreIsCorrect;
         private float _safeMomentUntil;
         private readonly Queue<string> _recentPromptMessages = new Queue<string>();
         private string _safeMomentContext = "게임 플레이 중 잠깐 여유가 생김";
@@ -39,11 +42,13 @@ namespace StreamOn.Minigames.Runner
             _runnerAudience = FindFirstObjectByType<RunnerBroadcastAudienceController>();
             _tileAudience = FindFirstObjectByType<TileArenaChatAdapter>();
             _chat = FindFirstObjectByType<RunnerChatController>();
+            EnsureIgnoreButton();
             for (int i = 0; i < choiceButtons.Length; i++)
             {
                 int index = i;
                 choiceButtons[i]?.onClick.AddListener(() => SelectChoice(index));
             }
+            ignoreButton?.onClick.AddListener(() => SelectIgnore(false));
             HideImmediate();
             _nextPromptAt = Time.unscaledTime + (settings != null ? settings.firstPromptDelay : 15f);
         }
@@ -59,6 +64,7 @@ namespace StreamOn.Minigames.Runner
                     if (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame) SelectChoice(0);
                     else if (keyboard.digit2Key.wasPressedThisFrame || keyboard.numpad2Key.wasPressedThisFrame) SelectChoice(1);
                     else if (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame) SelectChoice(2);
+                    else if (keyboard.digit4Key.wasPressedThisFrame || keyboard.numpad4Key.wasPressedThisFrame) SelectIgnore(false);
                 }
                 return;
             }
@@ -101,20 +107,22 @@ namespace StreamOn.Minigames.Runner
                 prompt = ConvertGeneratedPrompt(generated);
             }
             if (prompt == null) prompt = PickLocalPrompt();
+            prompt = PreparePromptForTalkingLevel(prompt);
             if (prompt == null)
             {
                 ScheduleNext();
                 _activePrompt = null;
                 yield break;
             }
-            _visibleChoices = prompt.choices.Where(choice => choice != null && choice.minimumTalkingLevel <= TalkingLevel)
-                .OrderBy(_ => Random.value).Take(choiceButtons.Length).ToList();
-            if (_visibleChoices.Count < 2)
+            _visibleChoices = prompt.choices.Where(choice => choice != null)
+                .OrderBy(_ => Random.value).Take(3).ToList();
+            if (_visibleChoices.Count != 3)
             {
                 ScheduleNext();
                 _activePrompt = null;
                 yield break;
             }
+            _currentIgnoreIsCorrect = prompt.ignoreIsCorrect;
 
             string nickname = _chat != null ? _chat.PickDonationViewerNickname() : "시청자";
             viewerText.text = $"{nickname}  {prompt.viewerMessage}";
@@ -126,6 +134,8 @@ namespace StreamOn.Minigames.Runner
                 choiceButtons[i].gameObject.SetActive(show);
                 if (show) choiceLabels[i].text = $"{i + 1}. {_visibleChoices[i].text}";
             }
+            if (ignoreButton != null) ignoreButton.gameObject.SetActive(true);
+            if (ignoreLabel != null) ignoreLabel.text = "4. 무반응";
             canvasGroup.alpha = 1f;
             canvasGroup.interactable = true;
             canvasGroup.blocksRaycasts = true;
@@ -140,7 +150,7 @@ namespace StreamOn.Minigames.Runner
                 if (timerFill != null) timerFill.fillAmount = Mathf.Clamp01(remaining / duration);
                 yield return null;
             }
-            if (!_answered) feedbackText.text = "게임에 집중하느라 채팅을 넘겼다";
+            if (!_answered) SelectIgnore(true);
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = false;
             yield return new WaitForSecondsRealtime(_answered ? 1.4f : 0.7f);
@@ -154,16 +164,41 @@ namespace StreamOn.Minigames.Runner
             if (generated == null || string.IsNullOrWhiteSpace(generated.viewerMessage)
                 || generated.choices == null || generated.choices.Length < 3) return null;
             RunnerGeneratedWitChoice[] ordered = generated.choices.OrderByDescending(choice => choice.quality).Take(3).ToArray();
-            if (ordered.Select(choice => Mathf.Clamp(choice.quality, 0, 2)).Distinct().Count() < 3) return null;
             return new RunnerWitPrompt
             {
                 viewerMessage = Crop(generated.viewerMessage, 42),
-                choices = ordered.Select((choice, index) => new RunnerWitChoice
+                ignoreIsCorrect = generated.shouldIgnore,
+                choices = ordered.Select(choice => new RunnerWitChoice
                 {
                     text = Crop(choice.text, 42),
                     quality = Mathf.Clamp(choice.quality, 0, 2),
-                    minimumTalkingLevel = index == 2 ? 2 : 1
+                    minimumTalkingLevel = 1
                 }).Where(choice => !string.IsNullOrWhiteSpace(choice.text)).ToList()
+            };
+        }
+
+        private RunnerWitPrompt PreparePromptForTalkingLevel(RunnerWitPrompt prompt)
+        {
+            if (prompt == null || prompt.choices == null) return null;
+            RunnerWitChoice[] source = prompt.choices.Where(choice => choice != null && !string.IsNullOrWhiteSpace(choice.text))
+                .Take(3).ToArray();
+            if (source.Length != 3) return null;
+
+            int[] ranked = Enumerable.Range(0, source.Length).OrderByDescending(index => source[index].quality).ToArray();
+            int successfulAnswers = prompt.ignoreIsCorrect ? 0 : Mathf.Clamp(TalkingLevel, 1, 3);
+            Dictionary<int, int> rankByIndex = ranked.Select((sourceIndex, rank) => new { sourceIndex, rank })
+                .ToDictionary(item => item.sourceIndex, item => item.rank);
+            return new RunnerWitPrompt
+            {
+                viewerMessage = prompt.viewerMessage,
+                ignoreIsCorrect = prompt.ignoreIsCorrect,
+                choices = source.Select((choice, index) => new RunnerWitChoice
+                {
+                    text = choice.text,
+                    quality = rankByIndex[index] < successfulAnswers ? 2
+                        : !prompt.ignoreIsCorrect && rankByIndex[index] == successfulAnswers ? 1 : 0,
+                    minimumTalkingLevel = 1
+                }).ToList()
             };
         }
 
@@ -191,10 +226,54 @@ namespace StreamOn.Minigames.Runner
             if (_activePrompt == null || _answered || _visibleChoices == null || index < 0 || index >= _visibleChoices.Count) return;
             _answered = true;
             int quality = _visibleChoices[index].quality;
+            ApplyWitQuality(quality, quality >= 2 ? "채팅 반응이 확 살아났다!"
+                : quality == 1 ? "무난하게 넘어갔다" : "채팅창이 잠깐 조용해졌다...");
+        }
+
+        private void SelectIgnore(bool timedOut)
+        {
+            if (_activePrompt == null || _answered) return;
+            _answered = true;
+            bool correct = _currentIgnoreIsCorrect;
+            string feedback = correct
+                ? timedOut ? "대꾸하지 않자 분탕 채팅이 묻혔다" : "괜히 받아주지 않자 채팅이 넘어갔다"
+                : timedOut ? "대답할 타이밍을 놓쳤다..." : "받아칠 만한 채팅을 그냥 넘겼다...";
+            ApplyWitQuality(correct ? 2 : 0, feedback);
+        }
+
+        private void ApplyWitQuality(int quality, string feedback)
+        {
             if (quality >= 2 && TalkingLevel >= 3) quality = 3;
-            feedbackText.text = quality >= 2 ? "채팅 반응이 확 살아났다!" : quality == 1 ? "무난하게 넘어갔다" : "채팅창이 잠깐 조용해졌다...";
+            feedbackText.text = feedback;
             _runnerAudience?.ApplyWitInteraction(quality);
             _tileAudience?.ApplyWitInteraction(quality);
+        }
+
+        private void EnsureIgnoreButton()
+        {
+            if (ignoreButton != null)
+            {
+                if (ignoreLabel == null) ignoreLabel = ignoreButton.GetComponentInChildren<TMP_Text>(true);
+                return;
+            }
+            Button template = choiceButtons?.LastOrDefault(button => button != null);
+            if (template == null) return;
+
+            GameObject clone = Instantiate(template.gameObject, template.transform.parent);
+            clone.name = "Choice 4 - Ignore";
+            ignoreButton = clone.GetComponent<Button>();
+            ignoreLabel = clone.GetComponentInChildren<TMP_Text>(true);
+            RectTransform ignoreRect = clone.GetComponent<RectTransform>();
+            RectTransform templateRect = template.GetComponent<RectTransform>();
+            if (ignoreRect != null && templateRect != null)
+                ignoreRect.anchoredPosition = templateRect.anchoredPosition + Vector2.down * 35f;
+            Image background = clone.GetComponent<Image>();
+            if (background != null) background.color = new Color(0.16f, 0.17f, 0.22f, 1f);
+
+            RectTransform panel = transform as RectTransform;
+            if (panel != null) panel.sizeDelta = new Vector2(panel.sizeDelta.x, panel.sizeDelta.y + 75f);
+            RectTransform feedbackRect = feedbackText != null ? feedbackText.rectTransform : null;
+            if (feedbackRect != null) feedbackRect.anchoredPosition += Vector2.down * 38f;
         }
 
         private void ScheduleNext() => _nextPromptAt = Time.unscaledTime

@@ -1,0 +1,1824 @@
+﻿using System.Collections.Generic;
+using UnityEngine;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
+
+public sealed class BuildingModeController : MonoBehaviour
+{
+    private enum BrickOrientation
+    {
+        Horizontal,
+        Vertical
+    }
+
+    private enum HalfCellSide
+    {
+        None,
+        Negative,
+        Positive
+    }
+
+    [System.Serializable]
+    private sealed class BrickDefinition
+    {
+        [SerializeField] private string displayName = "2x2";
+        [SerializeField] private GameObject prefab;
+        [SerializeField, Min(1)] private int cellsLong = 1;
+        [SerializeField] private bool halfCell;
+        [Tooltip("이 브릭 종류 1층의 HP. 0 이하면 BuildingModeController 의 Brick Base Health 폴백")]
+        [SerializeField] private float baseHealth = 0f;
+
+        public string DisplayName => displayName;
+        public GameObject Prefab => prefab;
+        public int CellsLong => Mathf.Max(1, cellsLong);
+        public bool HalfCell => halfCell;
+        public bool CanRotate => halfCell || CellsLong > 1;
+        public float BaseHealth => baseHealth;
+    }
+
+    private readonly struct PlacementKey
+    {
+        public readonly Vector2Int Cell;
+        public readonly HalfCellSide HalfSide;
+
+        public PlacementKey(Vector2Int cell, HalfCellSide halfSide)
+        {
+            Cell = cell;
+            HalfSide = halfSide;
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is PlacementKey other && Cell == other.Cell && HalfSide == other.HalfSide;
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 31 + Cell.x;
+                hash = hash * 31 + Cell.y;
+                hash = hash * 31 + (int)HalfSide;
+                return hash;
+            }
+        }
+    }
+
+    private readonly struct Placement
+    {
+        public readonly Vector2Int AnchorCell;
+        public readonly Vector3 Center;
+        public readonly PlacementKey[] Keys;
+        public readonly HalfCellSide HalfSide;
+
+        public Placement(Vector2Int anchorCell, Vector3 center, PlacementKey[] keys, HalfCellSide halfSide)
+        {
+            AnchorCell = anchorCell;
+            Center = center;
+            Keys = keys;
+            HalfSide = halfSide;
+        }
+    }
+
+    [SerializeField] private string playerName = "Player";
+    [SerializeField] private BuildingGridOverlay gridOverlay;
+    [SerializeField] private GameObject brickPrefab;
+    [SerializeField] private string sceneBrickTemplateName = "Lego_Part_3";
+    [SerializeField] private BrickDefinition[] brickDefinitions =
+    {
+        new BrickDefinition(),
+        new BrickDefinition()
+    };
+    [SerializeField] private float brickYOffset = 0f;
+    [SerializeField] private float stackOverlapY = 0.0473111f;
+    [SerializeField] private bool requireDetectedFloorCell = false;
+    [Tooltip("씬의 BuildableCellMarker 오브젝트가 위치한 칸에만 배치 허용")]
+    [SerializeField] private bool restrictToBuildableMarkers = false;
+
+    [Header("Brick Health")]
+    [SerializeField] private float brickBaseHealth = 100f;
+    [SerializeField] private float brickStackBonus = 30f;
+    [SerializeField] private bool addHealthBarToBricks = true;
+    [SerializeField] private Vector3 brickHealthBarOffset = new Vector3(0f, 0.55f, 0f);
+    [SerializeField] private Vector2 brickHealthBarPixelSize = new Vector2(90f, 10f);
+    [SerializeField] private float brickHealthBarWorldScale = 0.008f;
+
+    [Header("Companion Health")]
+    [SerializeField] private bool addHealthBarToCompanions = true;
+    [SerializeField] private Vector3 companionHealthBarOffset = new Vector3(0f, 1.1f, 0f);
+    [SerializeField] private Vector2 companionHealthBarPixelSize = new Vector2(70f, 8f);
+    [SerializeField] private float companionHealthBarWorldScale = 0.007f;
+
+    [SerializeField] private Color previewColor = new Color(1f, 1f, 1f, 0.36f);
+    [SerializeField] private Color blockedPreviewColor = new Color(1f, 0.25f, 0.2f, 0.3f);
+
+    private readonly Dictionary<PlacementKey, List<GameObject>> placedBricks = new Dictionary<PlacementKey, List<GameObject>>();
+
+    private Transform player;
+    private Camera sceneCamera;
+    private GameObject previewBrick;
+    private Material previewMaterial;
+    private GameObject previewTemplate;
+    private Vector2Int highlightedCell;
+    private Vector3 highlightedFloorPoint;
+    private bool hasHighlightedCell;
+    private bool canBuildOnHighlightedCell;
+    private bool previousLeftMousePressed;
+    private bool previousRightMousePressed;
+    private bool queuedLeftClickBuild;
+    private bool queuedRightClickDestroy;
+    private bool isDragSelecting;
+    private Vector2Int dragAnchorCell;
+    private readonly List<GameObject> dragGhostBricks = new List<GameObject>();
+    private readonly List<Vector3> dragGhostOriginalScales = new List<Vector3>();
+    private Material dragGhostMaterial;
+    private int dragGhostBrickIndex = -1;
+    private int selectedBrickIndex = 0;
+    private BrickOrientation selectedOrientation = BrickOrientation.Horizontal;
+    private const int HotbarSlotCount = 5;
+
+    private void Awake()
+    {
+        FindReferences();
+        BuildingHotbarUI.EnsureExists();
+        BuildingHotbarUI.SetSelectedSlot(selectedBrickIndex);
+        RefreshPreviewBrick(true);
+    }
+
+    private void OnDisable()
+    {
+        if (previewBrick != null)
+        {
+            previewBrick.SetActive(false);
+        }
+    }
+
+    private void Update()
+    {
+        FindReferences();
+        HandleSelectionInput();
+        RefreshPreviewBrick(false);
+        UpdateHighlight();
+        UpdateCompanionPreview();
+        HandleBuildInput();
+        UpdateDragSelect();
+        HandleDestroyInput();
+    }
+
+    private void OnGUI()
+    {
+        Event current = Event.current;
+        if (current == null || current.type != EventType.MouseDown)
+        {
+            return;
+        }
+
+        if (current.button == 0)
+        {
+            queuedLeftClickBuild = true;
+        }
+        else if (current.button == 1)
+        {
+            queuedRightClickDestroy = true;
+        }
+        else
+        {
+            return;
+        }
+
+        current.Use();
+    }
+
+    private void FindReferences()
+    {
+        if (player == null)
+        {
+            GameObject playerObject = GameObject.Find(playerName);
+            if (playerObject == null)
+            {
+                playerObject = GameObject.FindWithTag("Player");
+            }
+
+            if (playerObject != null)
+            {
+                player = playerObject.transform;
+            }
+        }
+
+        if (gridOverlay == null)
+        {
+            gridOverlay = FindAnyObjectByType<BuildingGridOverlay>();
+        }
+        if (gridOverlay != null && gridOverlay.CellSize <= 0f)
+        {
+            gridOverlay.RebuildGrid();
+        }
+
+        if (sceneCamera == null)
+        {
+            sceneCamera = Camera.main;
+            if (sceneCamera == null)
+            {
+                sceneCamera = FindAnyObjectByType<Camera>();
+            }
+        }
+    }
+
+    private void HandleSelectionInput()
+    {
+        int selectableSlots = Mathf.Max(HotbarSlotCount, brickDefinitions?.Length ?? 0);
+        for (int i = 0; i < selectableSlots; i++)
+        {
+            if (WasNumberKeyPressed(i + 1))
+            {
+                SelectBrick(i);
+                return;
+            }
+        }
+
+        BrickDefinition selectedBrick = GetSelectedBrick();
+        if (selectedBrick != null && selectedBrick.CanRotate && WasRotateKeyPressed())
+        {
+            selectedOrientation = selectedOrientation == BrickOrientation.Horizontal
+                ? BrickOrientation.Vertical
+                : BrickOrientation.Horizontal;
+        }
+
+        // 동료 선택 상태에서 R 누르면 90도 회전
+        if (GetCompanionForCurrentSlot() != null && WasRotateKeyPressed())
+        {
+            companionYaw = (companionYaw + 90f) % 360f;
+        }
+    }
+
+    private void SelectBrick(int index)
+    {
+        int selectableSlots = Mathf.Max(HotbarSlotCount, brickDefinitions?.Length ?? 1);
+        int clampedIndex = Mathf.Clamp(index, 0, selectableSlots - 1);
+        if (selectedBrickIndex == clampedIndex)
+        {
+            return;
+        }
+
+        selectedBrickIndex = clampedIndex;
+        if (GetSelectedBrick()?.CanRotate != true)
+        {
+            selectedOrientation = BrickOrientation.Horizontal;
+        }
+
+        BuildingHotbarUI.SetSelectedSlot(selectedBrickIndex);
+        RefreshPreviewBrick(true);
+    }
+
+    private void UpdateHighlight()
+    {
+        hasHighlightedCell = TryGetTargetCell(out highlightedCell, out highlightedFloorPoint);
+        canBuildOnHighlightedCell = false;
+
+        BrickDefinition selectedBrick = GetSelectedBrick();
+        Placement placement = default;
+        bool hasPlacement = selectedBrick != null && hasHighlightedCell;
+        if (hasPlacement)
+        {
+            hasPlacement = TryGetPlacement(selectedBrick, out placement);
+        }
+
+        if (hasPlacement)
+        {
+            bool placementAllowed = IsPlacementAllowed(placement);
+            bool inStock = HasInventoryFor(selectedBrick);
+            canBuildOnHighlightedCell = placementAllowed && inStock;
+        }
+
+        if (previewBrick == null)
+        {
+            return;
+        }
+
+        previewBrick.SetActive(hasPlacement && !isDragSelecting);
+        if (!hasPlacement)
+        {
+            return;
+        }
+
+        int stackIndex = GetStackCount(placement.Keys);
+        PlaceBrick(previewBrick, selectedBrick, placement, stackIndex);
+        if (previewMaterial != null)
+        {
+            SetPreviewMaterialColor(previewMaterial, canBuildOnHighlightedCell ? previewColor : blockedPreviewColor);
+        }
+    }
+
+    // 매 프레임 호출 → 동료 슬롯 선택 상태면 반투명 프리뷰 표시
+    private void UpdateCompanionPreview()
+    {
+        CompanionDefinition def = GetCompanionForCurrentSlot();
+
+        if (def == null || !hasHighlightedCell)
+        {
+            if (companionPreview != null) companionPreview.SetActive(false);
+            return;
+        }
+
+        // 브릭 프리뷰는 숨김 (충돌 방지)
+        if (previewBrick != null) previewBrick.SetActive(false);
+
+        // Def 이 바뀌면 프리뷰 재생성
+        if (companionPreview == null || companionPreviewDef != def)
+        {
+            if (companionPreview != null) Destroy(companionPreview);
+
+            if (def.prefab == null)
+            {
+                LogPrefabIssueOnce(def, "prefab 필드가 비어있음");
+                companionPreviewDef = def;
+                return;
+            }
+
+            try
+            {
+                companionPreview = Instantiate(def.prefab, transform);
+            }
+            catch (System.InvalidCastException)
+            {
+                LogPrefabIssueOnce(def, "InvalidCastException — prefab 참조가 손상됨. Chicken.asset 등의 CompanionDefinition Inspector 에서 prefab 필드를 비웠다가 해당 프리팹을 다시 드래그해서 재할당하세요.");
+                companionPreviewDef = def;
+                return;
+            }
+
+            companionPreview.name = $"{def.displayName}_Preview";
+            if (def.spawnScale > 0f)
+                companionPreview.transform.localScale = Vector3.one * def.spawnScale;
+
+            // 콜라이더/AI/Damageable 제거
+            foreach (Collider c in companionPreview.GetComponentsInChildren<Collider>()) Destroy(c);
+            foreach (CompanionToy t in companionPreview.GetComponentsInChildren<CompanionToy>()) Destroy(t);
+            foreach (Damageable d in companionPreview.GetComponentsInChildren<Damageable>()) Destroy(d);
+
+            // 반투명 머티리얼 적용
+            companionPreviewMaterial = new Material(FindPreviewShader())
+            {
+                name = "Companion Preview Material",
+                color = previewColor
+            };
+            ConfigurePreviewMaterial(companionPreviewMaterial);
+            foreach (Renderer r in companionPreview.GetComponentsInChildren<Renderer>())
+            {
+                r.sharedMaterial = companionPreviewMaterial;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+            }
+            companionPreviewDef = def;
+        }
+
+        // 배치 가능한 셀인지 확인 (buildable 마커 제한 반영)
+        bool canPlace = true;
+        if (restrictToBuildableMarkers)
+        {
+            var cells = GetBuildableMarkerCells();
+            if (cells == null || cells.Count == 0 || !cells.Contains(highlightedCell))
+                canPlace = false;
+        }
+        // 브릭/동료 이미 있는 셀 배제
+        if (canPlace && CellHasBrick(highlightedCell)) canPlace = false;
+        if (canPlace && CellHasCompanion(highlightedCell)) canPlace = false;
+        // 재고 확인
+        if (CompanionInventory.Instance == null || !CompanionInventory.Instance.HasAny(def.companionId))
+            canPlace = false;
+
+        companionPreview.SetActive(true);
+        Vector3 pos = gridOverlay.CellToWorldCenter(highlightedCell);
+        pos.y = gridOverlay.SurfaceY + def.placedYOffset;
+        companionPreview.transform.position = pos;
+        companionPreview.transform.rotation = Quaternion.Euler(0f, companionYaw, 0f);
+
+        if (companionPreviewMaterial != null)
+            SetPreviewMaterialColor(companionPreviewMaterial, canPlace ? previewColor : blockedPreviewColor);
+    }
+
+    private bool TryGetTargetCell(out Vector2Int targetCell, out Vector3 floorPoint)
+    {
+        targetCell = default;
+        floorPoint = default;
+        if (gridOverlay == null || gridOverlay.CellSize <= 0f)
+        {
+            return false;
+        }
+
+        if (sceneCamera == null)
+        {
+            return false;
+        }
+
+        Ray ray = sceneCamera.ScreenPointToRay(GetMousePosition());
+        Plane floorPlane = new Plane(Vector3.up, new Vector3(0f, gridOverlay.SurfaceY, 0f));
+        if (!floorPlane.Raycast(ray, out float enter))
+        {
+            return false;
+        }
+
+        floorPoint = ray.GetPoint(enter);
+        targetCell = gridOverlay.WorldToCell(floorPoint);
+        return true;
+    }
+
+    private bool TryGetPlacement(BrickDefinition brick, out Placement placement)
+    {
+        placement = default;
+        if (gridOverlay == null || gridOverlay.CellSize <= 0f)
+        {
+            return false;
+        }
+
+        if (brick.HalfCell)
+        {
+            HalfCellSide side = GetHalfCellSide(highlightedCell, highlightedFloorPoint);
+            Vector3 center = gridOverlay.CellToWorldCenter(highlightedCell);
+            float offset = gridOverlay.CellSize * 0.25f;
+            if (selectedOrientation == BrickOrientation.Vertical)
+            {
+                center.x += side == HalfCellSide.Negative ? -offset : offset;
+            }
+            else
+            {
+                center.z += side == HalfCellSide.Negative ? -offset : offset;
+            }
+
+            placement = new Placement(
+                highlightedCell,
+                center,
+                new[] { new PlacementKey(highlightedCell, side) },
+                side);
+            return true;
+        }
+
+        PlacementKey[] keys = new PlacementKey[brick.CellsLong];
+        Vector3 centerSum = Vector3.zero;
+        for (int i = 0; i < brick.CellsLong; i++)
+        {
+            Vector2Int cell = highlightedCell + GetCellOffset(i);
+            keys[i] = new PlacementKey(cell, HalfCellSide.None);
+            centerSum += gridOverlay.CellToWorldCenter(cell);
+        }
+
+        placement = new Placement(highlightedCell, centerSum / brick.CellsLong, keys, HalfCellSide.None);
+        return true;
+    }
+
+    private Vector2Int GetCellOffset(int distance)
+    {
+        return selectedOrientation == BrickOrientation.Horizontal
+            ? new Vector2Int(distance, 0)
+            : new Vector2Int(0, distance);
+    }
+
+    private HalfCellSide GetHalfCellSide(Vector2Int cell, Vector3 floorPoint)
+    {
+        Vector3 center = gridOverlay.CellToWorldCenter(cell);
+        if (selectedOrientation == BrickOrientation.Vertical)
+        {
+            return floorPoint.x < center.x ? HalfCellSide.Negative : HalfCellSide.Positive;
+        }
+
+        return floorPoint.z < center.z ? HalfCellSide.Negative : HalfCellSide.Positive;
+    }
+
+    private bool IsPlacementAllowed(Placement placement)
+    {
+        // 동료가 이미 있는 셀은 브릭 배치 불가
+        foreach (PlacementKey key in placement.Keys)
+        {
+            if (CellHasCompanion(key.Cell)) return false;
+        }
+
+        // 지정 셀 모드: 마커 셀에 포함된 것만 통과
+        if (restrictToBuildableMarkers)
+        {
+            HashSet<Vector2Int> allowed = GetBuildableMarkerCells();
+            if (allowed != null && allowed.Count > 0)
+            {
+                foreach (PlacementKey key in placement.Keys)
+                {
+                    if (!allowed.Contains(key.Cell)) return false;
+                }
+                return true;
+            }
+        }
+
+        if (!requireDetectedFloorCell)
+        {
+            return true;
+        }
+
+        foreach (PlacementKey key in placement.Keys)
+        {
+            if (!gridOverlay.IsCellOnFloor(key.Cell))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void HandleBuildInput()
+    {
+        if (!WasLeftMousePressed() && !queuedLeftClickBuild)
+            return;
+
+        queuedLeftClickBuild = false;
+
+        // 동료 슬롯 선택 상태이면 동료 배치 처리
+        if (TryPlaceCompanionAtHighlight()) return;
+
+        // Shift + 클릭 → 직사각형 드래그 선택 시작 (배치는 마우스 놓을 때)
+        if (IsShiftHeld() && hasHighlightedCell)
+        {
+            isDragSelecting = true;
+            dragAnchorCell = highlightedCell;
+            dragGhostBrickIndex = -1;
+            return;
+        }
+
+        // 일반 클릭 → 단일 브릭 배치
+        BrickDefinition selectedBrick = GetSelectedBrick();
+        GameObject template = ResolveBrickTemplate(selectedBrick);
+        if (!canBuildOnHighlightedCell || selectedBrick == null || template == null
+            || !TryGetPlacement(selectedBrick, out Placement placement))
+            return;
+
+        if (!TryConsumeInventoryForBrick(selectedBrick)) return;
+
+        SpawnBrick(selectedBrick, template, placement);
+    }
+
+    // ── 동료 배치 ────────────────────────────────────────────────
+
+    [Header("Companions")]
+    [Tooltip("사용 가능한 동료 종류들 (ScriptableObject). 슬롯 3~5 에서 선택됨")]
+    [SerializeField] private CompanionDefinition[] companionCatalog;
+
+    // 동료 프리뷰 (배치 전 반투명 가이드)
+    private GameObject companionPreview;
+    private Material companionPreviewMaterial;
+    private CompanionDefinition companionPreviewDef;
+    private float companionYaw = 0f;
+
+    // 필드에 배치된 동료 트래킹 (cell → GameObject)
+    private readonly Dictionary<Vector2Int, GameObject> placedCompanions = new Dictionary<Vector2Int, GameObject>();
+
+    public CompanionDefinition GetCompanionDefinitionById(string id)
+    {
+        if (companionCatalog == null || string.IsNullOrEmpty(id)) return null;
+        foreach (CompanionDefinition d in companionCatalog)
+            if (d != null && d.companionId == id) return d;
+        return null;
+    }
+
+    private bool CellHasCompanion(Vector2Int cell)
+    {
+        if (!placedCompanions.TryGetValue(cell, out GameObject go)) return false;
+        if (go == null) { placedCompanions.Remove(cell); return false; }
+        return true;
+    }
+
+    private bool CellHasBrick(Vector2Int cell)
+    {
+        foreach (KeyValuePair<PlacementKey, List<GameObject>> kv in placedBricks)
+        {
+            if (kv.Key.Cell != cell) continue;
+            if (kv.Value != null && kv.Value.Count > 0) return true;
+        }
+        return false;
+    }
+
+    private CompanionDefinition GetCompanionForCurrentSlot()
+    {
+        CompanionInventory.EnsureExists();
+        var inv = CompanionInventory.Instance;
+        if (inv == null) return null;
+
+        // 현재 선택된 hotbar 슬롯이 동료 슬롯 범위 안에 있는지
+        if (selectedBrickIndex < inv.FirstSlotIndex || selectedBrickIndex > inv.LastSlotIndex)
+            return null;
+
+        string id = inv.GetIdInSlot(selectedBrickIndex);
+        if (string.IsNullOrEmpty(id)) return null;
+
+        if (companionCatalog != null)
+        {
+            foreach (CompanionDefinition d in companionCatalog)
+                if (d != null && d.companionId == id) return d;
+        }
+        return null;
+    }
+
+    private readonly System.Collections.Generic.HashSet<CompanionDefinition> loggedPrefabIssues =
+        new System.Collections.Generic.HashSet<CompanionDefinition>();
+
+    private void LogPrefabIssueOnce(CompanionDefinition def, string reason)
+    {
+        if (def == null || loggedPrefabIssues.Contains(def)) return;
+        loggedPrefabIssues.Add(def);
+        Debug.LogError($"[Companion] {def.displayName} ({def.companionId}) 프리뷰 생성 실패: {reason}");
+    }
+
+    // 현재 선택된 슬롯이 왜 프리뷰가 안 뜨는지 진단.
+    // Inspector 에서 BuildingModeController 우클릭 → "Diagnose Selected Companion Slot" 실행.
+    [ContextMenu("Diagnose Selected Companion Slot")]
+    private void DiagnoseSelectedCompanionSlot()
+    {
+        CompanionInventory.EnsureExists();
+        var inv = CompanionInventory.Instance;
+        string report = $"[Diagnose] selectedBrickIndex={selectedBrickIndex}, ";
+
+        if (inv == null) { Debug.LogWarning(report + "CompanionInventory.Instance == null"); return; }
+        report += $"companion slot range=[{inv.FirstSlotIndex}..{inv.LastSlotIndex}], ";
+
+        if (selectedBrickIndex < inv.FirstSlotIndex || selectedBrickIndex > inv.LastSlotIndex)
+        {
+            Debug.LogWarning(report + "→ 선택된 슬롯이 동료 슬롯 범위 밖. 번호키 3~5 로 다시 선택해보세요.");
+            return;
+        }
+
+        string id = inv.GetIdInSlot(selectedBrickIndex);
+        report += $"inv.GetIdInSlot={id ?? "<null>"}, count={(string.IsNullOrEmpty(id) ? 0 : inv.GetCount(id))}, ";
+
+        if (string.IsNullOrEmpty(id))
+        {
+            Debug.LogWarning(report + "→ 이 슬롯에 아직 동료가 없음. 상점에서 구매하거나 인스펙터의 preferredSlot 을 확인.");
+            return;
+        }
+
+        int catalogCount = companionCatalog?.Length ?? 0;
+        report += $"catalogSize={catalogCount}, catalog ids=[";
+        if (companionCatalog != null)
+        {
+            for (int i = 0; i < companionCatalog.Length; i++)
+                report += (i > 0 ? ", " : "") + (companionCatalog[i] != null ? companionCatalog[i].companionId : "<null>");
+        }
+        report += "], ";
+
+        CompanionDefinition match = null;
+        if (companionCatalog != null)
+            foreach (CompanionDefinition d in companionCatalog)
+                if (d != null && d.companionId == id) { match = d; break; }
+
+        if (match == null)
+        {
+            Debug.LogWarning(report + $"→ companionCatalog 에 id=\"{id}\" 인 CompanionDefinition 이 없음. BuildingModeController 인스펙터의 Companion Catalog 배열에 추가.");
+            return;
+        }
+
+        report += $"matched def={match.displayName}, prefab={(match.prefab != null ? match.prefab.name : "<null>")}, kind={match.kind}, spawnScale={match.spawnScale}";
+        if (match.prefab == null)
+        {
+            Debug.LogWarning(report + " → CompanionDefinition 의 prefab 필드가 비어있음.");
+            return;
+        }
+
+        Debug.Log(report + " → 정상. 프리뷰가 안 뜬다면 hasHighlightedCell 이 false (마우스가 유효 셀 위에 없음) 이거나 gridOverlay 문제.");
+    }
+
+    private bool TryPlaceCompanionAtHighlight()
+    {
+        CompanionDefinition def = GetCompanionForCurrentSlot();
+        if (def == null) return false;
+
+        if (!hasHighlightedCell)
+        {
+            // 슬롯은 동료지만 아직 배치 못 함 (셀 조준 안 됨)
+            return true; // 클릭 소비만
+        }
+
+        // 지정 셀 모드 활성 시 마커 셀만 허용
+        if (restrictToBuildableMarkers)
+        {
+            var cells = GetBuildableMarkerCells();
+            if (cells == null || cells.Count == 0 || !cells.Contains(highlightedCell))
+            {
+                Debug.Log("[Companion] 배치 불가 셀");
+                return true;
+            }
+        }
+
+        // 브릭/동료 이미 있으면 배치 불가
+        if (CellHasBrick(highlightedCell))
+        {
+            Debug.Log("[Companion] 해당 칸에 이미 브릭 있음");
+            return true;
+        }
+        if (CellHasCompanion(highlightedCell))
+        {
+            Debug.Log("[Companion] 해당 칸에 이미 동료 있음");
+            return true;
+        }
+
+        // 재고 확인 및 소모
+        if (!CompanionInventory.Instance.TryConsume(def.companionId, 1))
+        {
+            Debug.Log($"[Companion] {def.companionId} 재고 없음");
+            return true;
+        }
+
+        // 스폰 (R로 회전한 각도 적용)
+        Vector3 spawnPos = gridOverlay.CellToWorldCenter(highlightedCell);
+        spawnPos.y = gridOverlay.SurfaceY + def.placedYOffset;
+        GameObject go;
+        try
+        {
+            go = Instantiate(def.prefab, spawnPos, Quaternion.Euler(0f, companionYaw, 0f));
+        }
+        catch (System.InvalidCastException)
+        {
+            LogPrefabIssueOnce(def, "InvalidCastException — prefab 참조가 손상됨. CompanionDefinition Inspector 에서 prefab 재할당 필요.");
+            // 재고를 환불
+            CompanionInventory.Instance.TryAdd(def.companionId, 1, def.preferredSlot);
+            return true;
+        }
+        if (def.spawnScale > 0f) go.transform.localScale = Vector3.one * def.spawnScale;
+
+        // Damageable 자동 부착
+        Damageable dmg = go.GetComponent<Damageable>();
+        if (dmg == null) dmg = go.AddComponent<Damageable>();
+        dmg.SetMaxHealth(def.maxHealth);
+
+        // AI 컴포넌트 자동 부착 (프리팹에 미리 없어도 됨)
+        CompanionToy toy = go.GetComponent<CompanionToy>();
+        if (toy == null)
+        {
+            switch (def.kind)
+            {
+                case CompanionKind.Mobile:
+                    toy = go.AddComponent<MobileCompanionAI>();
+                    break;
+                case CompanionKind.Trap:
+                    toy = go.AddComponent<ChickenTrapCompanionAI>();
+                    break;
+                default:
+                    toy = go.AddComponent<StationaryCompanionAI>();
+                    break;
+            }
+        }
+        toy.Configure(def);
+
+        if (addHealthBarToCompanions && go.GetComponent<HealthBar>() == null)
+        {
+            HealthBar hb = go.AddComponent<HealthBar>();
+            hb.Configure(companionHealthBarOffset, companionHealthBarPixelSize,
+                companionHealthBarWorldScale, hideDuringDay: true, hideWhenFull: true);
+        }
+
+        // 셀 점유 등록
+        placedCompanions[highlightedCell] = go;
+
+        Debug.Log($"[Companion] {def.displayName} 배치 완료 (셀 {highlightedCell})");
+        return true;
+    }
+
+    private bool TryConsumeInventoryForBrick(BrickDefinition brick)
+    {
+        if (brick == null) return false;
+        BrickInventory.EnsureExists();
+        if (!BrickInventory.Instance.TryConsume(brick.DisplayName, 1))
+        {
+            Debug.Log($"[BuildingMode] {brick.DisplayName} 브릭 재고 없음");
+            return false;
+        }
+        return true;
+    }
+
+    // 재고 유무 확인 (Editor 모드에서는 항상 있는 것으로 간주 → 프리뷰 정상 표시)
+    private bool HasInventoryFor(BrickDefinition brick)
+    {
+        if (brick == null) return false;
+        if (!Application.isPlaying) return true;
+        BrickInventory.EnsureExists();
+        return BrickInventory.Instance.GetCount(brick.DisplayName) > 0;
+    }
+
+    // 마커 셀 캐시 (매 프레임 재계산 — 마커가 씬에서 이동해도 반영)
+    private HashSet<Vector2Int> cachedBuildableCells;
+    private int cachedBuildableFrame = -1;
+
+    private HashSet<Vector2Int> GetBuildableMarkerCells()
+    {
+        if (gridOverlay == null || gridOverlay.CellSize <= 0f) return null;
+
+        // 프레임당 한 번만 재계산
+        if (cachedBuildableCells != null && cachedBuildableFrame == Time.frameCount)
+            return cachedBuildableCells;
+
+        if (cachedBuildableCells == null)
+            cachedBuildableCells = new HashSet<Vector2Int>();
+        else
+            cachedBuildableCells.Clear();
+
+#if UNITY_2023_1_OR_NEWER
+        BuildableCellMarker[] markers = Object.FindObjectsByType<BuildableCellMarker>(FindObjectsSortMode.None);
+#else
+        BuildableCellMarker[] markers = Object.FindObjectsOfType<BuildableCellMarker>();
+#endif
+        foreach (BuildableCellMarker m in markers)
+        {
+            if (m == null) continue;
+            cachedBuildableCells.Add(m.GetCell(gridOverlay));
+        }
+
+        cachedBuildableFrame = Time.frameCount;
+        return cachedBuildableCells;
+    }
+
+    private void UpdateDragSelect()
+    {
+        if (!isDragSelecting)
+            return;
+
+        // Shift를 놓으면 취소
+        if (!IsShiftHeld())
+        {
+            ClearDragGhosts();
+            isDragSelecting = false;
+            return;
+        }
+
+        // 마우스를 놓으면 배치 확정
+        if (!IsLeftMouseHeld())
+        {
+            CommitDragSelect();
+            isDragSelecting = false;
+            return;
+        }
+
+        if (hasHighlightedCell)
+            RefreshDragGhosts();
+    }
+
+    private void CommitDragSelect()
+    {
+        BrickDefinition selectedBrick = GetSelectedBrick();
+        if (selectedBrick == null) return;
+
+        GameObject template = ResolveBrickTemplate(selectedBrick);
+        if (template == null) return;
+
+        Vector2Int currentCell = hasHighlightedCell ? highlightedCell : dragAnchorCell;
+        List<Vector2Int> cells = GetRectangleCells(dragAnchorCell, currentCell);
+
+        foreach (Vector2Int cell in cells)
+        {
+            if (!TryGetPlacementForCell(selectedBrick, cell, out Placement placement))
+                continue;
+            if (!IsPlacementAllowed(placement))
+                continue;
+            // 인벤토리 없으면 이 위치는 건너뜀
+            if (!TryConsumeInventoryForBrick(selectedBrick))
+                break; // 재고 다 소진되면 나머지 셀도 건너뜀
+            SpawnBrick(selectedBrick, template, placement);
+        }
+
+        ClearDragGhosts();
+    }
+
+    private void RefreshDragGhosts()
+    {
+        BrickDefinition selectedBrick = GetSelectedBrick();
+        if (selectedBrick == null) { ClearDragGhosts(); return; }
+
+        // 브릭 타입이 바뀌면 풀 초기화
+        if (dragGhostBrickIndex != selectedBrickIndex)
+        {
+            ClearDragGhosts();
+            dragGhostBrickIndex = selectedBrickIndex;
+        }
+
+        List<Vector2Int> cells = GetRectangleCells(dragAnchorCell, highlightedCell);
+        GameObject template = ResolveBrickTemplate(selectedBrick);
+        if (template == null) { ClearDragGhosts(); return; }
+
+        EnsureDragGhostMaterial();
+
+        // 풀 확장
+        while (dragGhostBricks.Count < cells.Count)
+        {
+            GameObject ghost = Instantiate(template, transform);
+            ghost.SetActive(false);
+            foreach (Collider col in ghost.GetComponentsInChildren<Collider>()) Destroy(col);
+            foreach (BuildingPlacedBrick m in ghost.GetComponentsInChildren<BuildingPlacedBrick>()) Destroy(m);
+            foreach (Renderer r in ghost.GetComponentsInChildren<Renderer>())
+            {
+                r.sharedMaterial = dragGhostMaterial;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+            }
+            dragGhostBricks.Add(ghost);
+            dragGhostOriginalScales.Add(ghost.transform.localScale);
+        }
+
+        // 활성 고스트 배치
+        for (int i = 0; i < cells.Count; i++)
+        {
+            if (!TryGetPlacementForCell(selectedBrick, cells[i], out Placement placement))
+            {
+                dragGhostBricks[i].SetActive(false);
+                continue;
+            }
+            dragGhostBricks[i].SetActive(true);
+            dragGhostBricks[i].transform.localScale = dragGhostOriginalScales[i];
+            PlaceBrick(dragGhostBricks[i], selectedBrick, placement, GetStackCount(placement.Keys));
+        }
+
+        // 초과 고스트 비활성
+        for (int i = cells.Count; i < dragGhostBricks.Count; i++)
+            dragGhostBricks[i].SetActive(false);
+    }
+
+    private void ClearDragGhosts()
+    {
+        foreach (GameObject ghost in dragGhostBricks)
+            if (ghost != null) Destroy(ghost);
+        dragGhostBricks.Clear();
+        dragGhostOriginalScales.Clear();
+    }
+
+    private void EnsureDragGhostMaterial()
+    {
+        if (dragGhostMaterial != null) return;
+        dragGhostMaterial = new Material(FindPreviewShader())
+        {
+            name = "Drag Ghost Material",
+            color = previewColor
+        };
+        ConfigurePreviewMaterial(dragGhostMaterial);
+    }
+
+    private bool TryGetPlacementForCell(BrickDefinition brick, Vector2Int cell, out Placement placement)
+    {
+        placement = default;
+        if (gridOverlay == null || gridOverlay.CellSize <= 0f) return false;
+
+        if (brick.HalfCell)
+        {
+            HalfCellSide side = HalfCellSide.Negative;
+            Vector3 center = gridOverlay.CellToWorldCenter(cell);
+            float offset = gridOverlay.CellSize * 0.25f;
+            if (selectedOrientation == BrickOrientation.Vertical)
+                center.x -= offset;
+            else
+                center.z -= offset;
+
+            placement = new Placement(cell, center, new[] { new PlacementKey(cell, side) }, side);
+            return true;
+        }
+
+        PlacementKey[] keys = new PlacementKey[brick.CellsLong];
+        Vector3 centerSum = Vector3.zero;
+        for (int i = 0; i < brick.CellsLong; i++)
+        {
+            Vector2Int c = cell + GetCellOffset(i);
+            keys[i] = new PlacementKey(c, HalfCellSide.None);
+            centerSum += gridOverlay.CellToWorldCenter(c);
+        }
+        placement = new Placement(cell, centerSum / brick.CellsLong, keys, HalfCellSide.None);
+        return true;
+    }
+
+    private static List<Vector2Int> GetRectangleCells(Vector2Int anchor, Vector2Int current)
+    {
+        int minX = Mathf.Min(anchor.x, current.x);
+        int maxX = Mathf.Max(anchor.x, current.x);
+        int minY = Mathf.Min(anchor.y, current.y);
+        int maxY = Mathf.Max(anchor.y, current.y);
+
+        List<Vector2Int> cells = new List<Vector2Int>((maxX - minX + 1) * (maxY - minY + 1));
+        for (int x = minX; x <= maxX; x++)
+            for (int y = minY; y <= maxY; y++)
+                cells.Add(new Vector2Int(x, y));
+        return cells;
+    }
+
+    private GameObject SpawnBrick(BrickDefinition selectedBrick, GameObject template, Placement placement)
+    {
+        GameObject brick = Instantiate(template, placement.Center, Quaternion.identity);
+        brick.name = $"{template.name}_{selectedBrick.DisplayName}_Built";
+        brick.SetActive(true);
+        int stackIndex = GetStackCount(placement.Keys);
+        PlaceBrick(brick, selectedBrick, placement, stackIndex);
+
+        BuildingPlacedBrick marker = brick.GetComponent<BuildingPlacedBrick>();
+        if (marker == null)
+        {
+            marker = brick.AddComponent<BuildingPlacedBrick>();
+        }
+
+        marker.Cell = placement.AnchorCell;
+        marker.StackIndex = stackIndex;
+        marker.InventoryKey = selectedBrick.DisplayName;
+        EnsureClickableCollider(brick);
+        AddBrickToStacks(brick, placement.Keys);
+
+        // HP 부여: 브릭별 baseHealth 우선 사용, 없으면 전역 fallback. 스택 인덱스가 클수록 튼튼.
+        float baseHP = selectedBrick.BaseHealth > 0f ? selectedBrick.BaseHealth : brickBaseHealth;
+        float health = baseHP + brickStackBonus * stackIndex;
+        Damageable dmg = brick.GetComponent<Damageable>();
+        if (dmg == null) dmg = brick.AddComponent<Damageable>();
+        dmg.SetMaxHealth(health);
+        dmg.OnDeath += () => HandleBrickDestroyed(brick);
+
+        if (addHealthBarToBricks && brick.GetComponent<HealthBar>() == null)
+        {
+            HealthBar hb = brick.AddComponent<HealthBar>();
+            // 크기와 위치를 브릭에 맞게 커스터마이즈
+            hb.Configure(brickHealthBarOffset, brickHealthBarPixelSize, brickHealthBarWorldScale);
+        }
+
+        // 배치 사운드 (파괴/피격 사운드는 BuildingPlacedBrick 이 Damageable 이벤트로 자체 처리)
+        marker.HandlePlaced();
+        return brick;
+    }
+
+    public List<StreamOn.Minigames.Runner.PlasticKnightmarePlacedObject> CapturePlacedBricks()
+    {
+        var result = new List<StreamOn.Minigames.Runner.PlasticKnightmarePlacedObject>();
+        BuildingPlacedBrick[] markers = FindObjectsByType<BuildingPlacedBrick>(FindObjectsSortMode.None);
+        foreach (BuildingPlacedBrick marker in markers)
+        {
+            if (marker == null || string.IsNullOrEmpty(marker.InventoryKey)) continue;
+            Damageable health = marker.GetComponent<Damageable>();
+            result.Add(new StreamOn.Minigames.Runner.PlasticKnightmarePlacedObject
+            {
+                id = marker.InventoryKey,
+                cellX = marker.Cell.x,
+                cellY = marker.Cell.y,
+                stackIndex = marker.StackIndex,
+                rotationY = marker.transform.eulerAngles.y,
+                currentHealth = health != null ? health.CurrentHealth : 0f
+            });
+        }
+        result.Sort((a, b) => a.stackIndex.CompareTo(b.stackIndex));
+        return result;
+    }
+
+    public void RestorePlacedBricks(IEnumerable<StreamOn.Minigames.Runner.PlasticKnightmarePlacedObject> saved)
+    {
+        BuildingPlacedBrick[] existing = FindObjectsByType<BuildingPlacedBrick>(FindObjectsSortMode.None);
+        foreach (BuildingPlacedBrick marker in existing)
+            if (marker != null) Destroy(marker.gameObject);
+        placedBricks.Clear();
+        if (saved == null || brickDefinitions == null) return;
+
+        foreach (var item in saved)
+        {
+            BrickDefinition definition = null;
+            foreach (BrickDefinition candidate in brickDefinitions)
+                if (candidate != null && candidate.DisplayName == item.id) { definition = candidate; break; }
+            if (definition == null) continue;
+            selectedOrientation = Mathf.Abs(Mathf.DeltaAngle(item.rotationY, 90f)) < 45f
+                ? BrickOrientation.Vertical : BrickOrientation.Horizontal;
+            if (!TryGetPlacementForCell(definition, new Vector2Int(item.cellX, item.cellY), out Placement placement)) continue;
+            GameObject template = ResolveBrickTemplate(definition);
+            if (template == null) continue;
+            GameObject brick = SpawnBrick(definition, template, placement);
+            Damageable health = brick != null ? brick.GetComponent<Damageable>() : null;
+            if (health != null && item.currentHealth > 0f) health.Revive(item.currentHealth);
+        }
+        selectedOrientation = BrickOrientation.Horizontal;
+    }
+
+    public List<StreamOn.Minigames.Runner.PlasticKnightmarePlacedObject> CapturePlacedCompanions()
+    {
+        var result = new List<StreamOn.Minigames.Runner.PlasticKnightmarePlacedObject>();
+        foreach (KeyValuePair<Vector2Int, GameObject> pair in placedCompanions)
+        {
+            if (pair.Value == null) continue;
+            CompanionToy toy = pair.Value.GetComponent<CompanionToy>();
+            if (toy == null || toy.Definition == null) continue;
+            Damageable health = pair.Value.GetComponent<Damageable>();
+            result.Add(new StreamOn.Minigames.Runner.PlasticKnightmarePlacedObject
+            {
+                id = toy.Definition.companionId,
+                cellX = pair.Key.x,
+                cellY = pair.Key.y,
+                rotationY = pair.Value.transform.eulerAngles.y,
+                currentHealth = health != null ? health.CurrentHealth : 0f
+            });
+        }
+        return result;
+    }
+
+    public void RestorePlacedCompanions(IEnumerable<StreamOn.Minigames.Runner.PlasticKnightmarePlacedObject> saved)
+    {
+        foreach (GameObject existing in placedCompanions.Values)
+            if (existing != null) Destroy(existing);
+        placedCompanions.Clear();
+        if (saved == null || gridOverlay == null) return;
+        foreach (var item in saved)
+        {
+            CompanionDefinition def = GetCompanionDefinitionById(item.id);
+            if (def == null || def.prefab == null) continue;
+            Vector2Int cell = new Vector2Int(item.cellX, item.cellY);
+            Vector3 position = gridOverlay.CellToWorldCenter(cell);
+            position.y = gridOverlay.SurfaceY + def.placedYOffset;
+            GameObject go = Instantiate(def.prefab, position, Quaternion.Euler(0f, item.rotationY, 0f));
+            if (def.spawnScale > 0f) go.transform.localScale = Vector3.one * def.spawnScale;
+            Damageable health = go.GetComponent<Damageable>() ?? go.AddComponent<Damageable>();
+            health.SetMaxHealth(def.maxHealth);
+            CompanionToy toy = go.GetComponent<CompanionToy>();
+            if (toy == null)
+            {
+                switch (def.kind)
+                {
+                    case CompanionKind.Mobile: toy = go.AddComponent<MobileCompanionAI>(); break;
+                    case CompanionKind.Trap: toy = go.AddComponent<ChickenTrapCompanionAI>(); break;
+                    default: toy = go.AddComponent<StationaryCompanionAI>(); break;
+                }
+            }
+            toy.Configure(def);
+            if (item.currentHealth > 0f) health.Revive(item.currentHealth);
+            if (addHealthBarToCompanions && go.GetComponent<HealthBar>() == null)
+            {
+                HealthBar bar = go.AddComponent<HealthBar>();
+                bar.Configure(companionHealthBarOffset, companionHealthBarPixelSize,
+                    companionHealthBarWorldScale, hideDuringDay: true, hideWhenFull: true);
+            }
+            placedCompanions[cell] = go;
+        }
+    }
+
+    private void HandleBrickDestroyed(GameObject brick)
+    {
+        if (brick == null) return;
+        RemoveBrickFromStacks(brick);
+        Destroy(brick);
+    }
+
+    private void PlaceBrick(GameObject brick, BrickDefinition definition, Placement placement, int stackIndex)
+    {
+        brick.transform.rotation = Quaternion.Euler(0f, GetRotationY(definition), 0f);
+        brick.transform.position = placement.Center;
+        FitBrickToFootprint(brick, GetTargetFootprint(definition), GetRotationY(definition));
+        CenterBrickOnFootprint(brick, placement.Center);
+        MoveBottomToSurface(brick, GetPlacementSurface(placement.Keys));
+    }
+
+    private static void CenterBrickOnFootprint(GameObject brick, Vector3 targetCenter)
+    {
+        if (!TryGetRendererBounds(brick, out Bounds bounds))
+        {
+            return;
+        }
+
+        Vector3 offset = bounds.center - targetCenter;
+        offset.y = 0f;
+        brick.transform.position -= offset;
+    }
+
+    private Vector2 GetTargetFootprint(BrickDefinition definition)
+    {
+        float cellSize = gridOverlay.CellSize;
+        if (definition.HalfCell)
+        {
+            return selectedOrientation == BrickOrientation.Horizontal
+                ? new Vector2(cellSize, cellSize * 0.5f)
+                : new Vector2(cellSize * 0.5f, cellSize);
+        }
+
+        return selectedOrientation == BrickOrientation.Horizontal
+            ? new Vector2(cellSize * definition.CellsLong, cellSize)
+            : new Vector2(cellSize, cellSize * definition.CellsLong);
+    }
+
+    private float GetRotationY(BrickDefinition definition)
+    {
+        if (!definition.CanRotate)
+        {
+            return 0f;
+        }
+
+        return selectedOrientation == BrickOrientation.Horizontal ? 0f : 90f;
+    }
+
+    private BrickDefinition GetSelectedBrick()
+    {
+        if (brickDefinitions == null || brickDefinitions.Length == 0)
+        {
+            return null;
+        }
+
+        if (selectedBrickIndex < 0 || selectedBrickIndex >= brickDefinitions.Length)
+        {
+            return null;
+        }
+
+        return brickDefinitions[selectedBrickIndex];
+    }
+
+    private GameObject ResolveBrickTemplate(BrickDefinition definition)
+    {
+        if (definition != null && definition.Prefab != null)
+        {
+            return definition.Prefab;
+        }
+
+        if (selectedBrickIndex == 0 && brickPrefab != null)
+        {
+            return brickPrefab;
+        }
+
+        if (definition == null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(sceneBrickTemplateName))
+        {
+            return null;
+        }
+
+        GameObject sceneTemplate = GameObject.Find(sceneBrickTemplateName);
+        if (sceneTemplate != null && sceneTemplate.GetComponent<BuildingPlacedBrick>() == null)
+        {
+            return sceneTemplate;
+        }
+
+        return null;
+    }
+
+    private static void FitBrickToFootprint(GameObject brick, Vector2 footprint, float rotationY)
+    {
+        if (footprint.x <= 0f || footprint.y <= 0f)
+        {
+            return;
+        }
+
+        if (!TryGetRendererBounds(brick, out Bounds bounds))
+        {
+            return;
+        }
+
+        if (bounds.size.x <= Mathf.Epsilon || bounds.size.z <= Mathf.Epsilon)
+        {
+            return;
+        }
+
+        // footprint.x = target world X, footprint.y = target world Z
+        float scaleForWorldX = footprint.x / bounds.size.x;
+        float scaleForWorldZ = footprint.y / bounds.size.z;
+
+        if (!IsValidScaleFactor(scaleForWorldX) || !IsValidScaleFactor(scaleForWorldZ))
+        {
+            return;
+        }
+
+        Vector3 scale = brick.transform.localScale;
+
+        // After 90째 Y rotation: local X ??world Z, local Z ??world X (magnitudes)
+        bool rotated90 = Mathf.Abs(Mathf.DeltaAngle(rotationY, 90f)) < 1f;
+        if (rotated90)
+        {
+            scale.x *= scaleForWorldZ;
+            scale.z *= scaleForWorldX;
+        }
+        else
+        {
+            scale.x *= scaleForWorldX;
+            scale.z *= scaleForWorldZ;
+        }
+
+        // Y scales with the narrow dimension so height stays proportional to brick thickness
+        scale.y *= Mathf.Min(scaleForWorldX, scaleForWorldZ);
+
+        brick.transform.localScale = scale;
+    }
+
+    private static bool TryGetRendererBounds(GameObject root, out Bounds bounds)
+    {
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>();
+        bounds = default;
+        if (renderers.Length == 0)
+        {
+            return false;
+        }
+
+        bounds = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++)
+        {
+            bounds.Encapsulate(renderers[i].bounds);
+        }
+
+        return true;
+    }
+
+    private static bool IsValidScaleFactor(float scaleFactor)
+    {
+        return scaleFactor > Mathf.Epsilon && !float.IsInfinity(scaleFactor) && !float.IsNaN(scaleFactor);
+    }
+
+    private static void MoveBottomToSurface(GameObject brick, float surfaceY)
+    {
+        Renderer[] renderers = brick.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0)
+        {
+            Vector3 position = brick.transform.position;
+            position.y = surfaceY;
+            brick.transform.position = position;
+            return;
+        }
+
+        Bounds bounds = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++)
+        {
+            bounds.Encapsulate(renderers[i].bounds);
+        }
+
+        brick.transform.position += Vector3.up * (surfaceY - bounds.min.y);
+    }
+
+    private void HandleDestroyInput()
+    {
+        if ((!WasRightMousePressed() && !queuedRightClickDestroy) || !hasHighlightedCell)
+        {
+            return;
+        }
+
+        queuedRightClickDestroy = false;
+
+        // 동료가 있는 셀이면 우선 회수 (재고 반환)
+        if (CellHasCompanion(highlightedCell))
+        {
+            GameObject companion = placedCompanions[highlightedCell];
+            if (companion != null)
+            {
+                CompanionToy toy = companion.GetComponent<CompanionToy>();
+                if (toy != null && toy.Definition != null)
+                {
+                    CompanionInventory.EnsureExists();
+                    CompanionInventory.Instance.TryAdd(toy.Definition.companionId, 1, toy.Definition.preferredSlot);
+                    Debug.Log($"[Companion] {toy.Definition.displayName} 회수됨 (재고 +1)");
+                }
+                Destroy(companion);
+            }
+            placedCompanions.Remove(highlightedCell);
+            return;
+        }
+
+        // 그 외엔 브릭 제거
+        BrickDefinition selectedBrick = GetSelectedBrick();
+        if (selectedBrick == null || !TryGetPlacement(selectedBrick, out Placement placement))
+        {
+            return;
+        }
+
+        GameObject brick = FindTopBrick(placement.Keys);
+        if (brick != null)
+        {
+            BuildingPlacedBrick marker = brick.GetComponent<BuildingPlacedBrick>();
+            string inventoryKey = marker != null ? marker.InventoryKey : selectedBrick.DisplayName;
+            RemoveBrickFromStacks(brick);
+            if (!string.IsNullOrEmpty(inventoryKey))
+            {
+                BrickInventory.EnsureExists();
+                BrickInventory.Instance.Add(inventoryKey, 1);
+            }
+            Destroy(brick);
+        }
+    }
+
+    private GameObject FindTopBrick(PlacementKey[] keys)
+    {
+        GameObject topBrick = null;
+        int topIndex = -1;
+        foreach (PlacementKey key in keys)
+        {
+            if (!placedBricks.TryGetValue(key, out List<GameObject> stack) || stack.Count == 0)
+            {
+                continue;
+            }
+
+            int index = stack.Count - 1;
+            if (index > topIndex)
+            {
+                topIndex = index;
+                topBrick = stack[index];
+            }
+        }
+
+        return topBrick;
+    }
+
+    private int GetStackCount(PlacementKey[] keys)
+    {
+        int stackCount = 0;
+        foreach (PlacementKey key in keys)
+        {
+            stackCount = Mathf.Max(stackCount, CountInStack(key));
+
+            if (key.HalfSide == HalfCellSide.None)
+            {
+                stackCount = Mathf.Max(stackCount, CountInStack(new PlacementKey(key.Cell, HalfCellSide.Negative)));
+                stackCount = Mathf.Max(stackCount, CountInStack(new PlacementKey(key.Cell, HalfCellSide.Positive)));
+            }
+            else
+            {
+                stackCount = Mathf.Max(stackCount, CountInStack(new PlacementKey(key.Cell, HalfCellSide.None)));
+            }
+        }
+
+        return stackCount;
+    }
+
+    private int CountInStack(PlacementKey key)
+    {
+        return placedBricks.TryGetValue(key, out List<GameObject> stack) ? stack.Count : 0;
+    }
+
+    private float GetPlacementSurface(PlacementKey[] keys)
+    {
+        float surface = gridOverlay.SurfaceY + brickYOffset;
+        foreach (PlacementKey key in keys)
+        {
+            surface = Mathf.Max(surface, GetTopSurfaceForKey(key));
+            if (key.HalfSide == HalfCellSide.None)
+            {
+                surface = Mathf.Max(surface, GetTopSurfaceForKey(new PlacementKey(key.Cell, HalfCellSide.Negative)));
+                surface = Mathf.Max(surface, GetTopSurfaceForKey(new PlacementKey(key.Cell, HalfCellSide.Positive)));
+            }
+            else
+            {
+                surface = Mathf.Max(surface, GetTopSurfaceForKey(new PlacementKey(key.Cell, HalfCellSide.None)));
+            }
+        }
+        return surface;
+    }
+
+    private float GetTopSurfaceForKey(PlacementKey key)
+    {
+        if (!placedBricks.TryGetValue(key, out List<GameObject> stack) || stack.Count == 0)
+        {
+            return gridOverlay.SurfaceY + brickYOffset;
+        }
+
+        GameObject topBrick = stack[stack.Count - 1];
+        if (TryGetRendererBounds(topBrick, out Bounds bounds))
+        {
+            return bounds.max.y - stackOverlapY;
+        }
+
+        return gridOverlay.SurfaceY + brickYOffset;
+    }
+
+    private void AddBrickToStacks(GameObject brick, PlacementKey[] keys)
+    {
+        foreach (PlacementKey key in keys)
+        {
+            if (!placedBricks.TryGetValue(key, out List<GameObject> stack))
+            {
+                stack = new List<GameObject>();
+                placedBricks.Add(key, stack);
+            }
+
+            stack.Add(brick);
+        }
+    }
+
+    private void RemoveBrickFromStacks(GameObject brick)
+    {
+        List<PlacementKey> emptyKeys = new List<PlacementKey>();
+        foreach (KeyValuePair<PlacementKey, List<GameObject>> pair in placedBricks)
+        {
+            pair.Value.RemoveAll(candidate => candidate == brick);
+            if (pair.Value.Count == 0)
+            {
+                emptyKeys.Add(pair.Key);
+            }
+        }
+
+        foreach (PlacementKey key in emptyKeys)
+        {
+            placedBricks.Remove(key);
+        }
+    }
+
+    private static float GetBrickHeight(GameObject brick)
+    {
+        Renderer[] renderers = brick.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0)
+        {
+            return 0f;
+        }
+
+        Bounds bounds = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++)
+        {
+            bounds.Encapsulate(renderers[i].bounds);
+        }
+
+        return bounds.size.y;
+    }
+
+    private static void EnsureClickableCollider(GameObject brick)
+    {
+        if (brick.GetComponentInChildren<Collider>() != null)
+        {
+            return;
+        }
+
+        Renderer[] renderers = brick.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0)
+        {
+            brick.AddComponent<BoxCollider>();
+            return;
+        }
+
+        Bounds bounds = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++)
+        {
+            bounds.Encapsulate(renderers[i].bounds);
+        }
+
+        BoxCollider collider = brick.AddComponent<BoxCollider>();
+        collider.center = brick.transform.InverseTransformPoint(bounds.center);
+        Vector3 localMin = brick.transform.InverseTransformPoint(bounds.min);
+        Vector3 localMax = brick.transform.InverseTransformPoint(bounds.max);
+        collider.size = new Vector3(
+            Mathf.Abs(localMax.x - localMin.x),
+            Mathf.Abs(localMax.y - localMin.y),
+            Mathf.Abs(localMax.z - localMin.z));
+    }
+
+    private void RefreshPreviewBrick(bool force)
+    {
+        BrickDefinition selectedBrick = GetSelectedBrick();
+        GameObject template = ResolveBrickTemplate(selectedBrick);
+        if (!force && (template == null || template == previewTemplate))
+        {
+            return;
+        }
+
+        previewTemplate = template;
+        if (previewBrick != null)
+        {
+            Destroy(previewBrick);
+        }
+
+        if (template == null)
+        {
+            previewBrick = null;
+            return;
+        }
+
+        previewBrick = Instantiate(template, transform);
+        previewBrick.name = $"{template.name}_Preview";
+        previewBrick.SetActive(false);
+
+        foreach (Collider collider in previewBrick.GetComponentsInChildren<Collider>())
+        {
+            Destroy(collider);
+        }
+
+        foreach (BuildingPlacedBrick marker in previewBrick.GetComponentsInChildren<BuildingPlacedBrick>())
+        {
+            Destroy(marker);
+        }
+
+        previewMaterial = new Material(FindPreviewShader())
+        {
+            name = "Build Preview Material",
+            color = previewColor
+        };
+        ConfigurePreviewMaterial(previewMaterial);
+
+        foreach (Renderer renderer in previewBrick.GetComponentsInChildren<Renderer>())
+        {
+            renderer.sharedMaterial = previewMaterial;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+        }
+    }
+
+    private static Shader FindPreviewShader()
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader != null)
+        {
+            return shader;
+        }
+
+        shader = Shader.Find("Sprites/Default");
+        if (shader != null)
+        {
+            return shader;
+        }
+
+        return Shader.Find("Standard");
+    }
+
+    private static void ConfigurePreviewMaterial(Material material)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        Color color = material.color;
+        if (material.HasProperty("_BaseColor"))
+        {
+            material.SetColor("_BaseColor", color);
+        }
+        if (material.HasProperty("_Color"))
+        {
+            material.SetColor("_Color", color);
+        }
+
+        material.SetFloat("_Surface", 1f);
+        material.SetFloat("_Blend", 0f);
+        material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        material.SetInt("_ZWrite", 0);
+        material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        material.EnableKeyword("_ALPHAPREMULTIPLY_OFF");
+        material.DisableKeyword("_ALPHATEST_ON");
+        material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+        material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+    }
+
+    private static void SetPreviewMaterialColor(Material material, Color color)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        material.color = color;
+        if (material.HasProperty("_BaseColor"))
+        {
+            material.SetColor("_BaseColor", color);
+        }
+        if (material.HasProperty("_Color"))
+        {
+            material.SetColor("_Color", color);
+        }
+    }
+
+    private static Vector3 GetMousePosition()
+    {
+#if ENABLE_INPUT_SYSTEM
+        Mouse mouse = Mouse.current;
+        if (mouse != null)
+        {
+            return mouse.position.ReadValue();
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        return Input.mousePosition;
+#else
+        return Vector3.zero;
+#endif
+    }
+
+    private bool IsShiftHeld()
+    {
+#if ENABLE_INPUT_SYSTEM
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null)
+            return keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+        return Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+#else
+        return false;
+#endif
+    }
+
+    private bool IsLeftMouseHeld()
+    {
+#if ENABLE_INPUT_SYSTEM
+        Mouse mouse = Mouse.current;
+        if (mouse != null)
+            return mouse.leftButton.isPressed;
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+        return Input.GetMouseButton(0);
+#else
+        return false;
+#endif
+    }
+
+    private bool WasLeftMousePressed()
+    {
+        bool pressed = false;
+#if ENABLE_INPUT_SYSTEM
+        Mouse mouse = Mouse.current;
+        if (mouse != null)
+        {
+            pressed = mouse.leftButton.isPressed;
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetMouseButtonDown(0))
+        {
+            previousLeftMousePressed = true;
+            return true;
+        }
+#endif
+
+        bool wasPressedThisFrame = pressed && !previousLeftMousePressed;
+        previousLeftMousePressed = pressed;
+        return wasPressedThisFrame;
+    }
+
+    private bool WasRightMousePressed()
+    {
+        bool pressed = false;
+#if ENABLE_INPUT_SYSTEM
+        Mouse mouse = Mouse.current;
+        if (mouse != null)
+        {
+            pressed = mouse.rightButton.isPressed;
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetMouseButtonDown(1))
+        {
+            previousRightMousePressed = true;
+            return true;
+        }
+#endif
+
+        bool wasPressedThisFrame = pressed && !previousRightMousePressed;
+        previousRightMousePressed = pressed;
+        return wasPressedThisFrame;
+    }
+
+    private static bool WasNumberKeyPressed(int number)
+    {
+#if ENABLE_INPUT_SYSTEM
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null)
+        {
+            switch (number)
+            {
+                case 1: if (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame) return true; break;
+                case 2: if (keyboard.digit2Key.wasPressedThisFrame || keyboard.numpad2Key.wasPressedThisFrame) return true; break;
+                case 3: if (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame) return true; break;
+                case 4: if (keyboard.digit4Key.wasPressedThisFrame || keyboard.numpad4Key.wasPressedThisFrame) return true; break;
+                case 5: if (keyboard.digit5Key.wasPressedThisFrame || keyboard.numpad5Key.wasPressedThisFrame) return true; break;
+            }
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        switch (number)
+        {
+            case 1: return Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1);
+            case 2: return Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2);
+            case 3: return Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3);
+            case 4: return Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4);
+            case 5: return Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5);
+        }
+#endif
+
+        return false;
+    }
+
+    private static bool WasRotateKeyPressed()
+    {
+#if ENABLE_INPUT_SYSTEM
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && keyboard.rKey.wasPressedThisFrame)
+        {
+            return true;
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        return Input.GetKeyDown(KeyCode.R);
+#else
+        return false;
+#endif
+    }
+
+#if UNITY_EDITOR
+    // 동료 프리뷰 활성 중이면 Aggro/Attack Range 를 Scene 뷰에 표시
+    private void OnDrawGizmos()
+    {
+        if (companionPreview == null || !companionPreview.activeSelf) return;
+        if (companionPreviewDef == null) return;
+
+        Vector3 c = companionPreview.transform.position;
+
+        // Aggro Range (파랑)
+        Gizmos.color = new Color(0.35f, 0.75f, 1f, 0.85f);
+        Gizmos.DrawWireSphere(c, companionPreviewDef.aggroRange);
+
+        // Attack Range (주황)
+        Gizmos.color = new Color(1f, 0.5f, 0.15f, 0.95f);
+        Gizmos.DrawWireSphere(c, companionPreviewDef.attackRange);
+    }
+#endif
+}

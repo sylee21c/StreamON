@@ -51,15 +51,13 @@ namespace StreamOn.Minigames.Runner
         {
             if (gameManager.State != RunnerGameState.Playing) return;
             transform.Translate(Vector3.left * (gameManager.WorldSpeed * Time.deltaTime), Space.World);
-            if (!_counted && transform.position.x < -5f)
+            // Jump/Roll obstacles award a clear after passing the player. Enemies
+            // must never damage the player from this position check: health damage
+            // is handled exclusively by the actual collider contact in
+            // RunnerPlayerController.OnTriggerEnter2D.
+            if (obstacleType != RunnerObstacleType.Enemy && !_counted && transform.position.x < -5f)
             {
                 _counted = true;
-                if (obstacleType == RunnerObstacleType.Enemy)
-                {
-                    gameManager.OnEnemyEscaped();
-                    Deactivate();
-                    return;
-                }
                 gameManager.OnObstacleCleared(obstacleType);
             }
             if (transform.position.x <= despawnX) Deactivate();

@@ -6,7 +6,7 @@ namespace StreamOn.Minigames.Runner
     public enum RunnerGameState { Ready, Playing, GameOver }
     public enum RunnerRunEndReason { None, PlayerDefeated, TimeLimitCompleted }
 
-    public sealed class RunnerGameManager : MonoBehaviour
+    public sealed class RunnerGameManager : MonoBehaviour, IBroadcastGameSuspendHandler
     {
         [Header("Scene References")]
         [SerializeField] private RunnerPlayerController player;
@@ -25,6 +25,7 @@ namespace StreamOn.Minigames.Runner
 
         [Header("Broadcast Retry Rules")]
         [SerializeField, Min(0f)] private float gameOverTimePenaltySeconds = 8f;
+        [SerializeField, Min(0f)] private float deathAnimationDisplaySeconds = 1.4f;
 
         [Header("Campaign Difficulty")]
         [SerializeField, Min(1)] private int daysToMaximumDifficulty = 15;
@@ -50,12 +51,15 @@ namespace StreamOn.Minigames.Runner
         public int AttemptsPlayed { get; private set; }
         public RunnerRunEndReason LastEndReason { get; private set; }
         public RunnerBroadcastResult BroadcastResult { get; private set; }
+        public RunnerCampaignSettings CampaignSettings => campaign != null ? campaign.Settings : null;
         public event Action<float> SpeedChanged;
 
         private float _rawScore;
         private float _runStartingSpeed;
         private float _runMaximumSpeed;
         private float _runScoreMultiplier = 1f;
+        private Coroutine _gameOverPresentationRoutine;
+        private Coroutine _broadcastFinishRoutine;
         private bool _broadcastActive;
         private int _bestAttemptScore;
 
@@ -79,8 +83,17 @@ namespace StreamOn.Minigames.Runner
         {
             if (_broadcastActive)
             {
-                BroadcastElapsedSeconds += Time.deltaTime;
-                BroadcastSecondsRemaining = Mathf.Max(0f, BroadcastSecondsRemaining - Time.deltaTime);
+                if (CampaignSettings != null && RunnerBroadcastSessionStore.IsActive)
+                {
+                    RunnerBroadcastSessionStore.Tick(Time.deltaTime);
+                    BroadcastElapsedSeconds = RunnerBroadcastSessionStore.ElapsedSeconds;
+                    BroadcastSecondsRemaining = RunnerBroadcastSessionStore.RemainingSeconds;
+                }
+                else
+                {
+                    BroadcastElapsedSeconds += Time.deltaTime;
+                    BroadcastSecondsRemaining = Mathf.Max(0f, BroadcastSecondsRemaining - Time.deltaTime);
+                }
                 if (State == RunnerGameState.GameOver)
                 {
                     hud.SetScore(Score, HighScore, WorldSpeed, BroadcastSecondsRemaining);
@@ -99,6 +112,13 @@ namespace StreamOn.Minigames.Runner
 
         public void BeginRun()
         {
+            if (CampaignSettings != null && RunnerCampaignSaveStore.TryLoad(CampaignSettings, out RunnerCampaignSaveData sessionSave))
+            {
+                RunnerBroadcastSessionStore.BeginOrResume(CampaignSettings, sessionSave);
+                BroadcastDurationSeconds = RunnerBroadcastSessionStore.DurationSeconds;
+                BroadcastSecondsRemaining = RunnerBroadcastSessionStore.RemainingSeconds;
+                BroadcastElapsedSeconds = RunnerBroadcastSessionStore.ElapsedSeconds;
+            }
             _broadcastActive = true;
             AttemptsPlayed = 0;
             _bestAttemptScore = 0;
@@ -107,16 +127,24 @@ namespace StreamOn.Minigames.Runner
             HitsTaken = 0;
             LastEndReason = RunnerRunEndReason.None;
             BroadcastResult = null;
-            BroadcastElapsedSeconds = 0f;
-            BroadcastSecondsRemaining = BroadcastDurationSeconds;
+            if (!RunnerBroadcastSessionStore.IsActive)
+            {
+                BroadcastElapsedSeconds = 0f;
+                BroadcastSecondsRemaining = BroadcastDurationSeconds;
+            }
             if (campaign != null && campaign.IsActive)
-                audience.BeginBroadcast(campaign.Followers, campaign.GameSkill, campaign.TalkingSkill);
+                audience.BeginBroadcast(campaign.Followers, campaign.GameSkill, campaign.TalkingSkill, campaign.MentalLevel);
             chat.ResetChat();
             BeginAttempt(false);
         }
 
         private void BeginAttempt(bool isRetry)
         {
+            if (_gameOverPresentationRoutine != null)
+            {
+                StopCoroutine(_gameOverPresentationRoutine);
+                _gameOverPresentationRoutine = null;
+            }
             State = RunnerGameState.Playing;
             AttemptsPlayed++;
             WorldSpeed = _runStartingSpeed;
@@ -159,20 +187,23 @@ namespace StreamOn.Minigames.Runner
         }
 
         public void ConfigureCampaignRun(int day, int gameSkill, int healthStat, float broadcastDurationSeconds,
-            float gameOverPenaltySeconds = 8f)
+            float gameOverPenaltySeconds = 8f, int pcLevel = 1, int microphoneLevel = 1, int interiorLevel = 1)
         {
             int dayIndex = Mathf.Max(0, day - 1);
             int skillIndex = Mathf.Clamp(gameSkill - 1, 0, Mathf.Max(0, maximumEffectiveGameSkill - 1));
             float difficulty = Mathf.Clamp01(dayIndex / (float)Mathf.Max(1, daysToMaximumDifficulty));
             _runStartingSpeed = startingSpeed + maximumStartingSpeedBonus * difficulty;
             _runMaximumSpeed = maximumSpeed + maximumSpeedLimitBonus * difficulty;
-            _runScoreMultiplier = 1f + skillIndex * scoreBonusPerGameSkill;
+            float pcBonus = campaign != null && campaign.Settings != null
+                ? Mathf.Max(0, pcLevel - 1) * campaign.Settings.scoreBonusPerPcUpgrade : 0f;
+            _runScoreMultiplier = 1f + skillIndex * scoreBonusPerGameSkill + pcBonus;
             BroadcastDurationSeconds = Mathf.Max(1f, broadcastDurationSeconds);
             BroadcastSecondsRemaining = BroadcastDurationSeconds;
             gameOverTimePenaltySeconds = Mathf.Max(0f, gameOverPenaltySeconds);
             player.ConfigureForSkill(gameSkill, healthStat);
             spawner.ConfigureDifficulty(difficulty);
             audience.Configure(campaign != null ? campaign.GrowthSettings : null, this, chat);
+            audience.ConfigureEquipment(microphoneLevel, interiorLevel);
         }
 
         public void OnObstacleCleared(RunnerObstacleType obstacleType)
@@ -212,8 +243,6 @@ namespace StreamOn.Minigames.Runner
             chat.React(RunnerChatEvent.EnemyDefeated);
         }
 
-        public void OnEnemyEscaped() => player.ReceiveHit();
-
         public void EndRun() => EndRun(RunnerRunEndReason.PlayerDefeated);
 
         public void EndRun(RunnerRunEndReason reason)
@@ -229,40 +258,81 @@ namespace StreamOn.Minigames.Runner
                 RunnerUserSettingsData userSettings = RunnerUserSettingsStore.Load();
                 userSettings.runnerHighScore = HighScore;
                 RunnerUserSettingsStore.Save(userSettings);
+                audience?.OnNewHighScore();
             }
             if (reason == RunnerRunEndReason.PlayerDefeated)
             {
                 audience?.OnAttemptDefeated();
-                BroadcastSecondsRemaining = Mathf.Max(0f, BroadcastSecondsRemaining - gameOverTimePenaltySeconds);
+                if (RunnerBroadcastSessionStore.IsActive)
+                {
+                    RunnerBroadcastSessionStore.ApplyPenalty(gameOverTimePenaltySeconds);
+                    BroadcastSecondsRemaining = RunnerBroadcastSessionStore.RemainingSeconds;
+                }
+                else BroadcastSecondsRemaining = Mathf.Max(0f, BroadcastSecondsRemaining - gameOverTimePenaltySeconds);
             }
             else if (reason == RunnerRunEndReason.TimeLimitCompleted)
                 BroadcastSecondsRemaining = 0f;
             chat.BeginRunEndedChat(isNewHighScore, false);
             hud.SetScore(Score, HighScore, WorldSpeed, Mathf.Max(0f, BroadcastSecondsRemaining));
+            if (reason == RunnerRunEndReason.PlayerDefeated && deathAnimationDisplaySeconds > 0f)
+            {
+                hud.ShowGameOver(false);
+                _gameOverPresentationRoutine = StartCoroutine(ShowGameOverAfterDeathAnimation());
+            }
+            else
+            {
+                hud.ShowGameOver(true);
+                hud.SetRetryAvailable(CanRestartAttempt, BroadcastSecondsRemaining);
+            }
+            if (BroadcastSecondsRemaining <= 0f) FinishBroadcast();
+        }
+
+        private System.Collections.IEnumerator ShowGameOverAfterDeathAnimation()
+        {
+            yield return new WaitForSecondsRealtime(deathAnimationDisplaySeconds);
+            _gameOverPresentationRoutine = null;
+            if (State != RunnerGameState.GameOver || !_broadcastActive
+                || LastEndReason != RunnerRunEndReason.PlayerDefeated) yield break;
             hud.ShowGameOver(true);
             hud.SetRetryAvailable(CanRestartAttempt, BroadcastSecondsRemaining);
-            if (BroadcastSecondsRemaining <= 0f) FinishBroadcast();
         }
 
         private void FinishBroadcast()
         {
             if (!_broadcastActive) return;
             _broadcastActive = false;
+            RunnerBroadcastSessionStore.End(CampaignSettings);
             State = RunnerGameState.GameOver;
             LastEndReason = RunnerRunEndReason.TimeLimitCompleted;
             Score = Mathf.Max(Score, _bestAttemptScore);
             _rawScore = Score;
+            bool isNewHighScore = Score > HighScore;
+            if (isNewHighScore)
+            {
+                HighScore = Score;
+                RunnerUserSettingsData userSettings = RunnerUserSettingsStore.Load();
+                userSettings.runnerHighScore = HighScore;
+                RunnerUserSettingsStore.Save(userSettings);
+                audience?.OnNewHighScore();
+            }
             if (campaign != null && campaign.IsActive)
                 BroadcastResult = audience?.FinishBroadcast(Score, campaign.CurrentTargetScore, HitsTaken, EnemiesDefeated,
                     BroadcastElapsedSeconds, BroadcastDurationSeconds, true);
-            chat.BeginRunEndedChat(Score > HighScore, true);
+            chat.BeginRunEndedChat(isNewHighScore, true);
             hud.SetScore(Score, HighScore, WorldSpeed, 0f);
             hud.SetRetryAvailable(false, 0f);
-            if (campaign != null && campaign.IsActive)
-            {
-                hud.ShowGameOver(false);
-                campaign.HandleRunEnded();
-            }
+            hud.ShowGameOver(false);
+            if (_broadcastFinishRoutine != null) StopCoroutine(_broadcastFinishRoutine);
+            _broadcastFinishRoutine = StartCoroutine(FinishBroadcastPresentation());
+        }
+
+        private System.Collections.IEnumerator FinishBroadcastPresentation()
+        {
+            float exitDuration = campaign != null && campaign.GrowthSettings != null
+                ? campaign.GrowthSettings.viewerExitDuration : 3.2f;
+            if (audience != null) yield return audience.DrainViewersToZero(exitDuration);
+            _broadcastFinishRoutine = null;
+            if (campaign != null && campaign.IsActive) campaign.HandleRunEnded();
             else hud.ShowGameOver(true);
         }
 
@@ -271,6 +341,13 @@ namespace StreamOn.Minigames.Runner
             if (State != RunnerGameState.GameOver) return;
             if (CanRestartAttempt) BeginAttempt(true);
             else if (!_broadcastActive && (campaign == null || !campaign.IsActive)) BeginRun();
+        }
+
+        public bool TrySuspendForGameSwitch()
+        {
+            if (CampaignSettings != null) RunnerBroadcastSessionStore.SaveProgress(CampaignSettings);
+            _broadcastActive = false;
+            return true;
         }
 
         public void NotifyChat(RunnerChatEvent chatEvent) => chat?.React(chatEvent);
@@ -300,7 +377,7 @@ namespace StreamOn.Minigames.Runner
                 snapshot.campaignMaximumDays = campaign.MaximumDays;
                 snapshot.campaignEndless = campaign.IsEndless;
                 snapshot.subscribers = campaign.Subscribers;
-                snapshot.mental = campaign.Mental;
+                snapshot.mental = campaign.MentalLevel;
                 snapshot.gameSkill = campaign.GameSkill;
                 snapshot.talkingSkill = campaign.TalkingSkill;
                 snapshot.healthStat = campaign.HealthStat;

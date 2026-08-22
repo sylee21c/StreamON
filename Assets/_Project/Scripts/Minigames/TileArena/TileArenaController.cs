@@ -43,6 +43,7 @@ namespace StreamOn.Minigames.TileArena
         [SerializeField] private GameObject startOverlay;
         [SerializeField] private TileArenaAudioController audioController;
         [SerializeField] private TileArenaChatAdapter chatAdapter;
+        [SerializeField] private TileArenaBroadcastSessionController broadcastSession;
 
         [Header("Original Palette")]
         [SerializeField] private Color floorColor = new Color32(245, 246, 248, 255);
@@ -93,6 +94,7 @@ namespace StreamOn.Minigames.TileArena
         private void Awake()
         {
             if (chatAdapter == null) chatAdapter = GetComponent<TileArenaChatAdapter>();
+            if (broadcastSession == null) broadcastSession = GetComponent<TileArenaBroadcastSessionController>();
             if (audioController == null)
             {
                 audioController = GetComponent<TileArenaAudioController>();
@@ -159,6 +161,7 @@ namespace StreamOn.Minigames.TileArena
 
         public void StartGame()
         {
+            if (broadcastSession != null && !broadcastSession.TryStartAttempt()) return;
             _running = true;
             _transitioning = false;
             _score = 0;
@@ -311,7 +314,7 @@ namespace StreamOn.Minigames.TileArena
             }
             if (touched.Count == 0) return;
             foreach (Vector2Int cell in touched) _blue.Remove(cell);
-            _score += touched.Count;
+            _score += Mathf.Max(1, Mathf.RoundToInt(touched.Count * (broadcastSession != null ? broadcastSession.ScoreMultiplier : 1f)));
             audioController?.PlayPickup();
             chatAdapter?.OnBluePickedUp(touched.Count);
             if (_score > _best)
@@ -644,6 +647,7 @@ namespace StreamOn.Minigames.TileArena
             audioController?.StopMusic();
             audioController?.PlayGameOver();
             chatAdapter?.OnGameOver(_score > _bestAtRunStart);
+            broadcastSession?.OnAttemptGameOver(_score, maximumLives - _lives);
         }
 
         private void RenderPlayer(float now)

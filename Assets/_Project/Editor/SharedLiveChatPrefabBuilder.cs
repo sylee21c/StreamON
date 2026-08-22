@@ -359,8 +359,17 @@ namespace StreamOn.Editor
 
         private static RunnerDonationPopupController EnsureDonationPopup(GameObject prefab, Scene scene, Transform parent)
         {
-            RunnerDonationPopupController existing = FindInScene<RunnerDonationPopupController>(scene);
-            if (existing != null) return existing;
+            RunnerDonationPopupController[] existingPopups = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<RunnerDonationPopupController>(true)).ToArray();
+            RunnerDonationPopupController existing = existingPopups.FirstOrDefault();
+            foreach (RunnerDonationPopupController duplicate in existingPopups.Skip(1))
+                if (duplicate != null) Object.DestroyImmediate(duplicate.gameObject);
+            if (existing != null)
+            {
+                RectTransform existingRect = existing.GetComponent<RectTransform>();
+                existingRect.SetAsLastSibling();
+                return existing;
+            }
             GameObject instance = PrefabUtility.InstantiatePrefab(prefab, scene) as GameObject;
             instance.transform.SetParent(parent, false);
             RectTransform rect = instance.GetComponent<RectTransform>();

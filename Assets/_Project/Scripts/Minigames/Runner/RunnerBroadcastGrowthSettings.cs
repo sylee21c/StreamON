@@ -1,7 +1,92 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace StreamOn.Minigames.Runner
 {
+    public enum BroadcastPerformanceState
+    {
+        Good,
+        Neutral,
+        Poor
+    }
+
+    public sealed class RunnerBroadcastPerformanceMeter
+    {
+        private readonly Queue<float> _successes = new Queue<float>();
+        private readonly Queue<float> _mistakes = new Queue<float>();
+        private float _lastSuccessAt = float.NegativeInfinity;
+        private float _lastMistakeAt;
+        private float _lastMistakeSampleAt = float.NegativeInfinity;
+        private float _nextEvaluationAt;
+        private float _nextHeatStepAt;
+
+        public BroadcastPerformanceState State { get; private set; } = BroadcastPerformanceState.Neutral;
+
+        public void Reset(float now)
+        {
+            _successes.Clear();
+            _mistakes.Clear();
+            _lastSuccessAt = float.NegativeInfinity;
+            _lastMistakeAt = now;
+            _lastMistakeSampleAt = float.NegativeInfinity;
+            _nextEvaluationAt = now;
+            _nextHeatStepAt = float.PositiveInfinity;
+            State = BroadcastPerformanceState.Neutral;
+        }
+
+        public void RecordSuccess(float now, RunnerBroadcastGrowthSettings settings)
+        {
+            if (settings == null || now - _lastSuccessAt < settings.minimumSuccessSampleSpacing) return;
+            _lastSuccessAt = now;
+            _successes.Enqueue(now);
+        }
+
+        public void RecordMistake(float now, RunnerBroadcastGrowthSettings settings)
+        {
+            if (settings == null || now - _lastMistakeSampleAt < settings.minimumMistakeSampleSpacing) return;
+            _lastMistakeSampleAt = now;
+            _lastMistakeAt = now;
+            _mistakes.Enqueue(now);
+        }
+
+        public float Tick(float now, RunnerBroadcastGrowthSettings settings)
+        {
+            if (settings == null) return 0f;
+            Prune(_successes, now - settings.performanceWindowSeconds);
+            Prune(_mistakes, now - settings.performanceWindowSeconds);
+
+            if (now >= _nextEvaluationAt)
+            {
+                _nextEvaluationAt = now + settings.performanceEvaluationInterval;
+                bool poor = _mistakes.Count >= settings.poorStateMinimumMistakes
+                    && _successes.Count <= _mistakes.Count * settings.poorStateMaximumSuccessesPerMistake;
+                bool good = !poor && now - _lastMistakeAt >= settings.goodStateMistakeFreeSeconds
+                    && _successes.Count >= settings.goodStateMinimumSuccesses;
+                BroadcastPerformanceState next = poor ? BroadcastPerformanceState.Poor
+                    : good ? BroadcastPerformanceState.Good : BroadcastPerformanceState.Neutral;
+                if (next != State)
+                {
+                    State = next;
+                    _nextHeatStepAt = State == BroadcastPerformanceState.Good
+                        ? now + settings.goodStateHeatStepInterval
+                        : State == BroadcastPerformanceState.Poor
+                            ? now + settings.poorStateHeatStepInterval
+                            : float.PositiveInfinity;
+                }
+            }
+
+            if (State == BroadcastPerformanceState.Neutral || now < _nextHeatStepAt) return 0f;
+            _nextHeatStepAt = now + (State == BroadcastPerformanceState.Good
+                ? settings.goodStateHeatStepInterval : settings.poorStateHeatStepInterval);
+            return State == BroadcastPerformanceState.Good ? 1f : -1f;
+        }
+
+        private static void Prune(Queue<float> samples, float oldestAllowed)
+        {
+            while (samples.Count > 0 && samples.Peek() < oldestAllowed) samples.Dequeue();
+        }
+    }
+
     [CreateAssetMenu(fileName = "Runner Broadcast Growth Settings", menuName = "STREAM ON/Runner/Broadcast Growth Settings")]
     public sealed class RunnerBroadcastGrowthSettings : ScriptableObject
     {
@@ -16,18 +101,54 @@ namespace StreamOn.Minigames.Runner
         [Range(0f, 0.5f)] public float viewerRandomVariation = 0.12f;
         [Range(0f, 1f)] public float idleViewerFluctuationChance = 0.55f;
         [Min(1)] public int idleFluctuationMaximumViewers = 50;
-        [Range(0f, 100f)] public float startingHype = 35f;
-        [Range(0f, 100f)] public float restingHype = 30f;
-        [Min(0f)] public float hypeReturnPerSecond = 0.08f;
+        [Range(0f, 100f)] public float startingHype = 50f;
+        [Range(0f, 100f)] public float restingHype = 50f;
+        [Tooltip("보통 상태에서 기준 열기로 돌아가는 속도입니다. 0이면 보통 상태의 열기는 변하지 않습니다.")]
+        [Min(0f)] public float hypeReturnPerSecond = 0f;
 
-        [Header("Gameplay Hype")]
-        public float obstacleClearedHype = 1.5f;
-        public float enemyDefeatedHype = 5f;
-        public float attackMissedHype = -2.5f;
-        public float playerHitHype = -9f;
-        public float lowHealthDramaHype = 3f;
+        [Header("Broadcast Heat Rules")]
+        [Tooltip("재치 레벨이 1 오를 때 방송 열기 상승량에 더해지는 비율입니다.")]
+        [Range(0f, 1f)] public float heatGainBonusPerTalkingLevel = 0.18f;
+        [Tooltip("재치 레벨이 1 오를 때 방송 열기 감소량에서 덜 받는 비율입니다.")]
+        [Range(0f, 0.45f)] public float heatPenaltyReductionPerTalkingLevel = 0.14f;
+        [Min(0f)] public float newHighScoreHype = 8f;
+        [Min(0.5f)] public float viewerExitDuration = 3.2f;
+
+        [Header("Performance State Heat")]
+        [Tooltip("최근 성공과 실수를 평가할 시간 범위입니다.")]
+        [Min(2f)] public float performanceWindowSeconds = 12f;
+        [Tooltip("잘함/보통/못함 상태를 다시 판정하는 간격입니다.")]
+        [Min(0.1f)] public float performanceEvaluationInterval = 0.5f;
+        [Tooltip("마지막 실수 이후 이 시간 이상 지나야 잘하고 있는 상태가 될 수 있습니다.")]
+        [Min(0f)] public float goodStateMistakeFreeSeconds = 8f;
+        [Tooltip("판정 시간 안에 이만큼의 성공 표본이 있어야 잘하고 있는 상태가 됩니다.")]
+        [Min(1)] public int goodStateMinimumSuccesses = 3;
+        [Tooltip("판정 시간 안에 이만큼의 실수가 쌓여야 못하고 있는 상태가 됩니다.")]
+        [Min(1)] public int poorStateMinimumMistakes = 2;
+        [Tooltip("실수 1회당 허용할 성공 표본 수입니다. 성공이 더 많으면 보통 상태로 판정합니다.")]
+        [Min(0f)] public float poorStateMaximumSuccessesPerMistake = 0.75f;
+        [Tooltip("반복 호출되는 성공을 하나로 뭉개는 최소 간격입니다.")]
+        [Min(0f)] public float minimumSuccessSampleSpacing = 0.75f;
+        [Tooltip("한 피격에서 중복 호출되는 실수를 하나로 뭉개는 최소 간격입니다.")]
+        [Min(0f)] public float minimumMistakeSampleSpacing = 0.35f;
+        [Tooltip("잘하고 있는 상태에서 열기 1%가 오르는 간격입니다.")]
+        [Min(0.1f)] public float goodStateHeatStepInterval = 3f;
+        [Tooltip("못하고 있는 상태에서 열기 1%가 내려가는 간격입니다.")]
+        [Min(0.1f)] public float poorStateHeatStepInterval = 2f;
+        [Tooltip("특별 이벤트 보상/페널티가 실제 열기에 반영되는 초당 속도입니다.")]
+        [Min(0.1f)] public float eventHeatChangePerSecond = 3f;
+        [Tooltip("특별 이벤트 증감이 한꺼번에 쌓일 수 있는 최대 절댓값입니다.")]
+        [Min(1f)] public float maximumBufferedHeatChange = 20f;
+
+        [Header("Special Event Heat")]
         public float completedBroadcastHype = 8f;
-        public float defeatedHype = -12f;
+        public float correctModerationHype = 7f;
+        public float wrongModerationHype = -14f;
+        public float fraternizationOngoingHype = -1.4f;
+        public float slowFraternizationResolutionHype = 3f;
+        public float quickFraternizationResolutionHype = 9f;
+        [Min(0f)] public float quickFraternizationResponseSeconds = 6f;
+        [Min(0f)] public float slowFraternizationResponseSeconds = 32f;
 
         [Header("Chat Participation")]
         [Tooltip("채팅자 수 = base + sqrt(접속자) x multiplier")]
@@ -50,6 +171,8 @@ namespace StreamOn.Minigames.Runner
         [Range(0f, 1f)] public float maximumFollowConversion = 0.40f;
         [Range(1f, 5f)] public float unfollowRatingThreshold = 2.5f;
         [Range(0f, 0.2f)] public float unfollowRatePerMissingRatingPoint = 0.03f;
+        [Range(0f, 100f)] public float lowHeatUnfollowThreshold = 28f;
+        [Range(0f, 0.2f)] public float lowHeatUnfollowRate = 0.025f;
 
         [Header("Broadcast Rating Weights")]
         [Min(0f)] public float gameplayRatingWeight = 0.40f;
@@ -66,6 +189,18 @@ namespace StreamOn.Minigames.Runner
         [Header("Live Donation Events")]
         [Min(0)] public int minimumViewersForDonation = 1;
         [Min(0.5f)] public float liveDonationCooldown = 9f;
+        [Tooltip("성공 이벤트와 무관하게 방송 중 임의의 시점에 들어오는 일반 후원입니다.")]
+        public bool enableAmbientDonations = true;
+        [Min(1f)] public float ambientDonationMinimumInterval = 12f;
+        [Min(1f)] public float ambientDonationMaximumInterval = 24f;
+        public string[] ambientDonationMessages =
+        {
+            "방송 재밌게 보고 있어요 ㅋㅋ",
+            "오늘도 방송 파이팅!",
+            "커피값 보태고 갑니다",
+            "조용히 보다가 한 번 쏩니다",
+            "계속 가보자고"
+        };
         [Range(0f, 1f)] public float obstacleClearDonationChance = 0.025f;
         [Range(0f, 1f)] public float enemyDefeatDonationChance = 0.16f;
         [Range(0f, 1f)] public float tilePickupDonationChance = 0.018f;

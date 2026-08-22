@@ -8,6 +8,7 @@ using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace StreamOn.EditorTools
 {
@@ -19,13 +20,18 @@ namespace StreamOn.EditorTools
         private const string ControllerPath = OutputFolder + "/MorRunner.controller";
         private const string EnemyControllerPath = OutputFolder + "/RunnerEnemy.controller";
         private const string SetupVersionKey = "StreamOn.RunnerAnimatorSetup.Version";
-        private const int SetupVersion = 2;
+        private const int SetupVersion = 5;
 
         static RunnerAnimatorSetup() => EditorApplication.delayCall += SetupAfterUpgrade;
 
         private static void SetupAfterUpgrade()
         {
             if (EditorPrefs.GetInt(SetupVersionKey, 0) >= SetupVersion) return;
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                EditorApplication.delayCall += SetupAfterUpgrade;
+                return;
+            }
             SetupOnce();
         }
 
@@ -126,6 +132,9 @@ namespace StreamOn.EditorTools
                 AnimatorStateTransition toDead = machine.AddAnyStateTransition(deadState);
                 Configure(toDead, false, 0f); toDead.AddCondition(AnimatorConditionMode.If, 0f, "Dead");
             }
+            foreach (AnimatorStateTransition transition in machine.anyStateTransitions
+                .Where(item => item.destinationState == deadState))
+                transition.canTransitionToSelf = false;
             if (addRollGraph) AddActionGraph(machine, rollState, runState, "Roll");
             if (addAttackGraph) AddActionGraph(machine, attackState, runState, "Attack");
             EditorUtility.SetDirty(controller);
@@ -163,6 +172,12 @@ namespace StreamOn.EditorTools
             SerializedObject playerObject = new SerializedObject(player);
             playerObject.FindProperty("animator").objectReferenceValue = animator;
             playerObject.FindProperty("groundLayer").intValue = 1 << 6;
+            playerObject.FindProperty("attackHitbox").objectReferenceValue = EnsureAttackHitbox(player.transform);
+            playerObject.FindProperty("attackCooldownFrames").intValue = 12;
+            playerObject.FindProperty("attackInputBufferFrames").intValue = 4;
+            playerObject.FindProperty("attackAnimationFramesPerSecond").floatValue = 16f;
+            playerObject.FindProperty("minimumAttackCooldownFrames").intValue = 6;
+            playerObject.FindProperty("maxHealth").intValue = 5;
             playerObject.ApplyModifiedPropertiesWithoutUndo();
 
             Sprite enemySprite = AssetDatabase.LoadAllAssetsAtPath("Assets/Art/Inhumania_Asset/CharacterSprite/Enemies/mob1_walk.png")
@@ -183,6 +198,7 @@ namespace StreamOn.EditorTools
                 guide.text = "SPACE / ↑  점프     C / ↓  구르기     좌클릭  공격";
                 guide.rectTransform.sizeDelta = new Vector2(670f, 45f);
             }
+            EnsureSceneAuthoredGameplayUi(scene);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
             if (openedHere) EditorSceneManager.CloseScene(scene, true);
@@ -210,12 +226,26 @@ namespace StreamOn.EditorTools
             SetObstacleArray(enemyPool, enemies);
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
-            int previewIndex = 0;
-            NameAndPlacePreviews(jumps, "Jump Obstacle Preview", ref previewIndex);
-            NameAndPlacePreviews(rolls, "Roll Obstacle Preview", ref previewIndex);
-            NameAndPlacePreviews(enemies, "Enemy Preview", ref previewIndex);
-            if (obstacles.Length > 0 && obstacles[0].transform.parent != null)
-                obstacles[0].transform.parent.name = "Obstacle Previews & Pools";
+            // The objects in these pools are scene-authored previews. Their names,
+            // positions, scale, visuals and colliders belong to the designer and must
+            // never be normalized by this repair/setup pass.
+        }
+
+        private static BoxCollider2D EnsureAttackHitbox(Transform player)
+        {
+            Transform existing = player.Find("Attack Hitbox");
+            GameObject hitboxObject = existing != null ? existing.gameObject : new GameObject("Attack Hitbox");
+            if (existing == null) hitboxObject.transform.SetParent(player, false);
+            BoxCollider2D hitbox = hitboxObject.GetComponent<BoxCollider2D>();
+            if (hitbox == null)
+            {
+                hitbox = hitboxObject.AddComponent<BoxCollider2D>();
+                hitbox.size = new Vector2(3f, 1.4f);
+                hitbox.offset = new Vector2(1.8f, 0.15f);
+            }
+            hitbox.isTrigger = true;
+            hitbox.enabled = false;
+            return hitbox;
         }
 
         private static void SetObstacleArray(SerializedProperty property, RunnerObstacle[] values)
@@ -225,53 +255,201 @@ namespace StreamOn.EditorTools
                 property.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
         }
 
-        private static void NameAndPlacePreviews(RunnerObstacle[] values, string baseName, ref int previewIndex)
-        {
-            for (int i = 0; i < values.Length; i++)
-            {
-                RunnerObstacle obstacle = values[i];
-                obstacle.name = values.Length == 1 ? baseName : $"{baseName} {i + 1}";
-                Vector3 position = obstacle.transform.position;
-                position.x = 13f + previewIndex * 2f;
-                obstacle.transform.position = position;
-                obstacle.gameObject.SetActive(true);
-                previewIndex++;
-            }
-        }
-
         private static void ConfigureObstacle(RunnerObstacle obstacle, RunnerObstacleType type, Sprite enemySprite, AnimatorController enemyController)
         {
-            SerializedObject serialized = new SerializedObject(obstacle);
-            serialized.FindProperty("obstacleType").enumValueIndex = (int)type;
-            // Every obstacle now takes its final spawn height from the preview object's scene Y.
-            serialized.FindProperty("spawnOffset").vector3Value = Vector3.zero;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
+            // Existing obstacle objects are deliberately configured in the scene.
+            // Only fill missing enemy animation references; never overwrite authored
+            // transform, sprite, tint, collider, spawn offset, or animator settings.
+            if (type != RunnerObstacleType.Enemy) return;
 
             SpriteRenderer renderer = obstacle.GetComponent<SpriteRenderer>();
-            BoxCollider2D hitbox = obstacle.GetComponent<BoxCollider2D>();
             Animator enemyAnimator = obstacle.GetComponent<Animator>();
-            if (type == RunnerObstacleType.Enemy)
+            bool changed = false;
+            if (renderer != null && renderer.sprite == null && enemySprite != null)
             {
-                obstacle.transform.localScale = new Vector3(3.2f, 3.2f, 1f);
                 renderer.sprite = enemySprite;
-                renderer.color = Color.white;
-                hitbox.size = new Vector2(0.4f, 0.62f);
-                hitbox.offset = new Vector2(0f, 0.08f);
-                if (enemyAnimator == null) enemyAnimator = obstacle.gameObject.AddComponent<Animator>();
+                changed = true;
+            }
+            if (enemyAnimator == null)
+            {
+                enemyAnimator = obstacle.gameObject.AddComponent<Animator>();
+                changed = true;
+            }
+            if (enemyAnimator.runtimeAnimatorController == null && enemyController != null)
+            {
                 enemyAnimator.runtimeAnimatorController = enemyController;
                 enemyAnimator.enabled = true;
+                changed = true;
             }
-            else
+            if (changed) EditorUtility.SetDirty(obstacle.gameObject);
+        }
+
+        private static void EnsureSceneAuthoredGameplayUi(Scene scene)
+        {
+            Canvas canvas = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Canvas>(true)).FirstOrDefault();
+            RunnerHUD hud = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<RunnerHUD>(true)).FirstOrDefault();
+            RunnerPauseController pause = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<RunnerPauseController>(true)).FirstOrDefault();
+            if (canvas == null || hud == null || pause == null) return;
+
+            TMP_FontAsset font = canvas.GetComponentsInChildren<TMP_Text>(true)
+                .Select(text => text.font).FirstOrDefault(value => value != null);
+            TMP_Text speed = hud.GetComponentsInChildren<TMP_Text>(true).FirstOrDefault(text => text.name == "Speed");
+            TMP_Text health = hud.GetComponentsInChildren<TMP_Text>(true).FirstOrDefault(text => text.name == "Health");
+            TMP_Text broadcastTime = hud.GetComponentsInChildren<TMP_Text>(true)
+                .FirstOrDefault(text => text.name == "Broadcast Time");
+            if (broadcastTime == null)
             {
-                obstacle.transform.localScale = type == RunnerObstacleType.Roll
-                    ? new Vector3(1.8f, 0.8f, 1f)
-                    : new Vector3(1.2f, 2.2f, 1f);
-                renderer.color = type == RunnerObstacleType.Roll ? new Color(1f, 0.68f, 0.2f) : new Color(0.92f, 0.31f, 0.32f);
-                hitbox.size = Vector2.one;
-                hitbox.offset = Vector2.zero;
-                if (enemyAnimator != null) enemyAnimator.enabled = false;
+                broadcastTime = CreatePauseText(hud.transform, "Broadcast Time", "STREAM  01:30", font, 19f,
+                    new Vector2(170f, 50f), new Vector2(220f, 0f));
+                if (speed != null)
+                {
+                    speed.rectTransform.sizeDelta = new Vector2(150f, 50f);
+                    speed.rectTransform.anchoredPosition = new Vector2(70f, 0f);
+                }
+                if (health != null)
+                {
+                    health.text = "HP  ♥♥♥♥♥";
+                    health.rectTransform.sizeDelta = new Vector2(190f, 50f);
+                    health.rectTransform.anchoredPosition = new Vector2(365f, 0f);
+                }
             }
-            EditorUtility.SetDirty(obstacle.gameObject);
+            SerializedObject hudSerialized = new SerializedObject(hud);
+            hudSerialized.FindProperty("broadcastTimeText").objectReferenceValue = broadcastTime;
+            hudSerialized.ApplyModifiedPropertiesWithoutUndo();
+
+            GameObject pausePanel = EnsurePausePanel(canvas.transform, "Pause Menu", new Color(0.025f, 0.035f, 0.06f, 0.94f));
+            if (pausePanel.transform.Find("Title") == null)
+            {
+                CreatePauseText(pausePanel.transform, "Title", "일시정지", font, 44f, new Vector2(520f, 70f), new Vector2(0f, 155f));
+                CreatePauseButton(pausePanel.transform, "Continue Button", "계속하기", font, new Vector2(0f, 55f));
+                CreatePauseButton(pausePanel.transform, "Settings Button", "설정", font, new Vector2(0f, -20f));
+                CreatePauseButton(pausePanel.transform, "Manual Save Button", "수동 저장", font, new Vector2(0f, -95f));
+                CreatePauseButton(pausePanel.transform, "Main Menu Button", "메인 화면", font, new Vector2(0f, -170f));
+            }
+
+            GameObject settingsPanel = EnsurePausePanel(canvas.transform, "Settings Menu", new Color(0.025f, 0.035f, 0.06f, 0.97f));
+            if (settingsPanel.transform.Find("Title") == null)
+            {
+                CreatePauseText(settingsPanel.transform, "Title", "설정", font, 42f, new Vector2(520f, 65f), new Vector2(0f, 170f));
+                CreatePauseText(settingsPanel.transform, "Volume Label", "전체 음량  100%", font, 24f, new Vector2(520f, 45f), new Vector2(0f, 85f));
+                CreatePauseSlider(settingsPanel.transform, new Vector2(0f, 35f));
+                CreatePauseText(settingsPanel.transform, "AI Label", "AI 채팅  ON", font, 24f, new Vector2(520f, 45f), new Vector2(0f, -40f));
+                CreatePauseButton(settingsPanel.transform, "AI Toggle Button", "AI 채팅 전환", font, new Vector2(0f, -95f));
+                CreatePauseButton(settingsPanel.transform, "Back Button", "뒤로", font, new Vector2(0f, -170f));
+            }
+
+            TMP_Text countdown = canvas.GetComponentsInChildren<TMP_Text>(true)
+                .FirstOrDefault(text => text.name == "Resume Countdown");
+            if (countdown == null)
+            {
+                countdown = CreatePauseText(canvas.transform, "Resume Countdown", "3", font, 110f,
+                    new Vector2(500f, 180f), Vector2.zero);
+                countdown.fontStyle = FontStyles.Bold;
+            }
+
+            SerializedObject pauseSerialized = new SerializedObject(pause);
+            pauseSerialized.FindProperty("pausePanel").objectReferenceValue = pausePanel;
+            pauseSerialized.FindProperty("settingsPanel").objectReferenceValue = settingsPanel;
+            pauseSerialized.FindProperty("countdownText").objectReferenceValue = countdown;
+            pauseSerialized.FindProperty("volumeLabel").objectReferenceValue = settingsPanel.transform.Find("Volume Label")?.GetComponent<TMP_Text>();
+            pauseSerialized.FindProperty("aiLabel").objectReferenceValue = settingsPanel.transform.Find("AI Label")?.GetComponent<TMP_Text>();
+            pauseSerialized.FindProperty("volumeSlider").objectReferenceValue = settingsPanel.GetComponentInChildren<Slider>(true);
+            pauseSerialized.FindProperty("resumeButton").objectReferenceValue = pausePanel.transform.Find("Continue Button")?.GetComponent<Button>();
+            pauseSerialized.FindProperty("settingsButton").objectReferenceValue = pausePanel.transform.Find("Settings Button")?.GetComponent<Button>();
+            pauseSerialized.FindProperty("manualSaveButton").objectReferenceValue = pausePanel.transform.Find("Manual Save Button")?.GetComponent<Button>();
+            pauseSerialized.FindProperty("mainMenuButton").objectReferenceValue = pausePanel.transform.Find("Main Menu Button")?.GetComponent<Button>();
+            pauseSerialized.FindProperty("aiToggleButton").objectReferenceValue = settingsPanel.transform.Find("AI Toggle Button")?.GetComponent<Button>();
+            pauseSerialized.FindProperty("settingsBackButton").objectReferenceValue = settingsPanel.transform.Find("Back Button")?.GetComponent<Button>();
+            pauseSerialized.ApplyModifiedPropertiesWithoutUndo();
+
+            pausePanel.SetActive(false);
+            settingsPanel.SetActive(false);
+            countdown.gameObject.SetActive(false);
+        }
+
+        private static GameObject EnsurePausePanel(Transform parent, string name, Color color)
+        {
+            Transform existing = parent.Find(name);
+            if (existing != null) return existing.gameObject;
+            GameObject panel = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            panel.transform.SetParent(parent, false);
+            RectTransform rect = panel.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            panel.GetComponent<Image>().color = color;
+            return panel;
+        }
+
+        private static TMP_Text CreatePauseText(Transform parent, string name, string value, TMP_FontAsset font,
+            float fontSize, Vector2 size, Vector2 position)
+        {
+            GameObject obj = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+            obj.transform.SetParent(parent, false);
+            TextMeshProUGUI text = obj.GetComponent<TextMeshProUGUI>();
+            text.font = font;
+            text.fontSize = fontSize;
+            text.text = value;
+            text.color = Color.white;
+            text.alignment = TextAlignmentOptions.Center;
+            text.rectTransform.sizeDelta = size;
+            text.rectTransform.anchoredPosition = position;
+            return text;
+        }
+
+        private static Button CreatePauseButton(Transform parent, string name, string label, TMP_FontAsset font, Vector2 position)
+        {
+            GameObject obj = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            obj.transform.SetParent(parent, false);
+            RectTransform rect = obj.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(320f, 56f);
+            rect.anchoredPosition = position;
+            obj.GetComponent<Image>().color = new Color(0.13f, 0.52f, 0.58f, 1f);
+            CreatePauseText(obj.transform, "Label", label, font, 25f, rect.sizeDelta, Vector2.zero);
+            return obj.GetComponent<Button>();
+        }
+
+        private static Slider CreatePauseSlider(Transform parent, Vector2 position)
+        {
+            GameObject root = new GameObject("Master Volume", typeof(RectTransform), typeof(Slider));
+            root.transform.SetParent(parent, false);
+            RectTransform rect = root.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(360f, 24f);
+            rect.anchoredPosition = position;
+
+            GameObject background = new GameObject("Background", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            background.transform.SetParent(root.transform, false);
+            RectTransform backgroundRect = background.GetComponent<RectTransform>();
+            backgroundRect.anchorMin = new Vector2(0f, 0.35f);
+            backgroundRect.anchorMax = new Vector2(1f, 0.65f);
+            backgroundRect.offsetMin = backgroundRect.offsetMax = Vector2.zero;
+            background.GetComponent<Image>().color = new Color(0.2f, 0.22f, 0.27f, 1f);
+
+            GameObject fill = new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            fill.transform.SetParent(root.transform, false);
+            RectTransform fillRect = fill.GetComponent<RectTransform>();
+            fillRect.anchorMin = new Vector2(0f, 0.35f);
+            fillRect.anchorMax = new Vector2(1f, 0.65f);
+            fillRect.offsetMin = fillRect.offsetMax = Vector2.zero;
+            fill.GetComponent<Image>().color = new Color(0.2f, 0.8f, 0.72f, 1f);
+
+            GameObject handle = new GameObject("Handle", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            handle.transform.SetParent(root.transform, false);
+            RectTransform handleRect = handle.GetComponent<RectTransform>();
+            handleRect.sizeDelta = new Vector2(24f, 24f);
+            handle.GetComponent<Image>().color = Color.white;
+
+            Slider slider = root.GetComponent<Slider>();
+            slider.fillRect = fillRect;
+            slider.handleRect = handleRect;
+            slider.targetGraphic = handle.GetComponent<Image>();
+            slider.minValue = 0f;
+            slider.maxValue = 1f;
+            return slider;
         }
 
         private static void AddActionGraph(AnimatorStateMachine machine, AnimatorState action, AnimatorState run, string parameter)

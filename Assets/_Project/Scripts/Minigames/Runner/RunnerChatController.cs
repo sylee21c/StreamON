@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace StreamOn.Minigames.Runner
 {
@@ -15,7 +18,8 @@ namespace StreamOn.Minigames.Runner
         CampaignTalkingTraining, CampaignRest, CampaignActionSelected, CampaignSettlement, CampaignClear, CampaignFailed,
         BroadcastCompleted, DonationReceived, WitPrompt, WitReplySuccess, WitReplyOkay, WitReplyAwkward,
         TileArenaStarted, TileArenaJumped, TileArenaPickup,
-        TileArenaStageCleared, TileArenaPlayerHit, TileArenaLowLives, TileArenaGameOver
+        TileArenaStageCleared, TileArenaPlayerHit, TileArenaLowLives, TileArenaGameOver,
+        ChatConflict, ChatFraternization
     }
 
     public enum SharedChatGameState { Ready, Playing, GameOver }
@@ -60,15 +64,25 @@ namespace StreamOn.Minigames.Runner
         [Tooltip("매 플레이에 분탕 또는 논쟁형 페르소나를 최소 한 유형 포함")]
         [SerializeField] private bool ensureConflictPersona = true;
 
-        private readonly Queue<string> _pending = new Queue<string>();
-        private readonly Queue<string> _visible = new Queue<string>();
+        private sealed class RenderedChatLine
+        {
+            public string viewerId;
+            public string rendered;
+        }
+
+        private readonly Queue<RenderedChatLine> _pending = new Queue<RenderedChatLine>();
+        private readonly Queue<RenderedChatLine> _visible = new Queue<RenderedChatLine>();
         private readonly Queue<string> _recentChatContext = new Queue<string>();
         private readonly Queue<RunnerChatEvent> _aiEvents = new Queue<RunnerChatEvent>();
         private readonly List<RunnerViewerData> _activeViewers = new List<RunnerViewerData>();
         private readonly Dictionary<string, Queue<string>> _recentMessagesByViewer = new Dictionary<string, Queue<string>>();
+        private readonly Dictionary<string, string> _lastMessageByViewer = new Dictionary<string, string>();
+        private readonly HashSet<string> _bannedViewers = new HashSet<string>();
         private Coroutine _displayPump;
         private Coroutine _aiPump;
         private Coroutine _postGamePump;
+        private Coroutine _conflictPump;
+        private Coroutine _socialDialoguePump;
         private TMP_Text _titleText;
         private float _nextAmbientAt;
         private bool _loggedAiUnavailable;
@@ -82,6 +96,7 @@ namespace StreamOn.Minigames.Runner
         private float _audienceDelayMultiplier = 1f;
         private float _eventReactionChance = 1f;
         private float _eventReactionCooldown;
+        private float _broadcastHeat = 50f;
         private float _nextEventReactionAt;
         private int _lastLoggedViewerCount = -1;
         private int _lastLoggedChatterCount = -1;
@@ -89,6 +104,21 @@ namespace StreamOn.Minigames.Runner
         private string _externalGameTitle = "게임";
         private SharedChatGameState _externalGameState = SharedChatGameState.Ready;
         private RunnerChatSnapshot _externalSnapshot;
+        private string _lastDonationNickname;
+        private int _lastDonationAmount;
+        private string _lastDonationMessage;
+        private bool _lastDonationIsLarge;
+        private bool _conflictActive;
+        private RunnerViewerData _troublemaker;
+        private RunnerViewerData _conflictTarget;
+        private string _conflictTargetMessage;
+        private bool _conflictTargetsStreamer;
+        private bool _fraternizationActive;
+        private readonly List<RunnerViewerData> _fraternizers = new List<RunnerViewerData>();
+        private readonly HashSet<string> _fraternizationOffenders = new HashSet<string>();
+        private RunnerViewerData _pendingFraternizer;
+        private Coroutine _fraternizationPump;
+        private float _socialEventStartedAt;
 
         private void Awake()
         {
@@ -110,6 +140,11 @@ namespace StreamOn.Minigames.Runner
         private void Update()
         {
             if (Time.timeScale <= 0f || Time.unscaledTime < _nextAmbientAt) return;
+            if (IsPlayingNow() && !IsSocialEventActive() && (TryStartConflict() || TryStartFraternization()))
+            {
+                ScheduleNextAmbient(ambientMinimumDelay, ambientMaximumDelay);
+                return;
+            }
             RunnerChatEvent ambientEvent;
             if (gameManager != null)
             {
@@ -192,6 +227,9 @@ namespace StreamOn.Minigames.Runner
 
         public void React(RunnerChatEvent chatEvent)
         {
+            if (IsSocialEventActive() && chatEvent != RunnerChatEvent.ChatConflict
+                && chatEvent != RunnerChatEvent.ChatFraternization
+                && IsGameplayReaction(chatEvent) && UnityEngine.Random.value < 0.82f) return;
             if (!ShouldReactToLiveEvent(chatEvent)) return;
 
             if (!CanUseAi(out string apiKey))
@@ -238,21 +276,26 @@ namespace StreamOn.Minigames.Runner
             return speaking.Count > 0 ? speaking[UnityEngine.Random.Range(0, speaking.Count)].nickname : "익명의 시청자";
         }
 
-        public void OnDonationReceived(string donorNickname, int amount)
+        public void OnDonationReceived(string donorNickname, int amount, string donationMessage = null, bool isLarge = false)
         {
-            React(RunnerChatEvent.DonationReceived);
+            _lastDonationNickname = donorNickname ?? string.Empty;
+            _lastDonationAmount = Mathf.Max(0, amount);
+            _lastDonationMessage = donationMessage ?? string.Empty;
+            _lastDonationIsLarge = isLarge;
             _recentChatContext.Enqueue($"{donorNickname}님이 {amount:N0}원을 후원함");
             while (_recentChatContext.Count > 6) _recentChatContext.Dequeue();
+            React(RunnerChatEvent.DonationReceived);
         }
 
         public void ConfigureAudience(int currentViewers, int chattingViewers, float delayMultiplier,
-            float eventReactionChance, float eventReactionCooldown)
+            float eventReactionChance, float eventReactionCooldown, float broadcastHeat = 50f)
         {
             _audienceViewerCount = Mathf.Max(0, currentViewers);
             _chattingViewerCount = Mathf.Clamp(chattingViewers, 0, Mathf.Min(_audienceViewerCount, _activeViewers.Count));
             _audienceDelayMultiplier = Mathf.Clamp(delayMultiplier, 0.2f, 1f);
             _eventReactionChance = Mathf.Clamp01(eventReactionChance);
             _eventReactionCooldown = Mathf.Max(0f, eventReactionCooldown);
+            _broadcastHeat = Mathf.Clamp(broadcastHeat, 0f, 100f);
             if (_lastLoggedViewerCount != _audienceViewerCount || _lastLoggedChatterCount != _chattingViewerCount)
             {
                 Debug.Log($"STREAM ON audience: {_audienceViewerCount:N0} viewers, {_chattingViewerCount:N0} active chatters.", this);
@@ -278,14 +321,34 @@ namespace StreamOn.Minigames.Runner
             _visible.Clear();
             _recentChatContext.Clear();
             _recentMessagesByViewer.Clear();
+            _lastMessageByViewer.Clear();
+            _bannedViewers.Clear();
             _aiEvents.Clear();
             if (_displayPump != null) StopCoroutine(_displayPump);
             if (_aiPump != null) StopCoroutine(_aiPump);
             if (_postGamePump != null) StopCoroutine(_postGamePump);
+            if (_conflictPump != null) StopCoroutine(_conflictPump);
+            if (_socialDialoguePump != null) StopCoroutine(_socialDialoguePump);
+            if (_fraternizationPump != null) StopCoroutine(_fraternizationPump);
             _displayPump = null;
             _aiPump = null;
             _postGamePump = null;
+            _conflictPump = null;
+            _socialDialoguePump = null;
+            _conflictActive = false;
+            _troublemaker = null;
+            _conflictTarget = null;
+            _conflictTargetsStreamer = false;
+            _fraternizationActive = false;
+            _fraternizers.Clear();
+            _fraternizationOffenders.Clear();
+            _pendingFraternizer = null;
+            _fraternizationPump = null;
             _nextEventReactionAt = 0f;
+            _lastDonationNickname = string.Empty;
+            _lastDonationAmount = 0;
+            _lastDonationMessage = string.Empty;
+            _lastDonationIsLarge = false;
             SelectActiveViewers();
             ScheduleNextAmbient(ambientMinimumDelay, ambientMaximumDelay);
             RefreshSlots();
@@ -307,10 +370,54 @@ namespace StreamOn.Minigames.Runner
         public void BeginRunEndedChat(bool isNewHighScore, bool completedTimeLimit)
         {
             if (_postGamePump != null) StopCoroutine(_postGamePump);
-            React(completedTimeLimit ? RunnerChatEvent.BroadcastCompleted : RunnerChatEvent.GameOver);
+            if (completedTimeLimit)
+            {
+                BeginBroadcastEndingChat();
+                if (isNewHighScore) React(RunnerChatEvent.NewHighScore);
+                return;
+            }
+            React(RunnerChatEvent.GameOver);
             if (isNewHighScore) React(RunnerChatEvent.NewHighScore);
             ScheduleNextAmbient(postGameAmbientMinimumDelay, postGameAmbientMaximumDelay);
             _postGamePump = StartCoroutine(PumpPostGameReactions(_runGeneration));
+        }
+
+        public void BeginBroadcastEndingChat()
+        {
+            if (_postGamePump != null) StopCoroutine(_postGamePump);
+            StopActiveSocialEvent();
+            React(RunnerChatEvent.BroadcastCompleted);
+            _postGamePump = StartCoroutine(PumpBroadcastFarewells(_runGeneration));
+        }
+
+        private void StopActiveSocialEvent()
+        {
+            _conflictActive = false;
+            _fraternizationActive = false;
+            _fraternizers.Clear();
+            _fraternizationOffenders.Clear();
+            _pendingFraternizer = null;
+            if (_conflictPump != null) StopCoroutine(_conflictPump);
+            if (_fraternizationPump != null) StopCoroutine(_fraternizationPump);
+            if (_socialDialoguePump != null) StopCoroutine(_socialDialoguePump);
+            _conflictPump = null;
+            _fraternizationPump = null;
+            _socialDialoguePump = null;
+            RefreshTitle();
+        }
+
+        private IEnumerator PumpBroadcastFarewells(int generation)
+        {
+            yield return new WaitForSecondsRealtime(0.8f);
+            if (generation != _runGeneration) yield break;
+            React(RunnerChatEvent.BroadcastCompleted);
+            yield return new WaitForSecondsRealtime(0.95f);
+            if (generation != _runGeneration) yield break;
+            React(RunnerChatEvent.BroadcastCompleted);
+            yield return new WaitForSecondsRealtime(0.95f);
+            if (generation != _runGeneration) yield break;
+            React(RunnerChatEvent.BroadcastCompleted);
+            _postGamePump = null;
         }
 
         private IEnumerator PumpPostGameReactions(int generation)
@@ -342,29 +449,62 @@ namespace StreamOn.Minigames.Runner
                 if (wait > 0f) yield return new WaitForSecondsRealtime(wait);
                 List<RunnerChatEvent> events = new List<RunnerChatEvent>();
                 while (_aiEvents.Count > 0) events.Add(_aiEvents.Dequeue());
+                bool conflictRequest = events.Contains(RunnerChatEvent.ChatConflict);
+                bool fraternizationRequest = events.Contains(RunnerChatEvent.ChatFraternization);
+                bool socialRequest = conflictRequest || fraternizationRequest;
                 string eventText = BuildEventText(events);
                 RunnerChatSnapshot snapshot = gameManager != null
                     ? gameManager.CreateChatSnapshot(eventText)
                     : _externalSnapshot ?? new RunnerChatSnapshot { gameTitle = _externalGameTitle };
                 snapshot.events = eventText;
                 snapshot.recentMessages = string.Join(" | ", _recentChatContext);
+                snapshot.conflictActive = _conflictActive;
+                snapshot.conflictTroublemakerId = _troublemaker?.viewerId ?? string.Empty;
+                snapshot.conflictTroublemakerNickname = _troublemaker?.nickname ?? string.Empty;
+                snapshot.conflictTargetId = _conflictTarget?.viewerId ?? string.Empty;
+                snapshot.conflictTargetNickname = _conflictTarget?.nickname ?? string.Empty;
+                snapshot.conflictTargetMessage = _conflictTargetMessage ?? string.Empty;
+                snapshot.conflictTargetsStreamer = _conflictTargetsStreamer;
+                snapshot.fraternizationActive = _fraternizationActive;
+                snapshot.socialViewer1Id = _fraternizers.Count > 0 ? _fraternizers[0].viewerId : string.Empty;
+                snapshot.socialViewer1Nickname = _fraternizers.Count > 0 ? _fraternizers[0].nickname : string.Empty;
+                snapshot.socialViewer2Id = _fraternizers.Count > 1 ? _fraternizers[1].viewerId : string.Empty;
+                snapshot.socialViewer2Nickname = _fraternizers.Count > 1 ? _fraternizers[1].nickname : string.Empty;
+                snapshot.socialViewer3Id = _fraternizers.Count > 2 ? _fraternizers[2].viewerId : string.Empty;
+                snapshot.socialViewer3Nickname = _fraternizers.Count > 2 ? _fraternizers[2].nickname : string.Empty;
+                if (events.Contains(RunnerChatEvent.DonationReceived))
+                {
+                    snapshot.lastDonationNickname = _lastDonationNickname;
+                    snapshot.lastDonationAmount = _lastDonationAmount;
+                    snapshot.lastDonationMessage = _lastDonationMessage;
+                    snapshot.lastDonationIsLarge = _lastDonationIsLarge;
+                }
 
                 RunnerGeneratedChatBatch generated = null;
                 string failure = null;
                 OpenAiRunnerChatClient client = new OpenAiRunnerChatClient(endpoint, model, apiKey);
                 _nextAiRequestAt = Time.unscaledTime + minimumApiInterval;
-                IReadOnlyList<RunnerViewerData> speakingViewers = SpeakingViewers();
+                IReadOnlyList<RunnerViewerData> speakingViewers = IsSocialEventActive() ? SocialEventViewers() : SpeakingViewers();
                 if (speakingViewers.Count == 0) continue;
                 yield return client.Generate(speakingViewers, snapshot, value => generated = value, error => failure = error);
 
                 if (generation != _runGeneration) yield break;
+                if (socialRequest && !IsSocialEventActive()) continue;
                 if (generated?.messages != null)
                 {
+                    if (socialRequest)
+                    {
+                        if (_socialDialoguePump != null) StopCoroutine(_socialDialoguePump);
+                        _socialDialoguePump = StartCoroutine(PumpGeneratedSocialDialogue(generated.messages, generation));
+                        SetConnectionLabel("AI");
+                        continue;
+                    }
                     int accepted = 0;
                     foreach (RunnerGeneratedChat message in generated.messages)
                     {
                         RunnerViewerData viewer = _activeViewers.FirstOrDefault(item => item.viewerId == message.speakerId);
-                        if (viewer == null || !TrySanitize(message.message, out string safeMessage)) continue;
+                        if (viewer == null || _bannedViewers.Contains(viewer.viewerId)
+                            || !TrySanitize(message.message, out string safeMessage)) continue;
                         if (EnqueueRendered(viewer, safeMessage)) accepted++;
                     }
                     if (accepted > 0)
@@ -430,8 +570,374 @@ namespace StreamOn.Minigames.Runner
 
         private void RefreshTitle()
         {
-            if (_titleText != null)
-                _titleText.text = $"LIVE CHAT [{_connectionMode}]\n현재 시청자 {_audienceViewerCount:N0}명";
+            if (_titleText == null) return;
+            if (_conflictActive)
+                _titleText.text = $"LIVE CHAT [{_connectionMode}]\n현재 시청자 {_audienceViewerCount:N0}명  ·  <color=#FF665F>분탕 유저를 클릭해 밴</color>";
+            else _titleText.text = $"LIVE CHAT [{_connectionMode}]\n현재 시청자 {_audienceViewerCount:N0}명";
+        }
+
+        private bool IsSocialEventActive() => _conflictActive || _fraternizationActive;
+
+        private bool IsPlayingNow() => gameManager != null
+            ? gameManager.State == RunnerGameState.Playing
+            : _externalGameBound && _externalGameState == SharedChatGameState.Playing;
+
+        private bool TryStartConflict()
+        {
+            if (_audienceViewerCount < 3 || _chattingViewerCount < 3) return false;
+            float chance = Mathf.Lerp(0.48f, 0.01f, Mathf.Pow(Mathf.Clamp01(_broadcastHeat / 100f), 0.65f));
+            if (UnityEngine.Random.value > chance) return false;
+
+            RunnerViewerData[] troublemakers = _activeViewers.Where(viewer => !_bannedViewers.Contains(viewer.viewerId)
+                && IsConflictViewer(viewer)).ToArray();
+            if (troublemakers.Length == 0) return false;
+            _troublemaker = troublemakers[UnityEngine.Random.Range(0, troublemakers.Length)];
+
+            _conflictTargetsStreamer = UnityEngine.Random.value < 0.32f;
+            if (!_conflictTargetsStreamer)
+            {
+                RunnerViewerData[] targets = SpeakingViewers().Where(viewer => viewer.viewerId != _troublemaker.viewerId
+                    && !IsConflictViewer(viewer) && _lastMessageByViewer.ContainsKey(viewer.viewerId)).ToArray();
+                if (targets.Length > 0)
+                {
+                    _conflictTarget = targets[UnityEngine.Random.Range(0, targets.Length)];
+                    _conflictTargetMessage = _lastMessageByViewer[_conflictTarget.viewerId];
+                }
+                else _conflictTargetsStreamer = true;
+            }
+            if (_conflictTargetsStreamer)
+            {
+                _conflictTarget = null;
+                _conflictTargetMessage = "방금 플레이";
+            }
+            _conflictActive = true;
+            RefreshTitle();
+            EnqueueRendered(_troublemaker, _conflictTargetsStreamer
+                ? "아니 이걸 왜 맞음? 이 정도면 겜 접어야지 ㅋㅋ"
+                : $"@{_conflictTarget.nickname} {ShortConflictFragment(_conflictTargetMessage)}가 그렇게 어렵냐? 겜안분 티내네 ㅋㅋ");
+            React(RunnerChatEvent.ChatConflict);
+            if (_conflictPump != null) StopCoroutine(_conflictPump);
+            _conflictPump = StartCoroutine(PumpConflictFollowups(_runGeneration));
+            return true;
+        }
+
+        private bool TryStartFraternization()
+        {
+            if (_audienceViewerCount < 3 || _chattingViewerCount < 3) return false;
+            float chance = Mathf.Lerp(0.34f, 0.005f, Mathf.Pow(Mathf.Clamp01(_broadcastHeat / 100f), 0.72f));
+            if (UnityEngine.Random.value > chance) return false;
+            RunnerViewerData[] candidates = SpeakingViewers().Where(viewer => !IsConflictViewer(viewer)).ToArray();
+            if (candidates.Length < 2) return false;
+            candidates = candidates.OrderBy(_ => UnityEngine.Random.value).ToArray();
+            _fraternizers.Clear();
+            _fraternizationOffenders.Clear();
+            _fraternizers.Add(candidates[0]);
+            _fraternizers.Add(candidates[1]);
+            _pendingFraternizer = candidates.Length >= 3 && UnityEngine.Random.value < 0.48f ? candidates[2] : null;
+            _fraternizationActive = true;
+            _socialEventStartedAt = Time.unscaledTime;
+            MarkFraternizationOffender(_fraternizers[0]);
+            RefreshTitle();
+            EnqueueRendered(_fraternizers[0], $"@{_fraternizers[1].nickname} 오늘도 오셨네요 ㅋㅋ");
+            React(RunnerChatEvent.ChatFraternization);
+            if (_fraternizationPump != null) StopCoroutine(_fraternizationPump);
+            _fraternizationPump = StartCoroutine(PumpFraternizationFollowups(_runGeneration));
+            return true;
+        }
+
+        private static bool IsConflictViewer(RunnerViewerData viewer) => viewer != null
+            && (viewer.personaId == "baiter" || viewer.personaId == "chat_fighter");
+
+        private static bool IsGameplayReaction(RunnerChatEvent chatEvent) => chatEvent == RunnerChatEvent.PlayerJumped
+            || chatEvent == RunnerChatEvent.PlayerRolled || chatEvent == RunnerChatEvent.ObstacleCleared
+            || chatEvent == RunnerChatEvent.EnemyDefeated || chatEvent == RunnerChatEvent.AttackMissed
+            || chatEvent == RunnerChatEvent.PlayerHit || chatEvent == RunnerChatEvent.LowHealth
+            || chatEvent == RunnerChatEvent.TileArenaJumped || chatEvent == RunnerChatEvent.TileArenaPickup
+            || chatEvent == RunnerChatEvent.TileArenaStageCleared || chatEvent == RunnerChatEvent.TileArenaPlayerHit
+            || chatEvent == RunnerChatEvent.TileArenaLowLives;
+
+        private void EnqueueConflictOpening()
+        {
+            if (!_conflictActive || _troublemaker == null) return;
+            if (_socialDialoguePump != null) StopCoroutine(_socialDialoguePump);
+            _socialDialoguePump = StartCoroutine(PumpLocalConflictOpening(_runGeneration));
+        }
+
+        private IEnumerator PumpLocalConflictOpening(int generation)
+        {
+            yield return SocialReplyDelay();
+            if (!_conflictActive || generation != _runGeneration) yield break;
+            if (_conflictTargetsStreamer) EnqueueConflictBystander($"@{_troublemaker.nickname} 싫으면 보지마", false);
+            else if (_conflictTarget != null) EnqueueRendered(_conflictTarget, $"@{_troublemaker.nickname} 니가 해보던가 입만 살았네");
+            yield return SocialReplyDelay();
+            if (!_conflictActive || generation != _runGeneration) yield break;
+            EnqueueRendered(_troublemaker, _conflictTargetsStreamer
+                ? "못한 걸 못한다 하지 그럼 뭐라함?"
+                : $"@{_conflictTarget.nickname} 내가 님보단 잘함 꼬우면 닉 까셈");
+            yield return SocialReplyDelay();
+            if (!_conflictActive || generation != _runGeneration) yield break;
+            EnqueueConflictBystander("밴 좀 해주세요 방 분위기 망치네", true);
+            _socialDialoguePump = null;
+        }
+
+        private IEnumerator PumpGeneratedSocialDialogue(RunnerGeneratedChat[] messages, int generation)
+        {
+            foreach (RunnerGeneratedChat message in messages)
+            {
+                yield return SocialReplyDelay();
+                if (generation != _runGeneration || !IsSocialEventActive()) yield break;
+                RunnerViewerData viewer = _activeViewers.FirstOrDefault(item => item.viewerId == message.speakerId);
+                if (viewer == null || _bannedViewers.Contains(viewer.viewerId)
+                    || !TrySanitize(message.message, out string safeMessage)) continue;
+                if (_fraternizationActive && _fraternizers.Contains(viewer) && safeMessage.Contains("@"))
+                    MarkFraternizationOffender(viewer);
+                EnqueueRendered(viewer, safeMessage);
+            }
+            _socialDialoguePump = null;
+        }
+
+        private void EnqueueFraternizationOpening()
+        {
+            if (!_fraternizationActive || _fraternizers.Count < 2) return;
+            if (_socialDialoguePump != null) StopCoroutine(_socialDialoguePump);
+            _socialDialoguePump = StartCoroutine(PumpLocalFraternizationOpening(_runGeneration));
+        }
+
+        private IEnumerator PumpLocalFraternizationOpening(int generation)
+        {
+            yield return SocialReplyDelay();
+            if (!_fraternizationActive || generation != _runGeneration || _fraternizers.Count < 2) yield break;
+            MarkFraternizationOffender(_fraternizers[1]);
+            EnqueueRendered(_fraternizers[1], $"@{_fraternizers[0].nickname} ㅎㅇㅎㅇ 오늘도 있네");
+            yield return SocialReplyDelay();
+            if (!_fraternizationActive || generation != _runGeneration || _fraternizers.Count < 2) yield break;
+            EnqueueRendered(_fraternizers[0], $"@{_fraternizers[1].nickname} 어제 그 얘기 어떻게 됐어요?");
+            yield return SocialReplyDelay();
+            if (!_fraternizationActive || generation != _runGeneration) yield break;
+            EnqueueSocialBystander("둘이 따로 연락하면 안됨?", false);
+            _socialDialoguePump = null;
+        }
+
+        private IEnumerator PumpFraternizationFollowups(int generation)
+        {
+            int turn = 0;
+            yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(13f, 16f));
+            while (_fraternizationActive && generation == _runGeneration)
+            {
+                yield return SocialReplyDelay();
+                if (!_fraternizationActive || generation != _runGeneration) break;
+                ApplyFraternizationTick();
+                if (_pendingFraternizer != null && turn == 1)
+                {
+                    RunnerViewerData joining = _pendingFraternizer;
+                    _pendingFraternizer = null;
+                    _fraternizers.Add(joining);
+                    MarkFraternizationOffender(joining);
+                    EnqueueRendered(joining, $"@{_fraternizers[0].nickname} 저도 기억나요 ㅋㅋ 어제도 봄");
+                    RefreshTitle();
+                }
+                else if (_fraternizers.Count >= 2 && turn % 3 != 2)
+                {
+                    RunnerViewerData speaker = _fraternizers[turn % _fraternizers.Count];
+                    RunnerViewerData target = _fraternizers[(turn + 1) % _fraternizers.Count];
+                    MarkFraternizationOffender(speaker);
+                    string[] lines = { "오늘도 늦게까지 봄?", "어제 그 사람 또 옴?", "저번에 말한 거 봤어요?", "아 그때 개웃겼는데 ㅋㅋ" };
+                    EnqueueRendered(speaker, $"@{target.nickname} {lines[UnityEngine.Random.Range(0, lines.Length)]}");
+                }
+                else
+                {
+                    string[] reactions = { "친목 좀 그만", "또 시작이네", "둘이 개인톡해", "여기 단톡방임?", "보기 싫다 진짜", "친목 밴 안함?", "겜 얘기는 아무도 안하네" };
+                    EnqueueSocialBystander(reactions[UnityEngine.Random.Range(0, reactions.Length)], false);
+                }
+                turn++;
+            }
+            _fraternizationPump = null;
+        }
+
+        private void EnqueueSocialBystander(string message, bool includeParticipants)
+        {
+            RunnerViewerData[] candidates = SpeakingViewers().Where(viewer => includeParticipants
+                || !_fraternizers.Contains(viewer)).ToArray();
+            if (candidates.Length > 0) EnqueueRendered(candidates[UnityEngine.Random.Range(0, candidates.Length)], message);
+        }
+
+        private void MarkFraternizationOffender(RunnerViewerData viewer)
+        {
+            if (viewer != null && _fraternizationOffenders.Add(viewer.viewerId)) RefreshTitle();
+        }
+
+        private static WaitForSecondsRealtime SocialReplyDelay() =>
+            new WaitForSecondsRealtime(UnityEngine.Random.Range(3f, 5.01f));
+
+        private IEnumerator PumpConflictFollowups(int generation)
+        {
+            int turn = 0;
+            yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(13f, 16f));
+            while (_conflictActive && generation == _runGeneration)
+            {
+                yield return SocialReplyDelay();
+                if (!_conflictActive || generation != _runGeneration) break;
+                switch (turn++ % 4)
+                {
+                    case 0:
+                        if (_conflictTargetsStreamer) EnqueueConflictBystander($"@{_troublemaker.nickname} 니 방송 가서 해", false);
+                        else EnqueueRendered(_conflictTarget, $"@{_troublemaker.nickname} 말로는 누가 못함 ㅋㅋ");
+                        break;
+                    case 1:
+                        EnqueueRendered(_troublemaker, _conflictTargetsStreamer
+                            ? "팬들 몰려와서 쉴드치는 거 봐라 ㅋㅋ"
+                            : $"@{_conflictTarget.nickname} 긁혔네 ㅋㅋㅋ");
+                        break;
+                    case 2:
+                        EnqueueConflictBystander("채팅창 진짜 난리났네 ㅋㅋ", false);
+                        break;
+                    default:
+                        EnqueueConflictBystander($"@{_troublemaker.nickname} 그만 좀 해라", true);
+                        break;
+                }
+            }
+            _conflictPump = null;
+        }
+
+        private void EnqueueConflictBystander(string message, bool preferPeacekeeper)
+        {
+            RunnerViewerData[] candidates = SpeakingViewers().Where(viewer => viewer != _troublemaker
+                && viewer != _conflictTarget && (!preferPeacekeeper || viewer.personaId == "peacekeeper")).ToArray();
+            if (candidates.Length == 0)
+                candidates = SpeakingViewers().Where(viewer => viewer != _troublemaker && viewer != _conflictTarget).ToArray();
+            if (candidates.Length > 0) EnqueueRendered(candidates[UnityEngine.Random.Range(0, candidates.Length)], message);
+        }
+
+        private static string ShortConflictFragment(string message)
+        {
+            string value = (message ?? "방금 한 말").Trim();
+            if (value.Length > 14) value = value.Substring(0, 14).Trim();
+            return string.IsNullOrWhiteSpace(value) ? "방금 한 말" : value;
+        }
+
+        private void OnViewerClicked(string viewerId)
+        {
+            if (string.IsNullOrWhiteSpace(viewerId) || _bannedViewers.Contains(viewerId)) return;
+            RunnerViewerData clickedViewer = _activeViewers.FirstOrDefault(viewer => viewer.viewerId == viewerId);
+            if (clickedViewer == null) return;
+            bool conflictCorrect = _conflictActive && _troublemaker != null && viewerId == _troublemaker.viewerId;
+            bool fraternizationCorrect = _fraternizationActive && _fraternizationOffenders.Contains(viewerId);
+            bool correct = conflictCorrect || fraternizationCorrect;
+            _bannedViewers.Add(viewerId);
+            RemoveViewerChatHistory(viewerId);
+            EnqueueSystemMessage($"{clickedViewer.nickname} 님이 강제 퇴장되었습니다.");
+
+            if (!correct)
+            {
+                ApplyModerationResult(false);
+                if (_conflictTarget != null && viewerId == _conflictTarget.viewerId)
+                {
+                    _conflictTarget = null;
+                    _conflictTargetsStreamer = true;
+                }
+                StartCoroutine(PumpWrongBanReactions(_runGeneration));
+                return;
+            }
+
+            if (fraternizationCorrect)
+            {
+                _fraternizers.RemoveAll(viewer => viewer.viewerId == viewerId);
+                _fraternizationOffenders.Remove(viewerId);
+                if (_fraternizationOffenders.Count <= 1)
+                {
+                    _fraternizationActive = false;
+                    _pendingFraternizer = null;
+                    if (_fraternizationPump != null) StopCoroutine(_fraternizationPump);
+                    _fraternizationPump = null;
+                    _fraternizers.Clear();
+                    ApplyFraternizationResolved(Time.unscaledTime - _socialEventStartedAt);
+                    EnqueueSocialBystander("정리됐네 굿", false);
+                }
+                else EnqueueSocialBystander("남은 사람도 정리해야지", false);
+                RefreshTitle();
+                return;
+            }
+
+            _conflictActive = false;
+            if (_conflictPump != null) StopCoroutine(_conflictPump);
+            _conflictPump = null;
+            ApplyModerationResult(true);
+            EnqueueConflictBystander("밴 굿", false);
+            EnqueueConflictBystander("드디어 조용해지겠네", false);
+            RefreshTitle();
+        }
+
+        private IEnumerator PumpWrongBanReactions(int generation)
+        {
+            string[] reactions =
+            {
+                "?", "??", "뭐함?", "아니 왜?", "뭐 잘못했음?", "아니 무슨 일인데", "갑자기?", "뭐하냐?",
+                "왜 밴함?", "예?", "아니 쟤가 뭘했다고", "잘못 누른거임?", "뭔데 갑자기", "멀쩡한 사람 왜 자름",
+                "에반데", "???", "아니 이유라도 말해", "방금 뭐임?", "왜저래", "이건 좀..."
+            };
+            int count = UnityEngine.Random.Range(3, 6);
+            for (int i = 0; i < count; i++)
+            {
+                yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(0.35f, 0.9f));
+                if (generation != _runGeneration) yield break;
+                EnqueueConflictBystander(reactions[UnityEngine.Random.Range(0, reactions.Length)], false);
+            }
+        }
+
+        private void RemoveViewerChatHistory(string viewerId)
+        {
+            RunnerViewerData viewer = _activeViewers.FirstOrDefault(item => item.viewerId == viewerId);
+            RenderedChatLine[] pending = _pending.Where(line => line.viewerId != viewerId).ToArray();
+            RenderedChatLine[] visible = _visible.Where(line => line.viewerId != viewerId).ToArray();
+            string[] context = _recentChatContext.Where(line => viewer == null
+                || !line.StartsWith(viewer.nickname + ": ", StringComparison.Ordinal)).ToArray();
+            _pending.Clear();
+            _visible.Clear();
+            _recentChatContext.Clear();
+            foreach (RenderedChatLine line in pending) _pending.Enqueue(line);
+            foreach (RenderedChatLine line in visible) _visible.Enqueue(line);
+            foreach (string line in context) _recentChatContext.Enqueue(line);
+            _recentMessagesByViewer.Remove(viewerId);
+            _lastMessageByViewer.Remove(viewerId);
+            RefreshSlots();
+        }
+
+        private void EnqueueSystemMessage(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return;
+            _pending.Enqueue(new RenderedChatLine
+            {
+                viewerId = string.Empty,
+                rendered = $"<color=#AEB5C0>{message}</color>"
+            });
+            if (_displayPump == null) _displayPump = StartCoroutine(PumpDisplay());
+        }
+
+        private void ApplyModerationResult(bool correct)
+        {
+            RunnerBroadcastAudienceController runnerAudience = FindFirstObjectByType<RunnerBroadcastAudienceController>();
+            if (runnerAudience != null) runnerAudience.OnModerationResult(correct);
+            else
+            {
+                StreamOn.Minigames.TileArena.TileArenaChatAdapter tileAudience =
+                    FindFirstObjectByType<StreamOn.Minigames.TileArena.TileArenaChatAdapter>();
+                tileAudience?.OnModerationResult(correct);
+            }
+        }
+
+        private void ApplyFraternizationTick()
+        {
+            RunnerBroadcastAudienceController runnerAudience = FindFirstObjectByType<RunnerBroadcastAudienceController>();
+            if (runnerAudience != null) runnerAudience.OnFraternizationTick();
+            else FindFirstObjectByType<StreamOn.Minigames.TileArena.TileArenaChatAdapter>()?.OnFraternizationTick();
+        }
+
+        private void ApplyFraternizationResolved(float responseSeconds)
+        {
+            RunnerBroadcastAudienceController runnerAudience = FindFirstObjectByType<RunnerBroadcastAudienceController>();
+            if (runnerAudience != null) runnerAudience.OnFraternizationResolved(responseSeconds);
+            else FindFirstObjectByType<StreamOn.Minigames.TileArena.TileArenaChatAdapter>()
+                ?.OnFraternizationResolved(responseSeconds);
         }
 
         private bool ShouldReactToLiveEvent(RunnerChatEvent chatEvent)
@@ -451,6 +957,8 @@ namespace StreamOn.Minigames.Runner
                 case RunnerChatEvent.NewHighScore:
                 case RunnerChatEvent.TileArenaStarted:
                 case RunnerChatEvent.TileArenaGameOver:
+                case RunnerChatEvent.ChatConflict:
+                case RunnerChatEvent.ChatFraternization:
                     return true;
                 case RunnerChatEvent.PlayerJumped:
                 case RunnerChatEvent.TileArenaJumped:
@@ -548,7 +1056,29 @@ namespace StreamOn.Minigames.Runner
         private void EnqueueLocal(RunnerChatEvent chatEvent)
         {
             if (SpeakingViewers().Count == 0) return;
-            string[] pool = chatEvent switch
+            if (chatEvent == RunnerChatEvent.ChatConflict)
+            {
+                EnqueueConflictOpening();
+                return;
+            }
+            if (chatEvent == RunnerChatEvent.ChatFraternization)
+            {
+                EnqueueFraternizationOpening();
+                return;
+            }
+            string[] pool;
+            if (chatEvent == RunnerChatEvent.DonationReceived)
+            {
+                string amount = _lastDonationAmount.ToString("N0") + "원";
+                pool = _lastDonationIsLarge
+                    ? new[] { "와", "???", "ㅁㅊ", "미친", amount + " ㄷㄷㄷㄷ", "와 " + amount + "...." }
+                    : new[] { "오", "도네 ㄷㄷ", "ㅋㅋㅋㅋㅋ", "?", "도네 뭐야" };
+            }
+            else if (_broadcastHeat <= 30f && IsAmbientMoodEvent(chatEvent))
+                pool = new[] { "ㄴㅈ", "?", "...", "뭐함?", "개노잼", "예?", "이건 좀...", "왤케 조용함" };
+            else if (_broadcastHeat >= 70f && IsAmbientMoodEvent(chatEvent))
+                pool = new[] { "오", "가자", "좋은데?", "ㄱㄱ", "ㄱㄱㄱ", "ㅋㅋㅋㅋㅋ", "이대로만", "가보자" };
+            else pool = chatEvent switch
             {
                 RunnerChatEvent.RunStarted => new[] { "왔냐", "가보자고", "오늘 몇 점 봄?", "오 시작했네" },
                 RunnerChatEvent.PlayerJumped => new[] { "오", "방금 좀 쫄았다", "점프는 잘하네", "이건 깔끔" },
@@ -556,19 +1086,18 @@ namespace StreamOn.Minigames.Runner
                 RunnerChatEvent.ObstacleCleared => new[] { "이걸 사네", "어우", "아슬아슬 ㅋㅋ", "계속가" },
                 RunnerChatEvent.EnemyDefeated => new[] { "오 잡았네", "이건 좀 멋있었다", "한방이네", "클립각?" },
                 RunnerChatEvent.AttackMissed => new[] { "누구 때림?", "허공컷 ㅋㅋ", "아 너무 빨랐어", "못본척함" },
-                RunnerChatEvent.PlayerHit => new[] { "아", "그걸 맞냐 ㅋㅋ", "또 시작이네", "괜찮 아직 안죽음" },
-                RunnerChatEvent.LowHealth => new[] { "아 제발", "한대 남았네", "이제 진짜 집중", "못보겠다" },
-                RunnerChatEvent.GameOver => new[] { "아 끝났네", "까비", "마지막에 급했음", "그래서 다시함?", "이번 판은 좀 아깝다" },
-                RunnerChatEvent.BroadcastCompleted => new[] { "방송 끝까지 버텼네", "시간 다됐다", "오늘 방송 종료", "완주 굿", "결과 보자" },
-                RunnerChatEvent.DonationReceived => new[] { "오 후원", "큰손 등장", "리액션 가자", "후원 감사합니다", "이걸 보고 쏘네 ㅋㅋ" },
+                RunnerChatEvent.PlayerHit => new[] { "아니", "?", "???", "ㅋㅋㅋㅋㅋㅋ", "아니 이걸?", "뭐함?", "에반데", "개못하네..." },
+                RunnerChatEvent.LowHealth => new[] { "아 제발", "?", "좀만 더", "에반데", "못보겠다", "제발..." },
+                RunnerChatEvent.GameOver => new[] { "아니 뭐하냐", "?", "ㅋㅋㅋㅋㅋㅋㅋㅋ", "개못하네...", "아니 이걸?", "예?", "...", "뭐함?" },
+                RunnerChatEvent.BroadcastCompleted => new[] { "ㅈㅈ", "바이바이", "수고했다", "수고했어요", "다음에 봐요~", "담방에 봐" },
                 RunnerChatEvent.WitPrompt => new[] { "대답해봐 ㅋㅋ", "채팅 읽었냐", "이건 뭐라 할 건데", "해명해" },
-                RunnerChatEvent.WitReplySuccess => new[] { "오 받아쳤다 ㅋㅋ", "말빨 뭐임", "이건 좀 웃겼다", "클립 따놔" },
-                RunnerChatEvent.WitReplyOkay => new[] { "무난하네", "그래 그럴 수 있지", "대답은 했네", "일단 넘어감" },
-                RunnerChatEvent.WitReplyAwkward => new[] { "갑분싸 ㅋㅋ", "아 그건 좀", "채팅 얼었는데", "못 들은 걸로 하자" },
-                RunnerChatEvent.NewHighScore => new[] { "오 신기록", "이건 인정", "오늘 폼 뭐임", "드디어 넘었네" },
-                RunnerChatEvent.QuietMoment => new[] { "은근 빠르네", "왜 갑자기 조용함", "집중했네 ㅋㅋ", "이러다 또 맞음" },
-                RunnerChatEvent.PostGameDiscussion => new[] { "그래서 다시함?", "아까 그거만 안맞았어도", "채팅 또 싸우네 ㅋㅋ", "이번 판은 좀 아깝다", "R 안누름?" },
-                RunnerChatEvent.IdleChat => new[] { "언제 시작함", "다들 뭐함", "아직 있냐", "채팅 왜 조용해", "물 좀 마시고 와" },
+                RunnerChatEvent.WitReplySuccess => new[] { "ㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋ", "ㅋㅋㅋㅋㅋ", "아 ㅋㅋ", "미쳤네ㅋㅋ" },
+                RunnerChatEvent.WitReplyOkay => new[] { "음....", "예?", "하하", "?", "이건 좀..." },
+                RunnerChatEvent.WitReplyAwkward => new[] { "ㄴㅈ", "개노잼", "?", "음....", "예?", "하하", "이건 좀...", "아..." },
+                RunnerChatEvent.NewHighScore => BuildLocalHighScorePool(),
+                RunnerChatEvent.QuietMoment => new[] { "오", "가자", "좋은데?", "ㄱㄱ", "ㄱㄱㄱ", "좀만 더", "이대로만" },
+                RunnerChatEvent.PostGameDiscussion => new[] { "그래서 다시함?", "아까 그거만 안맞았어도", "이번 판은 좀 아깝다", "R 안누름?", "한판 더 ㄱ" },
+                RunnerChatEvent.IdleChat => new[] { "ㄴㅈ", "왤케 조용함", "...", "뭐함?", "자나", "언제 시작함" },
                 RunnerChatEvent.CampaignDayStarted => new[] { "오늘도 왔네", "이번엔 뭐 고름?", "멘탈 괜찮냐", "가보자" },
                 RunnerChatEvent.CampaignGameTraining => new[] { "연습했으면 보여줘", "오늘은 좀 다르냐", "게임 훈련 골랐네", "바로 방송 ㄱ" },
                 RunnerChatEvent.CampaignTalkingTraining => new[] { "오늘 말 많아지나", "소통 방송 온다", "겜은 안해도 됨?", "입은 풀렸고" },
@@ -581,9 +1110,9 @@ namespace StreamOn.Minigames.Runner
                 RunnerChatEvent.TileArenaJumped => new[] { "오 점프", "방금 위험했다", "타이밍 굿", "그걸 넘네" },
                 RunnerChatEvent.TileArenaPickup => new[] { "파랑 냠", "하나 더", "점수 좋고", "저거까지 먹자" },
                 RunnerChatEvent.TileArenaStageCleared => new[] { "오 다먹었다", "다음거 뭐냐", "이걸 다 먹네", "패턴 바뀐다" },
-                RunnerChatEvent.TileArenaPlayerHit => new[] { "아 맞았네", "빨간거 밟음 ㅋㅋ", "그걸 왜 들어가", "아직 목숨 있음" },
-                RunnerChatEvent.TileArenaLowLives => new[] { "이제 진짜 조심", "목숨 얼마 안남음", "아 제발", "점프 아껴" },
-                RunnerChatEvent.TileArenaGameOver => new[] { "아 끝", "까비", "마지막 빨강 억까네", "한판 더 ㄱ", "그래도 꽤 갔다" },
+                RunnerChatEvent.TileArenaPlayerHit => new[] { "아니", "?", "???", "ㅋㅋㅋㅋㅋㅋ", "아니 이걸?", "뭐함?", "에반데", "개못하네..." },
+                RunnerChatEvent.TileArenaLowLives => new[] { "아 제발", "?", "좀만 더", "에반데", "제발...", "ㄱㄱ" },
+                RunnerChatEvent.TileArenaGameOver => new[] { "아니 뭐하냐", "?", "ㅋㅋㅋㅋㅋㅋㅋㅋ", "아니 이걸?", "예?", "...", "뭐함?" },
                 _ => new[] { "아깝네", "다시 ㄱ", "뭐 예상했음", "끝?" }
             };
             for (int attempt = 0; attempt < Mathf.Min(8, pool.Length * 2); attempt++)
@@ -592,6 +1121,16 @@ namespace StreamOn.Minigames.Runner
                 string message = pool[UnityEngine.Random.Range(0, pool.Length)];
                 if (EnqueueRendered(viewer, message)) return;
             }
+        }
+
+        private static bool IsAmbientMoodEvent(RunnerChatEvent chatEvent) => chatEvent == RunnerChatEvent.QuietMoment
+            || chatEvent == RunnerChatEvent.IdleChat || chatEvent == RunnerChatEvent.PostGameDiscussion;
+
+        private string[] BuildLocalHighScorePool()
+        {
+            int score = gameManager != null ? gameManager.Score : Mathf.Max(0, _externalSnapshot?.score ?? 0);
+            int nextThousand = (score / 1000 + 1) * 1000;
+            return new[] { "ㅅㅅ", "나이스", "오", "가보자", "가즈아", $"{nextThousand}점 가자" };
         }
 
         private RunnerViewerData PickLocalPersona(RunnerChatEvent chatEvent)
@@ -622,7 +1161,26 @@ namespace StreamOn.Minigames.Runner
             return speaking[UnityEngine.Random.Range(0, speaking.Count)];
         }
 
-        private IReadOnlyList<RunnerViewerData> SpeakingViewers() => _activeViewers.Take(Mathf.Clamp(_chattingViewerCount, 0, _activeViewers.Count)).ToArray();
+        private IReadOnlyList<RunnerViewerData> SpeakingViewers() => _activeViewers
+            .Where(viewer => !_bannedViewers.Contains(viewer.viewerId))
+            .Take(Mathf.Clamp(_chattingViewerCount, 0, _activeViewers.Count)).ToArray();
+
+        private IReadOnlyList<RunnerViewerData> ConflictViewers()
+        {
+            List<RunnerViewerData> viewers = SpeakingViewers().ToList();
+            if (_troublemaker != null && !viewers.Contains(_troublemaker)) viewers.Add(_troublemaker);
+            if (_conflictTarget != null && !viewers.Contains(_conflictTarget)) viewers.Add(_conflictTarget);
+            return viewers;
+        }
+
+        private IReadOnlyList<RunnerViewerData> SocialEventViewers()
+        {
+            if (_conflictActive) return ConflictViewers();
+            List<RunnerViewerData> viewers = SpeakingViewers().ToList();
+            foreach (RunnerViewerData fraternizer in _fraternizers)
+                if (fraternizer != null && !viewers.Contains(fraternizer)) viewers.Add(fraternizer);
+            return viewers;
+        }
 
         private bool EnqueueRendered(RunnerViewerData viewer, string message)
         {
@@ -636,8 +1194,13 @@ namespace StreamOn.Minigames.Runner
             if (recent.Contains(normalized)) return false;
             recent.Enqueue(normalized);
             while (recent.Count > 8) recent.Dequeue();
+            _lastMessageByViewer[viewer.viewerId] = message;
             string color = ColorUtility.ToHtmlStringRGB(viewer.nameColor);
-            _pending.Enqueue($"<color=#{color}>{viewer.nickname}</color>  {message}");
+            _pending.Enqueue(new RenderedChatLine
+            {
+                viewerId = viewer.viewerId,
+                rendered = $"<link=ban><color=#{color}>{viewer.nickname}</color></link>  {message}"
+            });
             _recentChatContext.Enqueue(viewer.nickname + ": " + message);
             while (_recentChatContext.Count > 6) _recentChatContext.Dequeue();
             if (_displayPump == null) _displayPump = StartCoroutine(PumpDisplay());
@@ -702,6 +1265,8 @@ namespace StreamOn.Minigames.Runner
             RunnerChatEvent.TileArenaPlayerHit => "빨간 위험 타일에 닿아 목숨을 잃음",
             RunnerChatEvent.TileArenaLowLives => "타일 아레나에서 남은 목숨이 얼마 없음",
             RunnerChatEvent.TileArenaGameOver => "타일 아레나 게임 오버",
+            RunnerChatEvent.ChatConflict => "분탕 유저가 다른 시청자의 직전 채팅을 지목해 시비를 걸고 실제 채팅 분쟁이 시작됨",
+            RunnerChatEvent.ChatFraternization => "일부 시청자들이 서로 닉네임을 부르며 방송과 무관한 친분 대화를 시작함",
             _ => "특별한 사건 없이 게임 플레이 중"
         };
 
@@ -721,15 +1286,32 @@ namespace StreamOn.Minigames.Runner
         private void RefreshSlots()
         {
             EnsureSlots();
-            string[] values = _visible.ToArray();
+            RenderedChatLine[] values = _visible.ToArray();
             int empty = messageSlots.Length - values.Length;
-            for (int i = 0; i < messageSlots.Length; i++) messageSlots[i].text = i < empty ? string.Empty : values[i - empty];
+            for (int i = 0; i < messageSlots.Length; i++)
+            {
+                messageSlots[i].raycastTarget = true;
+                RunnerChatLineClickTarget clickTarget = messageSlots[i].GetComponent<RunnerChatLineClickTarget>();
+                if (clickTarget == null) clickTarget = messageSlots[i].gameObject.AddComponent<RunnerChatLineClickTarget>();
+                if (i < empty)
+                {
+                    messageSlots[i].text = string.Empty;
+                    clickTarget.Bind(null, null);
+                }
+                else
+                {
+                    RenderedChatLine line = values[i - empty];
+                    messageSlots[i].text = line.rendered;
+                    clickTarget.Bind(line.viewerId, OnViewerClicked);
+                }
+            }
         }
 
         private void EnsureSlots()
         {
             if (messageSlots != null && messageSlots.Length > 0 && messageSlots.All(slot => slot != null)) return;
             messageSlots = GetComponentsInChildren<TMP_Text>(true).Where(text => text.name.StartsWith("Message ")).OrderBy(text => text.name).ToArray();
+            foreach (TMP_Text slot in messageSlots) slot.raycastTarget = true;
         }
 
         private void OnValidate()
@@ -741,6 +1323,113 @@ namespace StreamOn.Minigames.Runner
             maximumActivePersonas = Mathf.Max(minimumActivePersonas, maximumActivePersonas);
             maximumViewersPerPersona = Mathf.Max(minimumViewersPerPersona, maximumViewersPerPersona);
             maximumActiveViewers = Mathf.Max(maximumActiveViewers, minimumActivePersonas * minimumViewersPerPersona);
+        }
+    }
+
+    public sealed class RunnerChatLineClickTarget : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler,
+        IPointerExitHandler, IPointerMoveHandler
+    {
+        private TMP_Text _text;
+        private string _viewerId;
+        private Action<string> _onClick;
+        private FontStyles _baseStyle;
+
+        public void Bind(string viewerId, Action<string> onClick)
+        {
+            if (_text == null) _text = GetComponent<TMP_Text>();
+            _viewerId = viewerId;
+            _onClick = onClick;
+            if (_text != null)
+            {
+                _baseStyle = _text.fontStyle & ~FontStyles.Underline;
+                _text.fontStyle = _baseStyle;
+            }
+        }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (eventData.button == PointerEventData.InputButton.Left && IsOverNickname(eventData)
+                && !string.IsNullOrWhiteSpace(_viewerId))
+            {
+                RunnerChatBanTooltip.Hide();
+                _onClick?.Invoke(_viewerId);
+            }
+        }
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            UpdateHover(eventData);
+        }
+
+        public void OnPointerMove(PointerEventData eventData) => UpdateHover(eventData);
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (_text != null) _text.fontStyle = _baseStyle;
+            RunnerChatBanTooltip.Hide();
+        }
+
+        private void UpdateHover(PointerEventData eventData)
+        {
+            bool overNickname = IsOverNickname(eventData) && !string.IsNullOrWhiteSpace(_viewerId);
+            if (_text != null) _text.fontStyle = _baseStyle;
+            if (overNickname) RunnerChatBanTooltip.Show(eventData.position);
+            else RunnerChatBanTooltip.Hide();
+        }
+
+        private bool IsOverNickname(PointerEventData eventData) => _text != null
+            && TMP_TextUtilities.FindIntersectingLink(_text, eventData.position, eventData.enterEventCamera) >= 0;
+    }
+
+    public sealed class RunnerChatBanTooltip : MonoBehaviour
+    {
+        private static RunnerChatBanTooltip _instance;
+        private RectTransform _rect;
+
+        public static void Show(Vector2 screenPosition)
+        {
+            EnsureExists();
+            _instance.gameObject.SetActive(true);
+            _instance._rect.position = screenPosition + new Vector2(14f, 18f);
+        }
+
+        public static void Hide()
+        {
+            if (_instance != null) _instance.gameObject.SetActive(false);
+        }
+
+        private static void EnsureExists()
+        {
+            if (_instance != null) return;
+            GameObject canvasObject = new GameObject("Chat Ban Tooltip Canvas", typeof(RectTransform), typeof(Canvas));
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 500;
+
+            GameObject panel = new GameObject("Chat Ban Tooltip", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            panel.transform.SetParent(canvasObject.transform, false);
+            _instance = panel.AddComponent<RunnerChatBanTooltip>();
+            _instance._rect = panel.GetComponent<RectTransform>();
+            _instance._rect.pivot = new Vector2(0f, 0f);
+            _instance._rect.sizeDelta = new Vector2(72f, 24f);
+            Image background = panel.GetComponent<Image>();
+            background.color = new Color(0.05f, 0.06f, 0.08f, 0.94f);
+            background.raycastTarget = false;
+
+            GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+            labelObject.transform.SetParent(panel.transform, false);
+            RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            TMP_Text label = labelObject.GetComponent<TMP_Text>();
+            label.text = "차단하기";
+            label.fontSize = 13f;
+            label.alignment = TextAlignmentOptions.Center;
+            label.color = new Color(1f, 0.72f, 0.68f);
+            label.raycastTarget = false;
+            panel.SetActive(false);
         }
     }
 }

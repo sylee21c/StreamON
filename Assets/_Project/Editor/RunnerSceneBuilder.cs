@@ -118,10 +118,11 @@ namespace StreamOn.EditorTools
             uiRoot.AddComponent<GraphicRaycaster>();
 
             RectTransform topHud = Panel("HUD", uiRoot.transform, new Color(0.04f, 0.05f, 0.08f, 0.88f), new Vector2(0.5f, 1f), new Vector2(900f, 90f), new Vector2(-150f, -55f), uiSprite);
-            TextMeshProUGUI score = Label("Score", topHud, "SCORE  000000", font, 24, TextAlignmentOptions.MidlineLeft, new Vector2(210f, 50f), new Vector2(-320f, 0f));
-            TextMeshProUGUI high = Label("Best", topHud, "BEST  000000", font, 24, TextAlignmentOptions.MidlineLeft, new Vector2(210f, 50f), new Vector2(-95f, 0f));
-            TextMeshProUGUI speed = Label("Speed", topHud, "SPEED  5.5", font, 22, TextAlignmentOptions.MidlineLeft, new Vector2(170f, 50f), new Vector2(120f, 0f));
-            TextMeshProUGUI health = Label("Health", topHud, "HP  ♥♥♥", font, 24, TextAlignmentOptions.MidlineLeft, new Vector2(190f, 50f), new Vector2(310f, 0f));
+            TextMeshProUGUI score = Label("Score", topHud, "SCORE  000000", font, 24, TextAlignmentOptions.MidlineLeft, new Vector2(190f, 50f), new Vector2(-345f, 0f));
+            TextMeshProUGUI high = Label("Best", topHud, "BEST  000000", font, 24, TextAlignmentOptions.MidlineLeft, new Vector2(190f, 50f), new Vector2(-145f, 0f));
+            TextMeshProUGUI speed = Label("Speed", topHud, "SPEED  5.5", font, 20, TextAlignmentOptions.MidlineLeft, new Vector2(150f, 50f), new Vector2(35f, 0f));
+            TextMeshProUGUI broadcastTime = Label("Broadcast Time", topHud, "STREAM  01:30", font, 19, TextAlignmentOptions.MidlineLeft, new Vector2(160f, 50f), new Vector2(190f, 0f));
+            TextMeshProUGUI health = Label("Health", topHud, "HP  ♥♥♥♥♥", font, 22, TextAlignmentOptions.MidlineLeft, new Vector2(180f, 50f), new Vector2(350f, 0f));
             health.color = new Color(1f, 0.38f, 0.43f);
 
             RectTransform chatPanel = Panel("Live Chat Panel", uiRoot.transform, new Color(0.04f, 0.05f, 0.08f, 0.93f), new Vector2(1f, 0.5f), new Vector2(300f, 720f), new Vector2(-150f, 0f), uiSprite);
@@ -142,7 +143,7 @@ namespace StreamOn.EditorTools
             UnityEventTools.AddPersistentListener(retry.onClick, manager.RestartRun);
 
             RunnerHUD hud = topHud.gameObject.AddComponent<RunnerHUD>();
-            Set(hud, "scoreText", score); Set(hud, "highScoreText", high); Set(hud, "speedText", speed); Set(hud, "healthText", health); Set(hud, "gameOverPanel", gameOver.gameObject);
+            Set(hud, "scoreText", score); Set(hud, "highScoreText", high); Set(hud, "speedText", speed); Set(hud, "broadcastTimeText", broadcastTime); Set(hud, "healthText", health); Set(hud, "gameOverPanel", gameOver.gameObject);
 
             GameObject cameraRoot = Root(scene, "Main Camera");
             cameraRoot.tag = "MainCamera";

@@ -15,7 +15,7 @@ namespace StreamOn.Minigames.Runner
         public bool corrupted;
         public int day;
         public int subscribers;
-        public float mental;
+        public int mentalLevel;
         public int healthStat;
         public int bestBroadcastScore;
         public string savedAtUtc;
@@ -118,7 +118,7 @@ namespace StreamOn.Minigames.Runner
 
     public static class RunnerCampaignSaveStore
     {
-        public const int CurrentVersion = 4;
+        public const int CurrentVersion = 7;
         private const string LegacyMigrationKey = "StreamOn.Save.LegacyMigrated.v2";
 
         public static int ActiveSlot
@@ -144,13 +144,19 @@ namespace StreamOn.Minigames.Runner
             savedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
             day = 1,
             subscribers = settings.startingSubscribers,
-            mental = settings.startingMental,
+            mentalLevel = settings.startingMentalLevel,
+            mentalExperience = 0,
             gameSkill = settings.startingGameSkill,
             gameSkillExperience = 0,
             talkingSkill = settings.startingTalkingSkill,
             talkingSkillExperience = 0,
             healthStat = settings.startingHealthStat,
             healthStatExperience = 0,
+            cash = 0,
+            pcLevel = 1,
+            microphoneLevel = 1,
+            fitnessLevel = 1,
+            interiorLevel = 1,
             records = new List<RunnerCampaignDayRecord>()
         };
 
@@ -172,7 +178,7 @@ namespace StreamOn.Minigames.Runner
                 info.recoveredFromBackup = recovered;
                 info.day = data.day;
                 info.subscribers = data.subscribers;
-                info.mental = data.mental;
+                info.mentalLevel = data.mentalLevel;
                 info.healthStat = data.healthStat;
                 info.bestBroadcastScore = data.bestBroadcastScore;
                 info.savedAtUtc = data.savedAtUtc;
@@ -254,15 +260,49 @@ namespace StreamOn.Minigames.Runner
                 settings.AddStatExperience(ref data.healthStat, ref data.healthStatExperience, 0, settings.maximumHealthStat);
                 data.version = 4;
             }
+            if (data.version < 5)
+            {
+                data.cash = Math.Max(0L, data.lifetimeDonations);
+                data.pcLevel = 1;
+                data.microphoneLevel = 1;
+                data.fitnessLevel = 1;
+                data.interiorLevel = 1;
+                data.version = 5;
+            }
+            if (data.version < 6)
+            {
+                // The old 0-100 consumable mental resource no longer affects
+                // progression. Existing saves restart the new stat at Lv.1.
+                data.mentalLevel = settings.startingMentalLevel;
+                data.mentalExperience = 0;
+                data.campaignFailed = false;
+                data.version = 6;
+            }
+            if (data.version < 7)
+            {
+                data.broadcastSessionActive = false;
+                data.broadcastSessionDurationSeconds = 0f;
+                data.broadcastSessionRemainingSeconds = 0f;
+                data.broadcastSessionElapsedSeconds = 0f;
+                data.version = 7;
+            }
             data.slot = slot;
             data.day = Mathf.Max(1, data.day);
-            data.mental = Mathf.Clamp(data.mental, 0f, settings.maximumMental);
+            data.mentalLevel = Mathf.Clamp(data.mentalLevel, 1, settings.maximumMentalLevel);
+            data.mentalExperience = Mathf.Max(0, data.mentalExperience);
             data.gameSkill = Mathf.Clamp(data.gameSkill, 1, settings.maximumGameSkill);
             data.talkingSkill = Mathf.Clamp(data.talkingSkill, 1, settings.maximumTalkingSkill);
             data.healthStat = Mathf.Clamp(data.healthStat, 1, settings.maximumHealthStat);
+            data.cash = Math.Max(0L, data.cash);
+            data.pcLevel = Mathf.Clamp(data.pcLevel, 1, 3);
+            data.microphoneLevel = Mathf.Clamp(data.microphoneLevel, 1, 3);
+            data.fitnessLevel = Mathf.Clamp(data.fitnessLevel, 1, 3);
+            data.interiorLevel = Mathf.Clamp(data.interiorLevel, 1, 3);
             if (data.gameSkill >= settings.maximumGameSkill) data.gameSkillExperience = 0;
             if (data.talkingSkill >= settings.maximumTalkingSkill) data.talkingSkillExperience = 0;
             if (data.healthStat >= settings.maximumHealthStat) data.healthStatExperience = 0;
+            if (data.mentalLevel >= settings.maximumMentalLevel) data.mentalExperience = 0;
+            data.campaignFailed = false;
             if (data.records == null) data.records = new List<RunnerCampaignDayRecord>();
         }
 

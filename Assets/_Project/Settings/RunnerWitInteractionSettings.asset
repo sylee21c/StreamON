@@ -28,7 +28,7 @@ MonoBehaviour:
     - text: "\uC544\uB2C8 \uC9C4\uC9DC \uC2E4\uC218\uC600\uC5B4"
       quality: 1
       minimumTalkingLevel: 1
-    - text: "\uBCF4\uB294 \uB208\uC774 \uADF8\uAC83\uBC16\uC5D0 \uC548 \uB3FC?"
+    - text: "다음엔 일부러 피하는 것도 보여줄게"
       quality: 0
       minimumTalkingLevel: 2
   - viewerMessage: "\uC624\uB298\uB3C4 \uC5D4\uB529 \uBABB \uBCF4\uB294 \uAC70 \uC544\uB2D8?"
@@ -39,7 +39,7 @@ MonoBehaviour:
     - text: "\uC624\uB298\uC740 \uC9C4\uC9DC \uAC00\uB2A5\uD568"
       quality: 1
       minimumTalkingLevel: 1
-    - text: "\uBABB \uBCF4\uBA74 \uB124 \uD0D3\uC73C\uB85C \uD558\uC790"
+    - text: "못 보면 엔딩이 다음 방송까지 늘어남"
       quality: 0
       minimumTalkingLevel: 2
   - viewerMessage: "\uC2E4\uB825 \uBC29\uC1A1 \uB9DE\uB098\uC694?"
@@ -50,7 +50,7 @@ MonoBehaviour:
     - text: "\uC5F0\uC2B5 \uC911\uC778 \uC2E4\uB825 \uBC29\uC1A1"
       quality: 1
       minimumTalkingLevel: 1
-    - text: "\uB098\uAC00\uBA74 \uC2E4\uB825 \uC62C\uB77C\uAC10"
+    - text: "실력은 채팅이 키우는 중입니다"
       quality: 0
       minimumTalkingLevel: 2
   - viewerMessage: "\uBC29\uAE08 \uD50C\uB808\uC774 \uD574\uBA85 \uBD80\uD0C1\uB4DC\uB9BD\uB2C8\uB2E4"
@@ -61,7 +61,7 @@ MonoBehaviour:
     - text: "\uC190\uC774 \uC7A0\uAE50 \uBBF8\uB044\uB7EC\uC84C\uC5B4"
       quality: 1
       minimumTalkingLevel: 1
-    - text: "\uCC44\uD305 \uB54C\uBB38\uC5D0 \uC9D1\uC911 \uBABB \uD588\uC796\uC544"
+    - text: "방금 장면은 편집본에서 사라집니다"
       quality: 0
       minimumTalkingLevel: 2
   - viewerMessage: "\uC774\uAC70 \uD074\uB9BD \uB530\uB3C4 \uB428?"
@@ -72,7 +72,7 @@ MonoBehaviour:
     - text: "\uC798 \uB098\uC628 \uBD80\uBD84\uB9CC \uB530\uC918"
       quality: 1
       minimumTalkingLevel: 1
-    - text: "\uADF8\uAC78 \uC65C \uB530"
+    - text: "제목은 잘한 척하는 법으로 부탁"
       quality: 0
       minimumTalkingLevel: 2
   - viewerMessage: "\uC624\uB298 \uC65C \uC774\uB807\uAC8C \uC798\uD568?"
@@ -83,6 +83,30 @@ MonoBehaviour:
     - text: "\uCEE8\uB514\uC158\uC774 \uC880 \uC88B\uB124"
       quality: 1
       minimumTalkingLevel: 1
-    - text: "\uC6D0\uB798 \uC798\uD588\uAC70\uB4E0"
+    - text: "이제야 손이 방송에 도착함"
       quality: 0
       minimumTalkingLevel: 2
+  - viewerMessage: "그 실력으로 방송 왜 켰냐 걍 접어"
+    ignoreIsCorrect: 1
+    choices:
+    - text: "그래도 너는 계속 보고 있네"
+      quality: 0
+      minimumTalkingLevel: 1
+    - text: "싫으면 나가도 돼"
+      quality: 0
+      minimumTalkingLevel: 1
+    - text: "네가 해봐"
+      quality: 0
+      minimumTalkingLevel: 1
+  - viewerMessage: "시청자도 없는데 혼자 뭐함?"
+    ignoreIsCorrect: 1
+    choices:
+    - text: "너 있잖아"
+      quality: 0
+      minimumTalkingLevel: 1
+    - text: "게임하고 있지"
+      quality: 0
+      minimumTalkingLevel: 1
+    - text: "조용히 해"
+      quality: 0
+      minimumTalkingLevel: 1

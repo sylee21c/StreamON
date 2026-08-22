@@ -44,7 +44,25 @@ namespace StreamOn.Minigames.Runner
         public float broadcastHype;
         public float broadcastRating;
         public int donationWon;
+        public string lastDonationNickname;
+        public int lastDonationAmount;
+        public string lastDonationMessage;
+        public bool lastDonationIsLarge;
         public string recentMessages;
+        public bool conflictActive;
+        public string conflictTroublemakerId;
+        public string conflictTroublemakerNickname;
+        public string conflictTargetId;
+        public string conflictTargetNickname;
+        public string conflictTargetMessage;
+        public bool conflictTargetsStreamer;
+        public bool fraternizationActive;
+        public string socialViewer1Id;
+        public string socialViewer1Nickname;
+        public string socialViewer2Id;
+        public string socialViewer2Nickname;
+        public string socialViewer3Id;
+        public string socialViewer3Nickname;
     }
 
     [Serializable] public sealed class RunnerGeneratedChat { public string speakerId; public string message; }
@@ -127,7 +145,41 @@ int1999 | 못할떈 왤케못해 ㅋㅋ
 아코너 | 부검 ㄱㄱ 난 챗 안 쳤으 ㅁㅋㅋㅋㅋㅋ
 Marcusjun | 아
 려아04 | 아하
-라테시온 | ?";
+라테시온 | ?
+인생편하게살고싶다 | ?
+남은 자 | ???
+아기앙카 | 엄
+나선이오 | 오옹
+속초행 | 오옹?
+남은 자 | ㅋㅋㅋㅋㅋㅋㅋ
+허니비야끼토리 | ㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋ
+턱이커서미안해 | 굿
+금손 마법사 8911 | 캬
+노지선 | 오
+hwk | ??
+BengolCAT | ?
+사과HDD | ㅇㅇ
+앙그리머 | ㄱㄱㄱ
+애 몽 | 아이고
+시식빵 | ㅋㅋㅋㅋㅋㅋㅋㅋㅋ
+민초버거 | 캬
+민초버거 | 왔냐?
+느렵 | 키야!
+스튜가좋아 | 오
+시식빵 | 헉
+스튜가좋아 | ㄹㅇㅋㅋ";
+
+        private const string EventReactionGuide = @"=== 이벤트별 반응 기준 ===
+피격·하트 손실·죽음: 아니 뭐하냐 / ? / ??? / ㅋㅋㅋㅋㅋㅋ / 개못하네 / 개못하네... / 아니 이걸? / 예? / ... / 에반데 / 아니 / 뭐함?
+방송 종료: ㅈㅈ / 바이바이 / 수고했다 / 수고했어요 / 다음에 봐요~ / 담방에 봐
+오래 버티거나 안정적인 플레이: 오 / 가자 / 좋은데? / ㄱㄱ / ㄱㄱㄱ / 좀만 더 / 이대로만
+최고 기록: ㅅㅅ / 나이스 / 오 / 다음 천 단위 점수 가자 / 가보자 / 가즈아
+스트리머 답변이 별로거나 어색함: ㄴㅈ / 개노잼 / ? / 음.... / 예? / 하하 / 이건 좀... / 아...
+스트리머 답변이 좋음: ㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋ / ㅋㅋㅋㅋㅋ / 아 ㅋㅋ / 미쳤네ㅋㅋ
+일반 도네: 도네 문구의 단어 하나에 짧게 반응. 내용을 다시 요약하거나 감사 인사를 대신 하지 않음.
+큰 도네: 실제 금액원 ㄷㄷㄷㄷ / 와 / ??? / 미친 / ㅁㅊ / 와 실제 금액원....
+플레이나 스트리머 반응이 너무 없을 때: ㄴㅈ / 왤케 조용함 / ... / 뭐함? / 자나
+=== 기준 끝 ===";
 
         private readonly string _endpoint;
         private readonly string _model;
@@ -193,6 +245,12 @@ Marcusjun | 아
         public IEnumerator GenerateWit(RunnerChatSnapshot snapshot, IReadOnlyCollection<string> recentPrompts,
             Action<RunnerGeneratedWitPrompt> onSuccess, Action<string> onFailure)
         {
+            float heat01 = Mathf.Clamp01((snapshot?.broadcastHype ?? 50f) / 100f);
+            float baitChance = Mathf.Lerp(0.38f, 0.07f, heat01);
+            bool requestBait = UnityEngine.Random.value < baitChance;
+            string requestedViewerType = requestBait
+                ? "이번에는 대답할수록 분탕만 신나는 어그로성 채팅을 만들고 shouldIgnore=true로 판정한다."
+                : "이번에는 관심·질문·가벼운 놀림 채팅을 만들고 shouldIgnore=false로 판정한다.";
             WitResponseRequest payload = new WitResponseRequest
             {
                 model = _model,
@@ -201,13 +259,15 @@ Marcusjun | 아
                 reasoning = new OpenAiReasoning { effort = "none" },
                 input = new[]
                 {
-                    Input("system", "한국 게임 방송 중 시청자와 스트리머의 짧은 재치 상호작용을 만든다. "
-                        + "현재 상황에서 실제 시청자가 막 쓸 법한 질문·놀림·반응 한 줄을 만들고, 스트리머 답변 3개를 만든다. "
-                        + "사건을 그대로 낭독하거나 설명문처럼 쓰지 않는다. 기존 질문을 반복하지 않는다. "
-                        + "첫 답변은 자연스럽고 재치 있는 답변(quality 2), 둘째는 무난한 답변(quality 1), "
-                        + "셋째는 분위기를 어색하게 만드는 답변(quality 0)이어야 한다. 각 문장은 35자 이내다."),
+                    Input("system", "한국 게임 방송 중 실제 시청자가 막 쓸 법한 짧은 질문·놀림·반응 한 줄과 스트리머 답변 후보 3개를 만든다. "
+                        + "사건을 낭독하거나 설명문처럼 쓰지 않고 기존 질문을 반복하지 않는다. "
+                        + "시청자 말이 관심·질문·가벼운 놀림이면 shouldIgnore=false다. 답변 후보를 분위기를 살리는 순서로 quality 2/1/0으로 평가한다. "
+                        + "시청자 말이 대답할수록 분탕만 신나거나 악의적인 어그로에 가까우면 shouldIgnore=true다. 이때 무반응만 정답이며 세 답변의 quality는 모두 0이다. "
+                        + "단순 반말, 가벼운 ㅋㅋ, 실력 놀림만으로 분탕 판정하지 않는다. 각 문장은 35자 이내다. "
+                        + "현재 talkingSkill이 2 이상이면 서로 다른 방식의 좋은 받아치기 후보를 늘리고, 3이면 세 후보 모두 실제로 쓸 만하게 만든다."),
                     Input("user", "현재 상황:\n" + JsonUtility.ToJson(snapshot)
-                        + "\n최근 사용해서 반복 금지인 질문:\n" + string.Join(" | ", recentPrompts ?? Array.Empty<string>()))
+                        + "\n최근 사용해서 반복 금지인 질문:\n" + string.Join(" | ", recentPrompts ?? Array.Empty<string>())
+                        + "\n이번 시청자 유형:\n" + requestedViewerType)
                 },
                 text = new WitTextOptions
                 {
@@ -260,7 +320,8 @@ Marcusjun | 아
                 {
                     Input("system", BuildSystemPrompt(viewers)),
                     Input("user", "현재 게임 상황 JSON:\n" + JsonUtility.ToJson(snapshot)
-                        + "\n\n이번 요청의 출력 형태(반드시 따름):\n" + BuildOutputShapeDirective())
+                        + "\n\n현재 방송 열기에 따른 채팅 분위기:\n" + BuildHeatDirective(snapshot)
+                        + "\n\n이번 요청의 출력 형태(반드시 따름):\n" + BuildOutputShapeDirective(snapshot))
                 },
                 text = new OpenAiTextOptions
                 {
@@ -283,17 +344,23 @@ Marcusjun | 아
             builder.AppendLine("금지 예: '적을 처치했네', '체력이 얼마 안 남았네', '죽었는데 신기록 갱신 ㅋㅋ', '점수가 올랐네'.");
             builder.AppendLine("실제 시청자처럼 반사 반응, 웃음, 물음표, 생략된 평가, 앞 채팅 동조·반박, 가끔만 훈수한다.");
             builder.AppendLine("긴 ㅋㅋ만 있는 줄, '?', '오', '아', '휴', '어어'도 완전한 정상 메시지다. 억지로 정보를 덧붙이지 않는다.");
-            builder.AppendLine("여러 메시지면 적어도 하나는 1~6자의 원초 반응이어야 하고, 완성된 설명문은 최대 하나다.");
+            builder.AppendLine("게임 사건이 있으면 그 사건을 설명하지 말고 아래 대응 반응군과 아주 가까운 채팅을 우선한다.");
+            builder.AppendLine("여러 메시지면 절반 이상은 1~10자의 원초 반응이어야 하고, 완성된 설명문은 최대 하나다.");
+            builder.AppendLine("같은 뜻도 ?, ??, ???, ㅋㅋ 길이, 점 개수, 띄어쓰기, 말끝, 오타를 매번 달리한다. 모든 줄을 같은 길이·문장형으로 맞추지 않는다.");
             builder.AppendLine("최근 채팅에 답할 때 닉네임을 부르지 말고 단어를 되받거나 'ㅇㅇ', '맞음', '그건 아닌듯'처럼 잇는다.");
+            builder.AppendLine("현재 상황 JSON의 conflictActive가 false면 시청자끼리 싸운다거나 채팅창이 싸운다는 말을 절대 만들지 않는다.");
+            builder.AppendLine("fraternizationActive가 false면 서로 오늘도 왔냐고 알아보거나 방송 밖 친분을 과시하는 친목 대화를 만들지 않는다.");
             builder.AppendLine("타일 아레나의 패턴은 매번 무작위로 교체된다. 패턴 번호는 진행도·난이도·도달 단계가 아니며 채팅에서 숫자, '벌써', '몇 스테이지', 기록 진척으로 절대 언급하지 않는다.");
             builder.AppendLine("시청자별 수치는 발화자 선택의 약한 확률일 뿐이며 고정 역할을 연기하지 않는다.");
             builder.AppendLine("message에는 닉네임 없이 한 줄 35자 이내 한국어 채팅만 쓴다. 설명, 따옴표, 괄호 연기, 마크업은 금지한다.");
             builder.AppendLine("혐오, 차별, 협박, 심한 욕설, 성적 표현, 현실 인신공격은 금지한다. 가벼운 놀림과 의견 충돌까지만 허용한다.");
+            builder.AppendLine(EventReactionGuide);
             builder.AppendLine("\n=== 실제 수집 로그: 닉네임 | 채팅 ===");
             builder.AppendLine(RealChatReferenceCorpus);
             builder.AppendLine("=== 실제 수집 로그 끝 ===");
             builder.AppendLine("위 로그의 게임 고유명사와 사실은 무시한다. 닉네임 작명 감각, 길이, 생략, 반응 밀도만 재현한다.");
-            builder.AppendLine("예시 닉네임과 문장을 그대로 복사하지 않는다. speakerId는 반드시 아래 현재 시청자의 ID를 한 글자도 바꾸지 않고 사용한다.");
+            builder.AppendLine("예시 닉네임은 복사하지 않는다. ?, 오, ㅋㅋ, ㄱㄱ 같은 짧은 반응은 그대로 재사용해도 되며 길이·말끝을 바꾼 변형도 섞는다. 긴 표본 문장은 통째로 복사하지 않는다.");
+            builder.AppendLine("speakerId는 반드시 아래 현재 시청자의 ID를 한 글자도 바꾸지 않고 사용한다.");
             builder.AppendLine("현재 말할 수 있는 시청자:");
             foreach (RunnerViewerData viewer in viewers)
             {
@@ -306,16 +373,62 @@ Marcusjun | 아
             return builder.ToString();
         }
 
-        private static string BuildOutputShapeDirective()
+        private static string BuildOutputShapeDirective(RunnerChatSnapshot snapshot)
         {
+            string events = snapshot?.events ?? string.Empty;
+            if (snapshot != null && snapshot.conflictActive && events.Contains("분탕"))
+                return snapshot.conflictTargetsStreamer
+                    ? $"분탕 유저 {snapshot.conflictTroublemakerNickname}가 스트리머 플레이에 시비를 건 직후의 실제 채팅 분쟁형. 정확히 3개를 쓴다. 1) 다른 시청자가 '@{snapshot.conflictTroublemakerNickname}'을 부르며 싫으면 나가라고 반박한다. 2) ID {snapshot.conflictTroublemakerId}가 다시 못한 걸 못한다고 했을 뿐이라며 우긴다. 3) 또 다른 시청자가 밴을 요구하거나 싸움에 짧게 반응한다. 게임 사건을 친절하게 설명하지 않는다."
+                    : $"분탕 유저가 이미 시비를 건 직후의 실제 채팅 분쟁형. 정확히 3개를 시간 순서대로 쓴다. 1) ID {snapshot.conflictTargetId}가 '@{snapshot.conflictTroublemakerNickname}'을 부르며 짧게 맞받아친다. 2) ID {snapshot.conflictTroublemakerId}가 다시 '@{snapshot.conflictTargetNickname}'을 부르며 우긴다. 3) 둘이 아닌 시청자가 싸움을 말리거나 분탕 유저 밴을 요구하거나 팝콘 반응을 한다. 직전 시비의 소재는 '{snapshot.conflictTargetMessage}'였으며 게임 사건 설명은 금지한다.";
+            if (snapshot != null && snapshot.fraternizationActive && events.Contains("친목"))
+                return $"친목 대화가 시작된 직후다. 정확히 3개를 쓴다. 1) ID {snapshot.socialViewer2Id}가 '@{snapshot.socialViewer1Nickname}'을 부르며 오늘도 왔다거나 전에 본 이야기를 한다. 2) ID {snapshot.socialViewer1Id}가 '@{snapshot.socialViewer2Nickname}'을 다시 부르며 방송 밖 친분을 이어간다. 3) 둘이 아닌 시청자가 친목 보기 싫다/둘이 따로 연락해라/또 시작이네/밴 필요하다는 식으로 짧게 반응한다. 게임 상황 설명은 금지한다.";
+            if (events.Contains("후원"))
+            {
+                int amount = Mathf.Max(0, snapshot?.lastDonationAmount ?? 0);
+                string message = snapshot?.lastDonationMessage ?? string.Empty;
+                if (snapshot != null && snapshot.lastDonationIsLarge)
+                    return $"큰 도네 반응형. 실제 금액은 {amount:N0}원이다. 2개 이상 출력한다면 과반을 와/???/ㅁㅊ/미친/{amount:N0}원 ㄷㄷ 같은 1~12자 반응으로 쓴다. 예시의 x원을 쓰지 말고 반드시 실제 금액만 쓴다. 도네 문구 '{message}'를 길게 풀이하지 않는다.";
+                return $"일반 도네 반응형. 도네 문구 '{message}'에서 눈에 띄는 말 한 조각에만 짧게 반응하거나 오/ㅋㅋ/? 같은 반응을 쓴다. 후원 사실을 설명하거나 모두가 '감사합니다'라고 하지 않는다.";
+            }
+            if (events.Contains("재치 있게 받아쳐") || events.Contains("반응이 좋아짐"))
+                return "좋은 리액션형. 첫 message는 반드시 ㅋㅋ만 5~20자로 쓴다. 나머지도 아 ㅋㅋ/미쳤네ㅋㅋ/ㅋㅋㅋㅋ처럼 웃음 위주이며 왜 웃긴지 설명하지 않는다.";
+            if (events.Contains("답변이 어색") || events.Contains("무난하게 답변"))
+                return "미지근하거나 나쁜 리액션형. ㄴㅈ/개노잼/?/음..../예?/하하/이건 좀.../아...와 아주 가까운 1~10자 반응을 과반으로 쓴다. 어색해졌다고 설명하지 않는다.";
+            if (events.Contains("방송을 정상 종료") || events.Contains("방송 종료"))
+                return "방종 인사형. ㅈㅈ/바이바이/수고했다/수고했어요/다음에 봐요~/담방에 봐와 가까운 짧은 인사만 쓴다. 방송이 끝났다는 사실을 설명하지 않는다.";
+            if (events.Contains("새 최고 기록") || events.Contains("신기록"))
+            {
+                int score = Mathf.Max(0, snapshot?.score ?? 0);
+                int nextThousand = (score / 1000 + 1) * 1000;
+                return $"최고 기록 반응형. ㅅㅅ/나이스/오/가보자/가즈아 또는 '{nextThousand}점 가자'처럼 짧게 쓴다. 현재 기록 달성을 해설하지 말고, 점수 목표를 말한다면 {nextThousand}만 사용한다.";
+            }
+            if (events.Contains("게임 오버") || events.Contains("피격") || events.Contains("목숨을 잃음") || events.Contains("저체력") || events.Contains("남은 목숨"))
+                return "피격·죽음 반응형. 아니 뭐하냐/?/???/ㅋㅋㅋㅋㅋㅋ/개못하네.../아니 이걸?/예?/.../에반데/아니/뭐함?과 아주 가까운 반응을 과반으로 쓴다. 맞았다거나 죽었다는 사실을 서술하지 않는다.";
+            if (events.Contains("특별한 사건 없이 게임 플레이") || events.Contains("특별한 사건 없이"))
+                return UnityEngine.Random.value < 0.72f
+                    ? "안정 플레이 응원형. 오/가자/좋은데?/ㄱㄱ/ㄱㄱㄱ/좀만 더/이대로만과 가까운 1~10자 반응을 쓴다. 오래 버텼다고 설명하지 않는다."
+                    : "정적 반응형. ㄴㅈ/왤케 조용함/.../뭐함?/자나와 가까운 짧은 반응만 쓴다.";
+            if (events.Contains("대기 화면"))
+                return "정적 반응형. ㄴㅈ/왤케 조용함/.../뭐함?/자나와 가까운 1~10자 반응을 과반으로 쓴다.";
+
             int roll = UnityEngine.Random.Range(0, 100);
-            if (roll < 22)
-                return "원초 반응형. 첫 message는 반드시 1~6자다. 웃기거나 어이없으면 ㅋㅋ만 길게 써도 되고, 아니면 오/아/?/어어/휴 같은 반응만 쓴다. 첫 message를 완성문으로 만들지 않는다.";
-            if (roll < 52)
+            if (roll < 35)
+                return "원초 반응형. 첫 message는 반드시 반응만 쓴다. ?, ??, ???, 오, 아, 캬, 헉, 어어, 휴, ㄱㄱㄱ 또는 길이가 매번 다른 ㅋㅋ 중 상황에 맞는 하나를 고른다. 완성문으로 만들지 않는다.";
+            if (roll < 65)
                 return "짧은 파편형. 첫 message는 2~10자의 생략되거나 끝맺지 않은 채팅이다. 사건을 주어+서술어로 설명하지 않는다.";
-            if (roll < 78)
+            if (roll < 85)
                 return "채팅 흐름형. recentMessages의 말 한 조각을 되받아 동조하거나 반박한다. 닉네임 호출과 친절한 설명은 금지한다.";
             return "짧은 의견형. 상황에 대한 평가나 훈수를 18자 이내로 쓴다. JSON에 적힌 사건 자체를 그대로 낭독하지 않는다.";
+        }
+
+        private static string BuildHeatDirective(RunnerChatSnapshot snapshot)
+        {
+            float heat = Mathf.Clamp(snapshot?.broadcastHype ?? 50f, 0f, 100f);
+            if (heat >= 70f)
+                return $"방송 열기 {heat:0}%. 채팅 분위기가 살아 있다. 같은 사건에도 응원·웃음·감탄 쪽을 우선한다. 별도 분탕 이벤트가 아니면 시비나 분쟁을 만들지 않는다.";
+            if (heat <= 30f)
+                return $"방송 열기 {heat:0}%. 채팅 분위기가 식었다. 같은 사건에도 ?/ㄴㅈ/.../뭐함?/개노잼 같은 냉담·불만·놀림 쪽을 우선하되 사건을 설명하지 않는다.";
+            return $"방송 열기 {heat:0}%. 긍정·무심·가벼운 놀림이 섞인 보통 채팅 분위기를 유지한다.";
         }
 
         private static OpenAiObjectSchema CreateSchema() => new OpenAiObjectSchema
@@ -347,6 +460,7 @@ Marcusjun | 아
             properties = new WitRootProperties
             {
                 viewerMessage = new OpenAiStringSchema { type = "string" },
+                shouldIgnore = new OpenAiBooleanSchema { type = "boolean" },
                 choices = new WitArraySchema
                 {
                     type = "array", minItems = 3, maxItems = 3,
@@ -362,7 +476,7 @@ Marcusjun | 아
                     }
                 }
             },
-            required = new[] { "viewerMessage", "choices" }, additionalProperties = false
+            required = new[] { "viewerMessage", "shouldIgnore", "choices" }, additionalProperties = false
         };
 
         [Serializable] private sealed class OpenAiResponseRequest { public string model; public bool store; public OpenAiInput[] input; public OpenAiTextOptions text; public OpenAiReasoning reasoning; public int max_output_tokens; }
@@ -378,11 +492,12 @@ Marcusjun | 아
         [Serializable] private sealed class OpenAiMessageProperties { public OpenAiStringSchema speakerId; public OpenAiStringSchema message; }
         [Serializable] private sealed class OpenAiStringSchema { public string type; }
         [Serializable] private sealed class OpenAiIntegerSchema { public string type; public int minimum; public int maximum; }
+        [Serializable] private sealed class OpenAiBooleanSchema { public string type; }
         [Serializable] private sealed class WitResponseRequest { public string model; public bool store; public OpenAiInput[] input; public WitTextOptions text; public OpenAiReasoning reasoning; public int max_output_tokens; }
         [Serializable] private sealed class WitTextOptions { public string verbosity; public WitJsonFormat format; }
         [Serializable] private sealed class WitJsonFormat { public string type; public string name; public bool strict; public WitObjectSchema schema; }
         [Serializable] private sealed class WitObjectSchema { public string type; public WitRootProperties properties; public string[] required; public bool additionalProperties; }
-        [Serializable] private sealed class WitRootProperties { public OpenAiStringSchema viewerMessage; public WitArraySchema choices; }
+        [Serializable] private sealed class WitRootProperties { public OpenAiStringSchema viewerMessage; public OpenAiBooleanSchema shouldIgnore; public WitArraySchema choices; }
         [Serializable] private sealed class WitArraySchema { public string type; public WitChoiceSchema items; public int minItems; public int maxItems; }
         [Serializable] private sealed class WitChoiceSchema { public string type; public WitChoiceProperties properties; public string[] required; public bool additionalProperties; }
         [Serializable] private sealed class WitChoiceProperties { public OpenAiStringSchema text; public OpenAiIntegerSchema quality; }

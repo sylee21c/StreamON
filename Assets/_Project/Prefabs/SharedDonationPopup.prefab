@@ -588,7 +588,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 5586105229717035710}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 0f76c78bd3e34f67ae2484d11dbcf876, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StreamOn.Minigames.Runner.RunnerDonationPopupController
   canvasGroup: {fileID: 4639106918448402665}

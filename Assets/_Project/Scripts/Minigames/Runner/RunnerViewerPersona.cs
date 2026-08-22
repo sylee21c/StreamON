@@ -66,27 +66,32 @@ namespace StreamOn.Minigames.Runner
         private static readonly string[] NaturalNamePrefixes =
         {
             "졸린", "느긋한", "말랑한", "수상한", "조용한", "급한", "작은", "대충사는",
-            "퇴근한", "길잃은", "배부른", "심심한", "흔들리는", "납작한", "새벽의", "비오는날"
+            "퇴근한", "길잃은", "배부른", "심심한", "흔들리는", "납작한", "새벽의", "비오는날",
+            "바쁜", "엉뚱한", "부지런한", "용감한", "배고픈", "겁많은", "금손", "잠깬"
         };
         private static readonly string[] NaturalNameNouns =
         {
             "만두", "두부", "문어", "주먹밥", "토끼", "장갑", "주전자", "도토리", "식빵", "고등어",
-            "우산", "쿠키", "오리", "선인장", "복숭아", "라면", "펭귄", "비둘기", "참새", "양말"
+            "우산", "쿠키", "오리", "선인장", "복숭아", "라면", "펭귄", "비둘기", "참새", "양말",
+            "마법사", "우주인", "요괴", "고양이", "젤리", "계피", "소다", "꿀벌", "감자", "도마뱀"
         };
         private static readonly string[] NaturalPhraseNames =
         {
             "집가면서봄", "닉네임고민중", "오늘만보고감", "한판만더본다", "겜은잘모름", "밥식는중",
-            "출근하기싫음", "조용히보는중", "방금들어옴", "누워서보는사람", "일단켜놓음", "내일은진짜잠"
+            "출근하기싫음", "조용히보는중", "방금들어옴", "누워서보는사람", "일단켜놓음", "내일은진짜잠",
+            "할일은내일함", "그전에죽겠는데", "턱은안커요", "퇴근만기다림", "사람일수도있음", "대충보고있음"
         };
         private static readonly string[] NaturalShortNames =
         {
             "구르릉", "모구리", "두부둡", "몽실쿵", "부릉밤", "토독이", "냐루", "오모리",
-            "해파링", "푸릇", "물컹", "차차롱", "보도독", "무니", "라로", "콩구리"
+            "해파링", "푸릇", "물컹", "차차롱", "보도독", "무니", "라로", "콩구리",
+            "느롬", "뽀각", "댱근", "호칠", "나봄", "구밤", "모냑", "해둥"
         };
         private static readonly string[] NaturalEnglishNames =
         {
             "mango", "mint", "noon", "river", "dodo", "mocha", "zero", "cloud",
-            "soda", "biscuit", "podo", "mumu", "slow", "tiny", "blue", "lime"
+            "soda", "biscuit", "podo", "mumu", "slow", "tiny", "blue", "lime",
+            "Bengol", "pollux", "Ren", "Melon", "midtown", "soboro", "hwk", "nada"
         };
         private static readonly string[] NaturalCuratedNames =
         {
@@ -94,7 +99,9 @@ namespace StreamOn.Minigames.Runner
             "한입만먹음", "안자고뭐함", "퇴근은언제", "돌아온김씨", "물먹는수달", "라면국물연구소",
             "대충지은아이디", "오늘도눕는다", "닉변예정", "말랑복숭", "구불감자", "자다깬참새",
             "이름없는주전자", "보라색양말", "김치말이두부", "새벽두시반", "아직안잠", "겜보다밥",
-            "MintRice", "cloud_37", "oo0oo", "qwer782", "mumu12", "BluePodo", "ramen404", "noon_ing"
+            "MintRice", "cloud_37", "oo0oo", "qwer782", "mumu12", "BluePodo", "ramen404", "noon_ing",
+            "민트맛건빵", "시나몬소다", "파란우편함", "복숭아하드", "퇴근한마법사", "감자맛젤리",
+            "오늘할일없음", "인생천천히살기", "내일은금손", "사실사람맞음", "MintHDD", "soboroCAT"
         };
 
         public static RunnerViewerData Create(RunnerViewerPersonaData persona, int index, HashSet<string> usedNicknames)
