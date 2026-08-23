@@ -646,7 +646,8 @@ namespace StreamOn.Minigames.TileArena
             _pointerDirections.Clear();
             if (gameOverScore != null) gameOverScore.text = _score.ToString();
             if (gameOverBest != null) gameOverBest.text = _best.ToString();
-            if (gameOverOverlay != null) gameOverOverlay.SetActive(true);
+            bool endingBroadcast = broadcastSession != null && broadcastSession.BroadcastActive;
+            if (gameOverOverlay != null) gameOverOverlay.SetActive(!endingBroadcast);
             audioController?.StopMusic();
             audioController?.PlayGameOver();
             chatAdapter?.OnGameOver(_score > _bestAtRunStart);

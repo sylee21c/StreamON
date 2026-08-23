@@ -215,8 +215,6 @@ namespace StreamOn.Editor
             UgsNotificationPresenter notificationPresenter = BuildUgsNotification(canvas.transform, font);
             BroadcastLeaderboardProvider existingProvider = Find<BroadcastLeaderboardProvider>(scene);
             if (existingProvider != null) existingProvider.notificationPresenter = notificationPresenter;
-            Transform legacyGauges = canvas.transform.Find("Stat Gauges");
-            if (legacyGauges != null) legacyGauges.gameObject.SetActive(false);
             Transform old = canvas.transform.Find("Growth And Leaderboard UI");
             if (old != null)
             {
@@ -320,11 +318,11 @@ namespace StreamOn.Editor
             view.experienceText = Text("Experience", card.transform, "EXP 0", font, 16, new Vector2(160, 28), new Vector2(130, 105));
             view.pointText = Text("Points", card.transform, "남은 포인트 1", font, 17, new Vector2(220, 28), new Vector2(0, 68));
             view.witText = Text("Wit", card.transform, "재치 0/5", font, 18, new Vector2(170, 34), new Vector2(-90, 23));
-            view.mentalText = Text("Mental", card.transform, "멘탈 0/5", font, 18, new Vector2(170, 34), new Vector2(-90, -22));
-            view.staminaText = Text("Stamina", card.transform, "체력 0/5", font, 18, new Vector2(170, 34), new Vector2(-90, -67));
+            view.composureText = Text("Composure", card.transform, "평정심 0/5", font, 18, new Vector2(170, 34), new Vector2(-90, -22));
+            view.controlText = Text("Control", card.transform, "통제력 0/5", font, 18, new Vector2(170, 34), new Vector2(-90, -67));
             view.witButton = MakeButton("Wit Up", card.transform, "+", font, new Vector2(64, 34), new Vector2(95, 23), new Color(.18f, .65f, .54f));
-            view.mentalButton = MakeButton("Mental Up", card.transform, "+", font, new Vector2(64, 34), new Vector2(95, -22), new Color(.18f, .65f, .54f));
-            view.staminaButton = MakeButton("Stamina Up", card.transform, "+", font, new Vector2(64, 34), new Vector2(95, -67), new Color(.18f, .65f, .54f));
+            view.composureButton = MakeButton("Composure Up", card.transform, "+", font, new Vector2(64, 34), new Vector2(95, -22), new Color(.18f, .65f, .54f));
+            view.controlButton = MakeButton("Control Up", card.transform, "+", font, new Vector2(64, 34), new Vector2(95, -67), new Color(.18f, .65f, .54f));
             view.cashText = Text("Cash", card.transform, "보유금 0원", font, 15, new Vector2(170, 28), new Vector2(-115, -110));
             view.respecButton = MakeButton("Respec", card.transform, "스탯 초기화", font, new Vector2(150, 34), new Vector2(125, -110), new Color(.48f, .30f, .34f));
         }

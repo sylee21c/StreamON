@@ -92,7 +92,7 @@ namespace StreamOn.Editor
             Text("Title", panel.transform, "방송 장비 업그레이드", font, 30, new Vector2(580, 50), new Vector2(0, 205));
             TMP_Text cash = Text("Cash", panel.transform, "보유금 0원", font, 21, new Vector2(560, 38), new Vector2(0, 160));
             TMP_Text[] labels = new TMP_Text[4]; Button[] buttons = new Button[4];
-            string[] names = { "PC", "마이크", "체력 장비", "방 인테리어" };
+            string[] names = { "PC", "마이크", "집중 장비", "방 인테리어" };
             for (int i = 0; i < 4; i++)
             {
                 float y = 105 - i * 78;

@@ -44,6 +44,9 @@ namespace StreamOn.Minigames.Runner
         private int _talkingSkillExperience;
         private int _healthStat;
         private int _healthStatExperience;
+        private int _witRank;
+        private int _composureRank;
+        private int _controlRank;
         private int _bestBroadcastScore;
         private long _lifetimeDonations;
         private long _cash;
@@ -96,7 +99,10 @@ namespace StreamOn.Minigames.Runner
             }
 
             _gameManager = gameManager;
-            _settlementView = FindFirstObjectByType<RunnerBroadcastSettlementView>();
+            // The settlement prefab is intentionally inactive in the scene until a
+            // broadcast ends. The default lookup ignores inactive objects, leaving
+            // this reference null and making the result screen impossible to show.
+            _settlementView = FindFirstObjectByType<RunnerBroadcastSettlementView>(FindObjectsInactive.Include);
             if (_settlementView == null)
                 Debug.LogError("방송 정산 UI가 씬에 연결되지 않았습니다. 런타임 UI는 자동 생성하지 않습니다.", this);
             _initialized = true;
@@ -194,7 +200,6 @@ namespace StreamOn.Minigames.Runner
             RunnerBroadcastResult result, int previousBest, int experienceGained, int broadcasterLevelAfter)
         {
             int finalBroadcastScore = _gameManager.FinalBroadcastScore;
-            yield return new WaitForSecondsRealtime(settings.resultDelay);
             if (_settlementView != null)
             {
                 _settlementView.Show(new RunnerSettlementDisplayData
@@ -232,12 +237,12 @@ namespace StreamOn.Minigames.Runner
                 dashboard += $"\n\n[방송 평가 {RatingGrade(result.finalRating)}]\n플레이 {result.gameplayRating:0.0}    생존 {result.survivalRating:0.0}    안정성 {result.safetyRating:0.0}    진행 {result.hostingRating:0.0}\n최종 평점  {result.finalRating:0.0} / 5.0";
                 _settlementBody.text = dashboard;
                 yield return new WaitForSecondsRealtime(0.28f);
-                dashboard += $"\n\n[성장 및 수익]\n팔로워 {Signed(result.followersGained)} / 이탈 -{result.followersLost} / 순변화 {Signed(subscriberDelta)}    전환율 {result.followConversionRate * 100f:0.0}%\n후원금 +{result.donationWon:N0}원    누적 {_lifetimeDonations:N0}원\n현재 팔로워 {_subscribers:N0}    멘탈 Lv.{_mentalLevel}";
+                dashboard += $"\n\n[성장 및 수익]\n팔로워 {Signed(result.followersGained)} / 이탈 -{result.followersLost} / 순변화 {Signed(subscriberDelta)}    전환율 {result.followConversionRate * 100f:0.0}%\n후원금 +{result.donationWon:N0}원    누적 {_lifetimeDonations:N0}원\n현재 팔로워 {_subscribers:N0}    평정심 {_composureRank}";
                 _settlementBody.text = dashboard;
             }
             else
             {
-                dashboard += $"\n\n팔로워 {Signed(subscriberDelta)}\n현재 팔로워 {_subscribers:N0}    멘탈 Lv.{_mentalLevel}";
+                dashboard += $"\n\n팔로워 {Signed(subscriberDelta)}\n현재 팔로워 {_subscribers:N0}    평정심 {_composureRank}";
                 _settlementBody.text = dashboard;
             }
             _settlementButtonLabel.text = !IsEndless && _day >= settings.fixedMaximumDays
@@ -304,6 +309,7 @@ namespace StreamOn.Minigames.Runner
             _talkingSkillExperience = 0;
             _healthStat = settings.startingHealthStat;
             _healthStatExperience = 0;
+            _witRank = _composureRank = _controlRank = 0;
             _bestBroadcastScore = 0;
             _lifetimeDonations = 0;
             _cash = 0;
@@ -328,7 +334,7 @@ namespace StreamOn.Minigames.Runner
                 : $"DAY {_day} / {settings.fixedMaximumDays}  방송 준비";
             _preparationStats.text =
                 $"팔로워  {_subscribers:N0}명     보유금 {_cash:N0}원\n" +
-                $"게임 Lv.{_gameSkill}     소통 Lv.{_talkingSkill}     체력 Lv.{_healthStat}     멘탈 Lv.{_mentalLevel}\n" +
+                $"재치 {_witRank}     평정심 {_composureRank}     통제력 {_controlRank}\n" +
                 $"오늘 목표  {CurrentTargetScore:N0}     캠페인 최고  {_bestBroadcastScore:N0}";
             RefreshStatus();
             ResetNewGameConfirmation();
@@ -343,7 +349,7 @@ namespace StreamOn.Minigames.Runner
             _endingTitle.color = cleared ? new Color(0.40f, 0.90f, 0.82f) : new Color(1f, 0.40f, 0.44f);
             _endingBody.text = cleared
                 ? $"최종 DAY  {_day}\n최종 팔로워  {_subscribers:N0}명\n누적 후원금 {_lifetimeDonations:N0}원\n캠페인 최고 점수  {_bestBroadcastScore:N0}"
-                : $"DAY {_day}에서 종료\n최종 팔로워  {_subscribers:N0}명\n멘탈 Lv.{_mentalLevel}\n최고 점수  {_bestBroadcastScore:N0}";
+                : $"DAY {_day}에서 종료\n최종 팔로워  {_subscribers:N0}명\n평정심 {_composureRank}\n최고 점수  {_bestBroadcastScore:N0}";
             ShowOnly(_endingPanel);
             _gameManager.NotifyChat(cleared ? RunnerChatEvent.CampaignClear : RunnerChatEvent.CampaignFailed);
         }
@@ -404,7 +410,7 @@ namespace StreamOn.Minigames.Runner
         {
             if (_statusText == null) return;
             string dayText = IsEndless ? $"DAY {_day}" : $"DAY {_day}/{settings.fixedMaximumDays}";
-            _statusText.text = $"{dayText}    팔로워 {_subscribers:N0}    보유금 {_cash:N0}원    목표 {CurrentTargetScore:N0}    게임 Lv.{_gameSkill}    소통 Lv.{_talkingSkill}    체력 Lv.{_healthStat}    멘탈 Lv.{_mentalLevel}";
+            _statusText.text = $"{dayText}    팔로워 {_subscribers:N0}    보유금 {_cash:N0}원    목표 {CurrentTargetScore:N0}    재치 {_witRank}    평정심 {_composureRank}    통제력 {_controlRank}";
         }
 
         private void SetStatusVisible(bool visible)
@@ -428,6 +434,9 @@ namespace StreamOn.Minigames.Runner
                 _talkingSkillExperience = Mathf.Max(0, data.talkingSkillExperience);
                 _healthStat = Mathf.Clamp(data.healthStat > 0 ? data.healthStat : settings.startingHealthStat, 1, settings.maximumHealthStat);
                 _healthStatExperience = Mathf.Max(0, data.healthStatExperience);
+                _witRank = data.witRank;
+                _composureRank = data.ComposureRank;
+                _controlRank = data.ControlRank;
                 _bestBroadcastScore = data.bestBroadcastScore;
                 _lifetimeDonations = data.lifetimeDonations;
                 _cash = data.cash;

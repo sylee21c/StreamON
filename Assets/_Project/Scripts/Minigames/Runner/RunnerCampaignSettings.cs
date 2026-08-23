@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace StreamOn.Minigames.Runner
 {
@@ -51,7 +52,7 @@ namespace StreamOn.Minigames.Runner
     }
 
     [Serializable]
-        public sealed class MentalRankRule
+    public sealed class ComposureRankRule
     {
         [Min(0)] public int rank;
         [Min(0)] public int upgradeCost;
@@ -66,13 +67,12 @@ namespace StreamOn.Minigames.Runner
     }
 
     [Serializable]
-    public sealed class StaminaRankRule
+    public sealed class ControlRankRule
     {
         [Min(0)] public int rank;
         [Min(0)] public int upgradeCost;
         [Min(1f)] public float maximumFocus = 100f;
         [Min(0f)] public float focusRecoveryBonus;
-        [Min(0f)] public float gameOverTimeLoss = 8f;
         [Min(0f)] public float focusRecoveryDelayReduction;
         [Range(0f, 1f)] public float focusDrainReduction;
         [Min(0f)] public float depletionRecoveryAmount;
@@ -129,28 +129,36 @@ namespace StreamOn.Minigames.Runner
         [Header("Starting State")]
         [Min(0)] public int startingSubscribers = 0;
         public string defaultStreamerName = "신입스트리머";
+        [HideInInspector]
         [Range(1, 3)] public int startingMentalLevel = 1;
+        [HideInInspector]
         [Min(1)] public int startingGameSkill = 1;
+        [HideInInspector]
         [Min(1)] public int startingTalkingSkill = 1;
+        [HideInInspector]
         [Min(1)] public int startingHealthStat = 1;
 
-        [Header("Stat Progression (Lv.1 - Lv.3)")]
+        // 기존 저장 데이터 변환에만 사용되는 구 스탯 값입니다. 새 게임 설정은
+        // 아래 Broadcaster Level & Stat Points의 재치/평정심/통제력 표에서 조절합니다.
+        [HideInInspector]
         [Range(1, 3)] public int maximumMentalLevel = 3;
+        [HideInInspector]
         [Range(1, 3)] public int maximumGameSkill = 3;
+        [HideInInspector]
         [Range(1, 3)] public int maximumTalkingSkill = 3;
+        [HideInInspector]
         [Range(1, 3)] public int maximumHealthStat = 3;
-        [Tooltip("Lv.1에서 Lv.2로 오르는 데 필요한 경험치")]
+        [HideInInspector]
         [Min(1)] public int experienceForLevel2 = 100;
-        [Tooltip("Lv.2에서 Lv.3으로 오르는 데 필요한 경험치")]
+        [HideInInspector]
         [Min(1)] public int experienceForLevel3 = 150;
 
-        [Header("Mental -> Broadcast Hype")]
-        [Tooltip("멘탈 레벨이 하나 오를 때 긍정적인 열기 획득량에 더해지는 비율입니다. 0.15 = +15%")]
+        [HideInInspector]
         [Range(0f, 1f)] public float hypeGainBonusPerMentalLevel = 0.15f;
-        [Tooltip("멘탈 레벨이 하나 오를 때 부정적인 열기 감소량에서 줄어드는 비율입니다. 0.15 = -15%")]
+        [HideInInspector]
         [Range(0f, 0.45f)] public float hypePenaltyReductionPerMentalLevel = 0.15f;
 
-        [Header("Day Actions")]
+        [HideInInspector]
         public List<RunnerCampaignActionDefinition> dayActions = new List<RunnerCampaignActionDefinition>();
 
         [Header("Broadcast Goals")]
@@ -202,8 +210,12 @@ namespace StreamOn.Minigames.Runner
         [Min(0)] public int startingStatPoints = 1;
         public List<BroadcasterLevelRule> broadcasterLevels = new List<BroadcasterLevelRule>();
         public List<WitRankRule> witRanks = new List<WitRankRule>();
-        public List<MentalRankRule> mentalRanks = new List<MentalRankRule>();
-        public List<StaminaRankRule> staminaRanks = new List<StaminaRankRule>();
+        [FormerlySerializedAs("mentalRanks")]
+        [Tooltip("평정심 단계별 열기 페널티 완화 및 상태 회복 설정")]
+        public List<ComposureRankRule> composureRanks = new List<ComposureRankRule>();
+        [FormerlySerializedAs("staminaRanks")]
+        [Tooltip("통제력 단계별 집중력 최대치, 회복, 슬로우모션 효율 설정")]
+        public List<ControlRankRule> controlRanks = new List<ControlRankRule>();
         [Min(0)] public int broadcastCompletionExperience = 45;
         [Min(0)] public int broadcastRatingExperiencePerPoint = 5;
         [Min(0)] public int newRecordExperience = 30;
@@ -343,8 +355,8 @@ namespace StreamOn.Minigames.Runner
 
         public float HeatScoreMultiplier(float heat) => Mathf.Max(0f, heatScoreMultiplier != null ? heatScoreMultiplier.Evaluate(Mathf.Clamp(heat, 0f, 100f)) : 1f);
         public WitRankRule WitRule(int rank) => RuleAt(witRanks, rank);
-        public MentalRankRule MentalRule(int rank) => RuleAt(mentalRanks, rank);
-        public StaminaRankRule StaminaRule(int rank) => RuleAt(staminaRanks, rank);
+        public ComposureRankRule ComposureRule(int rank) => RuleAt(composureRanks, rank);
+        public ControlRankRule ControlRule(int rank) => RuleAt(controlRanks, rank);
         private static T RuleAt<T>(List<T> rules, int rank) where T : class => rules != null && rules.Count > 0 ? rules[Mathf.Clamp(rank, 0, rules.Count - 1)] : null;
 
         public int UpgradeCost(RunnerEquipmentType type, int targetLevel)
@@ -447,7 +459,7 @@ namespace StreamOn.Minigames.Runner
                         experienceToNextLevel = 70 + level * 15,
                         statPointsGranted = level == 10 || level == 20 ? 2 : 1
                     });
-            if (witRanks == null || witRanks.Count != 6)
+            if (witRanks == null || witRanks.Count == 0)
                 witRanks = new List<WitRankRule>
                 {
                     new WitRankRule { rank = 0, upgradeCost = 0, advancedAnswerRewardMultiplier = 1f },
@@ -476,25 +488,25 @@ namespace StreamOn.Minigames.Runner
                     rule.comebackRewardMultiplier = rule.rank >= 5 ? 1.7f : 1.55f;
                 }
             }
-            if (mentalRanks == null || mentalRanks.Count != 6)
-                mentalRanks = new List<MentalRankRule>
+            if (composureRanks == null || composureRanks.Count == 0)
+                composureRanks = new List<ComposureRankRule>
                 {
-                    new MentalRankRule { rank = 0, upgradeCost = 0, poorStateTickInterval = 2f },
-                    new MentalRankRule { rank = 1, upgradeCost = 1, ordinaryPenaltyReduction = .12f, poorStateTickInterval = 2.3f, neutralRecoveryTimeReduction = .10f },
-                    new MentalRankRule { rank = 2, upgradeCost = 2, ordinaryPenaltyReduction = .24f, poorStateTickInterval = 2.6f, neutralRecoveryTimeReduction = .20f, protectsFirstMistakeAfterGoodPlay = true },
-                    new MentalRankRule { rank = 3, upgradeCost = 3, ordinaryPenaltyReduction = .36f, poorStateTickInterval = 3f, neutralRecoveryTimeReduction = .30f, protectsFirstMistakeAfterGoodPlay = true, correctWitClearsRecentMistakes = true, mistakeClearCooldownSeconds = 20f },
-                    new MentalRankRule { rank = 4, upgradeCost = 4, ordinaryPenaltyReduction = .48f, poorStateTickInterval = 3.5f, neutralRecoveryTimeReduction = .40f, extraMistakesRequiredForPoorState = 1, protectsFirstMistakeAfterGoodPlay = true, correctWitClearsRecentMistakes = true, mistakeClearCooldownSeconds = 20f },
-                    new MentalRankRule { rank = 5, upgradeCost = 5, ordinaryPenaltyReduction = .60f, poorStateTickInterval = 4f, neutralRecoveryTimeReduction = .50f, extraMistakesRequiredForPoorState = 1, oncePerBroadcastLargePenaltyReduction = .80f, protectsFirstMistakeAfterGoodPlay = true, correctWitClearsRecentMistakes = true, mistakeClearCooldownSeconds = 20f }
+                    new ComposureRankRule { rank = 0, upgradeCost = 0, poorStateTickInterval = 2f },
+                    new ComposureRankRule { rank = 1, upgradeCost = 1, ordinaryPenaltyReduction = .12f, poorStateTickInterval = 2.3f, neutralRecoveryTimeReduction = .10f },
+                    new ComposureRankRule { rank = 2, upgradeCost = 2, ordinaryPenaltyReduction = .24f, poorStateTickInterval = 2.6f, neutralRecoveryTimeReduction = .20f, protectsFirstMistakeAfterGoodPlay = true },
+                    new ComposureRankRule { rank = 3, upgradeCost = 3, ordinaryPenaltyReduction = .36f, poorStateTickInterval = 3f, neutralRecoveryTimeReduction = .30f, protectsFirstMistakeAfterGoodPlay = true, correctWitClearsRecentMistakes = true, mistakeClearCooldownSeconds = 20f },
+                    new ComposureRankRule { rank = 4, upgradeCost = 4, ordinaryPenaltyReduction = .48f, poorStateTickInterval = 3.5f, neutralRecoveryTimeReduction = .40f, extraMistakesRequiredForPoorState = 1, protectsFirstMistakeAfterGoodPlay = true, correctWitClearsRecentMistakes = true, mistakeClearCooldownSeconds = 20f },
+                    new ComposureRankRule { rank = 5, upgradeCost = 5, ordinaryPenaltyReduction = .60f, poorStateTickInterval = 4f, neutralRecoveryTimeReduction = .50f, extraMistakesRequiredForPoorState = 1, oncePerBroadcastLargePenaltyReduction = .80f, protectsFirstMistakeAfterGoodPlay = true, correctWitClearsRecentMistakes = true, mistakeClearCooldownSeconds = 20f }
                 };
-            if (staminaRanks == null || staminaRanks.Count != 6)
-                staminaRanks = new List<StaminaRankRule>
+            if (controlRanks == null || controlRanks.Count == 0)
+                controlRanks = new List<ControlRankRule>
                 {
-                    new StaminaRankRule { rank = 0, upgradeCost = 0, maximumFocus = 100f, gameOverTimeLoss = 8f },
-                    new StaminaRankRule { rank = 1, upgradeCost = 1, maximumFocus = 120f, focusRecoveryBonus = .15f, gameOverTimeLoss = 7.5f },
-                    new StaminaRankRule { rank = 2, upgradeCost = 2, maximumFocus = 140f, focusRecoveryBonus = .30f, gameOverTimeLoss = 7f, focusRecoveryDelayReduction = .7f },
-                    new StaminaRankRule { rank = 3, upgradeCost = 3, maximumFocus = 160f, focusRecoveryBonus = .45f, gameOverTimeLoss = 6.5f, focusRecoveryDelayReduction = .7f, focusDrainReduction = .08f },
-                    new StaminaRankRule { rank = 4, upgradeCost = 4, maximumFocus = 190f, focusRecoveryBonus = .60f, gameOverTimeLoss = 6f, focusRecoveryDelayReduction = .7f, focusDrainReduction = .15f },
-                    new StaminaRankRule { rank = 5, upgradeCost = 5, maximumFocus = 220f, focusRecoveryBonus = .80f, gameOverTimeLoss = 5.5f, focusRecoveryDelayReduction = .7f, focusDrainReduction = .20f, depletionRecoveryAmount = 35f }
+                    new ControlRankRule { rank = 0, upgradeCost = 0, maximumFocus = 100f },
+                    new ControlRankRule { rank = 1, upgradeCost = 1, maximumFocus = 120f, focusRecoveryBonus = .15f },
+                    new ControlRankRule { rank = 2, upgradeCost = 2, maximumFocus = 140f, focusRecoveryBonus = .30f, focusRecoveryDelayReduction = .7f },
+                    new ControlRankRule { rank = 3, upgradeCost = 3, maximumFocus = 160f, focusRecoveryBonus = .45f, focusRecoveryDelayReduction = .7f, focusDrainReduction = .08f },
+                    new ControlRankRule { rank = 4, upgradeCost = 4, maximumFocus = 190f, focusRecoveryBonus = .60f, focusRecoveryDelayReduction = .7f, focusDrainReduction = .15f },
+                    new ControlRankRule { rank = 5, upgradeCost = 5, maximumFocus = 220f, focusRecoveryBonus = .80f, focusRecoveryDelayReduction = .7f, focusDrainReduction = .20f, depletionRecoveryAmount = 35f }
                 };
         }
 
@@ -619,8 +631,12 @@ namespace StreamOn.Minigames.Runner
         public int broadcastSessionExperienceEarned;
         public int unspentStatPoints = 1;
         public int witRank;
+        // These legacy JSON field names are intentionally retained so existing saves
+        // migrate without losing invested points. Runtime code uses the semantic aliases below.
         public int mentalRank;
         public int staminaRank;
+        public int ComposureRank { get => mentalRank; set => mentalRank = value; }
+        public int ControlRank { get => staminaRank; set => staminaRank = value; }
         public bool freeRespecUsed;
         public int unlockedManagerTier;
         public int hiredManagerTier;

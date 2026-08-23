@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using StreamOn.UI;
 
 namespace StreamOn.Minigames.Runner
 {
@@ -15,18 +16,51 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private Transform player;
         [SerializeField] private TMP_Text statusText;
         [SerializeField] private TMP_Text promptText;
-        [Header("Scene-authored Stat Gauges")]
-        [SerializeField] private GameObject statGaugePanel;
-        [SerializeField] private RunnerStatGauge mentalGauge;
-        [SerializeField] private RunnerStatGauge gameSkillGauge;
-        [SerializeField] private RunnerStatGauge talkingSkillGauge;
-        [SerializeField] private RunnerStatGauge healthGauge;
         [Header("Scene-authored Broadcast Transition")]
         [SerializeField] private CanvasGroup transitionFade;
         [SerializeField] private GameObject gameSelectionPanel;
         [SerializeField] private Button runnerGameButton;
         [SerializeField] private Button tileArenaGameButton;
         [SerializeField] private Button plasticKnightmareGameButton;
+        [Header("Room Cameras")]
+        [SerializeField] private Camera mainRoomCamera;
+        [SerializeField] private Camera broadcastCutsceneCamera;
+        [SerializeField] private GameObject roomUi;
+        [SerializeField] private Vector3 nearCameraPosition = new Vector3(-1.273f, 2.039f, -0.225f);
+        [SerializeField] private Vector3 farCameraPosition = new Vector3(1.037f, 2.754f, 1.109f);
+        [SerializeField, Min(0.1f)] private float farCameraPlayerDistance = 6f;
+        [SerializeField, Min(0.1f)] private float cameraFollowSharpness = 3.5f;
+        [SerializeField] private float cutsceneStartX = -4.13f;
+        [SerializeField] private float cutsceneEndX = -4.55f;
+        [SerializeField, Min(0.1f)] private float cutsceneDuration = 0.65f;
+        [Header("Broadcast Computer Interaction")]
+        [SerializeField] private Transform broadcastInteractionZone;
+        [SerializeField] private Collider broadcastInteractionCollider;
+        [SerializeField] private Canvas broadcastPromptCanvas;
+        [SerializeField] private TMP_Text broadcastPromptWorldText;
+        [SerializeField, Min(0f)] private float interactionZoneTolerance = 0.15f;
+        [Header("Laptop Growth & Leaderboard Interaction")]
+        [SerializeField] private Transform laptopInteractionZone;
+        [SerializeField] private Collider laptopInteractionCollider;
+        [SerializeField] private Canvas laptopPromptCanvas;
+        [SerializeField] private GameObject growthAndLeaderboardPanel;
+        [SerializeField, Min(0f)] private float laptopInteractionZoneTolerance = 0.75f;
+        [SerializeField] private bool logLaptopInteraction;
+        [Header("Scene-authored Room Status HUD")]
+        [SerializeField] private Canvas statusHudCanvas;
+        [SerializeField] private TMP_Text hudFollowersText;
+        [SerializeField] private TMP_Text hudMoneyText;
+        [SerializeField] private TMP_Text hudWitLabel;
+        [SerializeField] private TMP_Text hudComposureLabel;
+        [SerializeField] private TMP_Text hudControlLabel;
+        [SerializeField] private TMP_Text hudWitLevelText;
+        [SerializeField] private TMP_Text hudComposureLevelText;
+        [SerializeField] private TMP_Text hudControlLevelText;
+        [SerializeField] private Image hudWitFill;
+        [SerializeField] private Image hudComposureFill;
+        [SerializeField] private Image hudControlFill;
+        [SerializeField] private TMP_Text hudXpLabel;
+        [SerializeField] private Image hudXpFill;
         [Header("Scene-authored Save Slots")]
         [SerializeField] private GameObject slotPanel;
         [SerializeField] private TMP_Text slotNotice;
@@ -34,9 +68,6 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private TMP_Text[] slotLabels;
         [SerializeField] private Button[] slotSelectButtons;
         [SerializeField] private Button[] slotDeleteButtons;
-        [SerializeField, Min(0.2f)] private float activityGaugeAnimationSeconds = 1.2f;
-        [SerializeField, Min(0f)] private float activityResultHoldSeconds = 0.55f;
-        [SerializeField, Min(0.1f)] private float fadeDuration = 0.65f;
         [SerializeField, Min(0.5f)] private float interactionDistance = 2.4f;
 
         private RunnerCampaignSaveData _save;
@@ -47,9 +78,16 @@ namespace StreamOn.Minigames.Runner
         private int _deleteArmedSlot = -1;
         private bool _transitioning;
         private int _gameSelectionInputEnabledFrame = int.MaxValue;
-
+        private Vector3 _playerInitialPosition;
+        private Vector3 _cutsceneCameraInitialPosition;
+        private GameObject[] _roomSiblingPanels;
+        private ScenePanelToggle _growthPanelToggle;
         private void Start()
         {
+            // The room is never a paused gameplay scene. A pause left behind by the
+            // previous scene would otherwise make CharacterController movement receive
+            // a zero delta time even though keyboard input is being detected.
+            Time.timeScale = 1f;
             if (settings == null)
             {
                 Debug.LogError("STREAM ON room requires RunnerCampaignSettings.", this);
@@ -58,6 +96,7 @@ namespace StreamOn.Minigames.Runner
             }
             AudioListener.volume = RunnerUserSettingsStore.Load().masterVolume;
             ResolveGameSelectionUi();
+            ResolveRoomPresentation();
             if (runnerGameButton != null) runnerGameButton.onClick.AddListener(SelectRunnerGame);
             if (tileArenaGameButton != null) tileArenaGameButton.onClick.AddListener(SelectTileArenaGame);
             if (plasticKnightmareGameButton != null) plasticKnightmareGameButton.onClick.AddListener(SelectPlasticKnightmareGame);
@@ -70,8 +109,27 @@ namespace StreamOn.Minigames.Runner
             if (gameSelectionPanel != null) gameSelectionPanel.SetActive(false);
             _activities = FindObjectsByType<RunnerRoomActivity>(FindObjectsSortMode.None);
             BindSlotMenu();
-            if (RunnerSaveSession.RequireSlotSelection) ShowSlotMenu();
-            else InitializeSelectedSlot();
+            // StreamerRoom must be immediately playable. Use the currently selected
+            // save slot here; slot management belongs to the menu and must not silently
+            // lock room movement behind an inactive overlay.
+            InitializeSelectedSlot();
+        }
+
+        private void LateUpdate()
+        {
+            if (broadcastPromptCanvas != null && mainRoomCamera != null)
+                broadcastPromptCanvas.transform.rotation = mainRoomCamera.transform.rotation;
+            if (laptopPromptCanvas != null && mainRoomCamera != null)
+                laptopPromptCanvas.transform.rotation = mainRoomCamera.transform.rotation;
+            if (player == null || mainRoomCamera == null || _transitioning) return;
+
+            Vector3 playerOffset = player.position - _playerInitialPosition;
+            playerOffset.y = 0f;
+            float distance01 = Mathf.Clamp01(playerOffset.magnitude / Mathf.Max(0.1f, farCameraPlayerDistance));
+            Vector3 targetPosition = Vector3.Lerp(nearCameraPosition, farCameraPosition, distance01);
+            float blend = 1f - Mathf.Exp(-cameraFollowSharpness * Time.deltaTime);
+            mainRoomCamera.transform.position = Vector3.Lerp(
+                mainRoomCamera.transform.position, targetPosition, blend);
         }
 
         private void InitializeSelectedSlot()
@@ -98,7 +156,9 @@ namespace StreamOn.Minigames.Runner
             }
             RunnerSaveSession.RequireSlotSelection = false;
             SetPlayerLocked(false);
+            SetStatusHudVisible(true);
             if (_slotPanel != null) _slotPanel.SetActive(false);
+            if (roomUi != null) roomUi.SetActive(false);
             RefreshStatus();
             if (RunnerBroadcastSessionStore.OpenGameSelectionOnRoomLoad)
             {
@@ -118,14 +178,35 @@ namespace StreamOn.Minigames.Runner
 
         private void Update()
         {
-            if (_transitioning || (_slotPanel != null && _slotPanel.activeSelf)) return;
+            // The growth panel locks movement, so it must always be closable from the
+            // keyboard. Relying on its Close button alone strands the player whenever
+            // the panel fails to render.
+            bool growthPanelOpen = growthAndLeaderboardPanel != null
+                && growthAndLeaderboardPanel.activeInHierarchy;
+            if (growthPanelOpen && Keyboard.current != null
+                && (Keyboard.current.escapeKey.wasPressedThisFrame
+                    || Keyboard.current.eKey.wasPressedThisFrame))
+            {
+                CloseGrowthAndLeaderboardPanel();
+                return;
+            }
+            if (_transitioning || (_slotPanel != null && _slotPanel.activeSelf)
+                || (gameSelectionPanel != null && gameSelectionPanel.activeInHierarchy)
+                || growthPanelOpen)
+            {
+                SetBroadcastPromptVisible(false);
+                SetLaptopPromptVisible(false);
+                return;
+            }
             if (_save != null && Keyboard.current != null && Keyboard.current.f5Key.wasPressedThisFrame)
             {
                 _notice = ManualSave() ? "수동 저장 완료" : "수동 저장 실패";
             }
             if (_save == null || player == null || _activities == null) return;
+            if (UpdateBroadcastComputerInteraction()) return;
+            if (UpdateLaptopInteraction()) return;
             RunnerRoomActivity closest = _activities
-                .Where(activity => activity != null)
+                .Where(activity => activity != null && !activity.IsBroadcastComputer)
                 .OrderBy(activity => Vector3.SqrMagnitude(activity.transform.position - player.position))
                 .FirstOrDefault();
             float distance = closest != null ? Vector3.Distance(closest.transform.position, player.position) : float.MaxValue;
@@ -146,17 +227,6 @@ namespace StreamOn.Minigames.Runner
         private void Interact(RunnerRoomActivity activity)
         {
             _notice = string.Empty;
-            if (activity.IsBroadcastComputer)
-            {
-                if (!_save.broadcastPending)
-                {
-                    _save.broadcastPending = true;
-                    _save.selectedAction = string.Empty;
-                    RunnerCampaignSaveStore.Save(settings, _save, true);
-                }
-                ShowGameSelection(false);
-                return;
-            }
             if (_save.broadcastPending)
             {
                 _notice = "오늘의 활동은 이미 끝났습니다. 컴퓨터에서 방송을 시작하세요.";
@@ -165,33 +235,108 @@ namespace StreamOn.Minigames.Runner
 
             _notice = "능력치는 방송 경험치로 레벨업한 뒤 성장 패널에서 올릴 수 있습니다.";
             return;
+        }
 
-#pragma warning disable CS0162
-            RunnerCampaignActionDefinition action = settings.dayActions.FirstOrDefault(candidate => candidate != null && candidate.id == activity.ActionId);
-            if (action == null)
+        private bool UpdateBroadcastComputerInteraction()
+        {
+            if (broadcastInteractionCollider == null)
             {
-                _notice = "이 오브젝트의 Action ID가 설정 에셋과 연결되지 않았습니다.";
-                return;
+                SetBroadcastPromptVisible(false);
+                return false;
             }
-            StatProgress previousMental = new StatProgress(_save.mentalLevel, _save.mentalExperience);
-            StatProgress previousGame = new StatProgress(_save.gameSkill, _save.gameSkillExperience);
-            StatProgress previousTalking = new StatProgress(_save.talkingSkill, _save.talkingSkillExperience);
-            StatProgress previousHealth = new StatProgress(_save.healthStat, _save.healthStatExperience);
-            settings.AddStatExperience(ref _save.gameSkill, ref _save.gameSkillExperience,
-                action.gameSkillDelta, settings.maximumGameSkill);
-            settings.AddStatExperience(ref _save.talkingSkill, ref _save.talkingSkillExperience,
-                action.talkingSkillDelta, settings.maximumTalkingSkill);
-            settings.AddStatExperience(ref _save.healthStat, ref _save.healthStatExperience,
-                action.healthStatDelta, settings.maximumHealthStat);
-            settings.AddStatExperience(ref _save.mentalLevel, ref _save.mentalExperience,
-                action.mentalExperienceDelta, settings.maximumMentalLevel);
-            _save.subscribers = Mathf.Max(settings.minimumSubscribersToStartBroadcast, _save.subscribers + action.subscriberDelta);
-            _save.selectedAction = action.displayName;
-            _save.broadcastPending = true;
-            RunnerCampaignSaveStore.Save(settings, _save);
-            StartCoroutine(ShowActivityResultThenGameSelection(action, previousMental,
-                previousGame, previousTalking, previousHealth));
-#pragma warning restore CS0162
+
+            Vector3 closestPoint = broadcastInteractionCollider.ClosestPoint(player.position);
+            bool insideZone = (closestPoint - player.position).sqrMagnitude
+                <= interactionZoneTolerance * interactionZoneTolerance;
+            SetBroadcastPromptVisible(insideZone);
+            if (!insideZone) return false;
+
+            if (promptText != null) promptText.text = string.Empty;
+            if (Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame)
+                BeginBroadcastSelection();
+            return true;
+        }
+
+        private void BeginBroadcastSelection()
+        {
+            if (_save == null || _transitioning) return;
+            _notice = string.Empty;
+            if (!_save.broadcastPending)
+            {
+                _save.broadcastPending = true;
+                _save.selectedAction = string.Empty;
+                RunnerCampaignSaveStore.Save(settings, _save, true);
+            }
+            SetBroadcastPromptVisible(false);
+            ShowGameSelection(false);
+        }
+
+        private void SetBroadcastPromptVisible(bool visible)
+        {
+            if (broadcastPromptCanvas != null && broadcastPromptCanvas.gameObject.activeSelf != visible)
+                broadcastPromptCanvas.gameObject.SetActive(visible);
+        }
+
+        private bool UpdateLaptopInteraction()
+        {
+            if (laptopInteractionCollider == null)
+            {
+                SetLaptopPromptVisible(false);
+                return false;
+            }
+
+            // The room player walks on the floor while the zone box is authored around
+            // desk height. Comparing full 3D positions makes the test fail or pass purely
+            // on how the CharacterController settles vertically, so match on the floor
+            // plane only and let the box's own height be irrelevant.
+            Vector3 probe = player.position;
+            probe.y = laptopInteractionCollider.bounds.center.y;
+            Vector3 closestPoint = laptopInteractionCollider.ClosestPoint(probe);
+            float distance = Vector3.Distance(closestPoint, probe);
+            bool insideZone = distance <= laptopInteractionZoneTolerance;
+            if (logLaptopInteraction)
+                Debug.Log($"STREAM ON laptop: distance {distance:F3} / tolerance {laptopInteractionZoneTolerance:F3} -> {insideZone}", this);
+            SetLaptopPromptVisible(insideZone);
+            if (!insideZone) return false;
+
+            if (promptText != null) promptText.text = string.Empty;
+            if (Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame)
+                OpenGrowthAndLeaderboardPanel();
+            return true;
+        }
+
+        private void SetLaptopPromptVisible(bool visible)
+        {
+            if (laptopPromptCanvas != null && laptopPromptCanvas.gameObject.activeSelf != visible)
+                laptopPromptCanvas.gameObject.SetActive(visible);
+        }
+
+        private void OpenGrowthAndLeaderboardPanel()
+        {
+            if (growthAndLeaderboardPanel == null || _transitioning) return;
+            SetLaptopPromptVisible(false);
+            SetStatusHudVisible(false);
+            // Room UI is a shared container. Several of its panels are left active in the
+            // scene and stay hidden only because the container itself is off, so turning
+            // it on for one panel would reveal every sibling along with it.
+            for (int index = 0; _roomSiblingPanels != null && index < _roomSiblingPanels.Length; index++)
+                if (_roomSiblingPanels[index] != null) _roomSiblingPanels[index].SetActive(false);
+            if (roomUi != null) roomUi.SetActive(true);
+            growthAndLeaderboardPanel.SetActive(true);
+            _growthPanelToggle?.Open();
+            SetPlayerLocked(true);
+        }
+
+        private void CloseGrowthAndLeaderboardPanel()
+        {
+            _growthPanelToggle?.Close();
+            if (growthAndLeaderboardPanel != null) growthAndLeaderboardPanel.SetActive(false);
+            // Restore the container to the state the room starts in, otherwise the next
+            // flow that turns it on inherits a half-open UI.
+            if (roomUi != null) roomUi.SetActive(false);
+            SetPlayerLocked(false);
+            RefreshStatus();
+            SetStatusHudVisible(true);
         }
 
         public void SelectRunnerGame() => LoadSelectedGame("runner",
@@ -291,146 +436,67 @@ namespace StreamOn.Minigames.Runner
         {
             if (gameSelectionPanel == null)
             {
-                SelectRunnerGame();
+                ShowSelectionError("방송 게임 선택 UI를 찾을 수 없습니다.");
                 return;
             }
-            if (fadeFirst) StartCoroutine(FadeToGameSelection());
-            else
-            {
-                SetPlayerLocked(true);
-                gameSelectionPanel.SetActive(true);
-                ArmGameSelectionInput();
-            }
+            if (_transitioning || gameSelectionPanel.activeInHierarchy) return;
+            StartCoroutine(PlayBroadcastStartCutscene());
         }
 
-        private IEnumerator FadeToGameSelection()
+        private IEnumerator PlayBroadcastStartCutscene()
         {
             if (_transitioning) yield break;
             _transitioning = true;
             SetPlayerLocked(true);
-            yield return FadeToGameSelectionCore();
-            _transitioning = false;
-        }
+            SetBroadcastPromptVisible(false);
+            SetStatusHudVisible(false);
 
-        private IEnumerator ShowActivityResultThenGameSelection(RunnerCampaignActionDefinition action,
-            StatProgress previousMental, StatProgress previousGame, StatProgress previousTalking, StatProgress previousHealth)
-        {
-            if (_transitioning) yield break;
-            _transitioning = true;
-            SetPlayerLocked(true);
-            _notice = BuildActivityResultNotice(action);
-            if (promptText != null) promptText.text = _notice;
-            if (statusText != null)
-                statusText.text = $"DAY {_save.day}    팔로워 {_save.subscribers:N0}    보유금 {_save.cash:N0}원    방송인 Lv.{_save.broadcasterLevel}    포인트 {_save.unspentStatPoints}";
-            if (statGaugePanel != null) statGaugePanel.SetActive(false);
+            if (roomUi != null) roomUi.SetActive(false);
+            if (mainRoomCamera != null) mainRoomCamera.gameObject.SetActive(false);
 
-            float fromGame = TotalExperience(previousGame);
-            float fromTalking = TotalExperience(previousTalking);
-            float fromHealth = TotalExperience(previousHealth);
-            float fromMental = TotalExperience(previousMental);
-            float toGame = TotalExperience(new StatProgress(_save.gameSkill, _save.gameSkillExperience));
-            float toTalking = TotalExperience(new StatProgress(_save.talkingSkill, _save.talkingSkillExperience));
-            float toHealth = TotalExperience(new StatProgress(_save.healthStat, _save.healthStatExperience));
-            float toMental = TotalExperience(new StatProgress(_save.mentalLevel, _save.mentalExperience));
-            float startedAt = Time.unscaledTime;
-            float duration = Mathf.Max(0.2f, activityGaugeAnimationSeconds);
-            while (Time.unscaledTime - startedAt < duration)
+            if (broadcastCutsceneCamera != null)
             {
-                float t = Mathf.SmoothStep(0f, 1f, (Time.unscaledTime - startedAt) / duration);
-                SetGaugeFromTotal(mentalGauge, Mathf.Lerp(fromMental, toMental, t), settings.maximumMentalLevel);
-                SetGaugeFromTotal(gameSkillGauge, Mathf.Lerp(fromGame, toGame, t), settings.maximumGameSkill);
-                SetGaugeFromTotal(talkingSkillGauge, Mathf.Lerp(fromTalking, toTalking, t), settings.maximumTalkingSkill);
-                SetGaugeFromTotal(healthGauge, Mathf.Lerp(fromHealth, toHealth, t), settings.maximumHealthStat);
-                yield return null;
-            }
-            RefreshStatus();
-            if (activityResultHoldSeconds > 0f) yield return new WaitForSecondsRealtime(activityResultHoldSeconds);
-            yield return FadeToGameSelectionCore();
-            _transitioning = false;
-        }
+                Transform cutsceneTransform = broadcastCutsceneCamera.transform;
+                Vector3 start = _cutsceneCameraInitialPosition;
+                start.x = cutsceneStartX;
+                Vector3 end = start;
+                end.x = cutsceneEndX;
+                cutsceneTransform.position = start;
+                broadcastCutsceneCamera.gameObject.SetActive(true);
 
-        private IEnumerator FadeToGameSelectionCore()
-        {
-            if (gameSelectionPanel == null)
-            {
-                SelectRunnerGame();
-                yield break;
-            }
-            if (transitionFade != null)
-            {
-                transitionFade.transform.SetAsLastSibling();
-                transitionFade.blocksRaycasts = true;
-                transitionFade.interactable = true;
                 float startedAt = Time.unscaledTime;
-                while (transitionFade.alpha < 1f)
+                float duration = Mathf.Max(0.1f, cutsceneDuration);
+                while (Time.unscaledTime - startedAt < duration)
                 {
-                    transitionFade.alpha = Mathf.Clamp01((Time.unscaledTime - startedAt) / Mathf.Max(0.1f, fadeDuration));
+                    float progress = Mathf.Clamp01((Time.unscaledTime - startedAt) / duration);
+                    progress = progress * progress * (3f - 2f * progress);
+                    cutsceneTransform.position = Vector3.Lerp(start, end, progress);
                     yield return null;
                 }
+
+                cutsceneTransform.position = _cutsceneCameraInitialPosition;
+                broadcastCutsceneCamera.gameObject.SetActive(false);
             }
+
+            if (mainRoomCamera != null) mainRoomCamera.gameObject.SetActive(true);
+            if (roomUi != null) roomUi.SetActive(true);
             gameSelectionPanel.SetActive(true);
             ArmGameSelectionInput();
-            if (transitionFade != null)
-            {
-                float startedAt = Time.unscaledTime;
-                float startAlpha = transitionFade.alpha;
-                while (transitionFade.alpha > 0f)
-                {
-                    transitionFade.alpha = Mathf.Lerp(startAlpha, 0f,
-                        (Time.unscaledTime - startedAt) / Mathf.Max(0.1f, fadeDuration));
-                    yield return null;
-                }
-                transitionFade.alpha = 0f;
-                transitionFade.blocksRaycasts = false;
-                transitionFade.interactable = false;
-            }
-        }
-
-        private string BuildActivityResultNotice(RunnerCampaignActionDefinition action)
-        {
-            List<string> gains = new List<string>();
-            if (action.gameSkillDelta != 0) gains.Add($"게임 경험치 +{action.gameSkillDelta}");
-            if (action.talkingSkillDelta != 0) gains.Add($"소통 경험치 +{action.talkingSkillDelta}");
-            if (action.healthStatDelta != 0) gains.Add($"체력 경험치 +{action.healthStatDelta}");
-            if (action.mentalExperienceDelta != 0) gains.Add($"멘탈 경험치 +{action.mentalExperienceDelta}");
-            return $"{action.displayName} 완료!  {string.Join("  ·  ", gains)}";
-        }
-
-        private float TotalExperience(StatProgress state)
-        {
-            if (state.level <= 1) return Mathf.Max(0, state.experience);
-            float total = settings.ExperienceRequiredForLevel(1);
-            if (state.level == 2) return total + Mathf.Max(0, state.experience);
-            return total + settings.ExperienceRequiredForLevel(2);
-        }
-
-        private void SetGaugeFromTotal(RunnerStatGauge gauge, float totalExperience, int maximumLevel)
-        {
-            if (gauge == null) return;
-            int levelTwoRequirement = settings.ExperienceRequiredForLevel(1);
-            int levelThreeRequirement = settings.ExperienceRequiredForLevel(2);
-            if (maximumLevel <= 1 || totalExperience >= levelTwoRequirement + levelThreeRequirement)
-                gauge.SetNormalizedLevelProgress(maximumLevel, 1f, maximumLevel);
-            else if (totalExperience >= levelTwoRequirement)
-                gauge.SetNormalizedLevelProgress(2,
-                    (totalExperience - levelTwoRequirement) / Mathf.Max(1f, levelThreeRequirement), maximumLevel);
-            else
-                gauge.SetNormalizedLevelProgress(1, totalExperience / Mathf.Max(1f, levelTwoRequirement), maximumLevel);
-        }
-
-        private readonly struct StatProgress
-        {
-            public readonly int level;
-            public readonly int experience;
-            public StatProgress(int level, int experience) { this.level = level; this.experience = experience; }
+            _transitioning = false;
         }
 
         public bool ManualSave() => _save != null && RunnerCampaignSaveStore.Save(settings, _save, true);
 
         private void ShowSlotMenu()
         {
+            if (slotPanel == null)
+            {
+                // A missing slot panel must never leave the room player permanently locked.
+                InitializeSelectedSlot();
+                return;
+            }
             SetPlayerLocked(true);
-            if (slotPanel == null) return;
+            if (roomUi != null) roomUi.SetActive(true);
             slotPanel.SetActive(true);
             RefreshSlotMenu();
         }
@@ -493,8 +559,138 @@ namespace StreamOn.Minigames.Runner
             runnerGameButton = explorerButtons.FirstOrDefault(button => button.name == "Runner Game Button");
             tileArenaGameButton = explorerButtons.FirstOrDefault(button => button.name == "Tile Arena Game Button");
             plasticKnightmareGameButton = explorerButtons.FirstOrDefault(button => button.name == "Plastic Knightmare Game Button");
+            Button closeButton = explorerButtons.FirstOrDefault(button => button.name == "Close Button");
+            if (closeButton != null) closeButton.onClick.AddListener(CloseGameSelection);
 
             if (legacyPanel != null && legacyPanel != gameSelectionPanel) legacyPanel.SetActive(false);
+        }
+
+        public void CloseGameSelection()
+        {
+            if (gameSelectionPanel != null) gameSelectionPanel.SetActive(false);
+            if (_save != null)
+            {
+                _save.broadcastPending = false;
+                RunnerCampaignSaveStore.Save(settings, _save, true);
+            }
+            SetPlayerLocked(false);
+            SetStatusHudVisible(true);
+        }
+
+        private void SetStatusHudVisible(bool visible)
+        {
+            if (statusHudCanvas != null && statusHudCanvas.gameObject.activeSelf != visible)
+                statusHudCanvas.gameObject.SetActive(visible);
+        }
+
+        private void ResolveRoomPresentation()
+        {
+            Transform[] sceneTransforms = FindObjectsByType<Transform>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            mainRoomCamera ??= sceneTransforms.FirstOrDefault(candidate => candidate != null
+                && candidate.name == "Main Camera")?.GetComponent<Camera>();
+            broadcastCutsceneCamera ??= sceneTransforms.FirstOrDefault(candidate => candidate != null
+                && candidate.name == "Second Camera")?.GetComponent<Camera>();
+            roomUi ??= sceneTransforms.FirstOrDefault(candidate => candidate != null
+                && candidate.name == "Room UI")?.gameObject;
+            broadcastInteractionZone ??= sceneTransforms.FirstOrDefault(candidate => candidate != null
+                && candidate.name == "Computer_InteractionZone");
+            if (broadcastInteractionCollider == null && broadcastInteractionZone != null)
+                broadcastInteractionCollider = broadcastInteractionZone.GetComponent<Collider>();
+            ResolveBroadcastPrompt();
+
+            ResolveLaptopInteraction(sceneTransforms);
+
+            _playerInitialPosition = player != null ? player.position : Vector3.zero;
+            if (roomUi != null) roomUi.transform.localScale = Vector3.one;
+            if (mainRoomCamera != null)
+            {
+                mainRoomCamera.transform.position = nearCameraPosition;
+                mainRoomCamera.gameObject.SetActive(true);
+            }
+            if (broadcastCutsceneCamera != null)
+            {
+                _cutsceneCameraInitialPosition = broadcastCutsceneCamera.transform.position;
+                _cutsceneCameraInitialPosition.x = cutsceneStartX;
+                broadcastCutsceneCamera.transform.position = _cutsceneCameraInitialPosition;
+                broadcastCutsceneCamera.gameObject.SetActive(false);
+            }
+            if (roomUi != null) roomUi.SetActive(false);
+        }
+
+        private void ResolveBroadcastPrompt()
+        {
+            SetBroadcastPromptVisible(false);
+        }
+
+        // Every lookup here reports its own failure. A silent null is what makes a
+        // scene-authored interaction look like it was never implemented at all.
+        private void ResolveLaptopInteraction(Transform[] sceneTransforms)
+        {
+            laptopInteractionZone ??= sceneTransforms.FirstOrDefault(candidate => candidate != null
+                && candidate.name == "Laptop_InteractionZone");
+            if (laptopInteractionZone == null)
+            {
+                Debug.LogError("STREAM ON laptop: 'Laptop_InteractionZone' 오브젝트를 씬에서 찾지 못했습니다.", this);
+                return;
+            }
+
+            if (laptopInteractionCollider == null)
+                laptopInteractionCollider = laptopInteractionZone.GetComponent<Collider>();
+            if (laptopInteractionCollider == null)
+                Debug.LogError("STREAM ON laptop: Laptop_InteractionZone에 Collider가 없습니다.", laptopInteractionZone);
+
+            if (laptopPromptCanvas == null && laptopInteractionZone.parent != null)
+                laptopPromptCanvas = laptopInteractionZone.parent
+                    .GetComponentsInChildren<Canvas>(true).FirstOrDefault();
+            if (laptopPromptCanvas == null)
+                Debug.LogError("STREAM ON laptop: Laptop 하위에서 프롬프트 Canvas를 찾지 못했습니다.", laptopInteractionZone);
+
+            growthAndLeaderboardPanel ??= sceneTransforms.FirstOrDefault(candidate => candidate != null
+                && candidate.name == "Growth And Leaderboard UI")?.gameObject;
+            if (growthAndLeaderboardPanel == null)
+                Debug.LogError("STREAM ON laptop: 'Growth And Leaderboard UI' 패널을 씬에서 찾지 못했습니다.", this);
+            else
+            {
+                _growthPanelToggle = growthAndLeaderboardPanel.GetComponent<ScenePanelToggle>();
+                Button closeButton = growthAndLeaderboardPanel.GetComponentsInChildren<Button>(true)
+                    .FirstOrDefault(button => button.name == "Close");
+                if (closeButton != null) closeButton.onClick.AddListener(CloseGrowthAndLeaderboardPanel);
+                else Debug.LogWarning("STREAM ON laptop: 패널에서 'Close' 버튼을 찾지 못했습니다. 닫기가 동작하지 않습니다.",
+                    growthAndLeaderboardPanel);
+            }
+
+            CacheRoomSiblingPanels();
+            SetLaptopPromptVisible(false);
+        }
+
+        // Every Room UI child except the growth panel and the two pass-through overlays
+        // is a modal panel that must not ride along when the container is turned on.
+        private void CacheRoomSiblingPanels()
+        {
+            if (roomUi == null) return;
+            _roomSiblingPanels = roomUi.transform.Cast<Transform>()
+                .Where(child => child != null
+                    && child.gameObject != growthAndLeaderboardPanel
+                    && child.name != "Broadcast Fade Overlay"
+                    && child.name != "UGS Service Notification UI")
+                .Select(child => child.gameObject)
+                .ToArray();
+        }
+
+        private static void SetHudGauge(TMP_Text label, TMP_Text levelText, Image fill,
+            string name, int rank, int maximum)
+        {
+            maximum = Mathf.Max(1, maximum);
+            rank = Mathf.Clamp(rank, 0, maximum);
+            if (label != null) label.text = name;
+            if (levelText != null)
+                levelText.text = rank >= maximum ? "Lvl. MAX" : $"Lvl. {rank + 1}";
+            if (fill != null)
+            {
+                RectTransform rect = fill.rectTransform;
+                rect.anchorMax = new Vector2(rank / (float)maximum, 1f);
+            }
         }
 
         private void ArmGameSelectionInput()
@@ -545,17 +741,38 @@ namespace StreamOn.Minigames.Runner
         public void RefreshStatus()
         {
             if (_save == null) return;
-            if (statusText != null)
-                statusText.text = $"DAY {_save.day}    팔로워 {_save.subscribers:N0}    보유금 {_save.cash:N0}원";
-            if (statGaugePanel != null) statGaugePanel.SetActive(true);
-            mentalGauge?.SetLevelProgress(_save.mentalLevel, _save.mentalExperience,
-                settings.ExperienceRequiredForLevel(_save.mentalLevel), settings.maximumMentalLevel);
-            gameSkillGauge?.SetLevelProgress(_save.gameSkill, _save.gameSkillExperience,
-                settings.ExperienceRequiredForLevel(_save.gameSkill), settings.maximumGameSkill);
-            talkingSkillGauge?.SetLevelProgress(_save.talkingSkill, _save.talkingSkillExperience,
-                settings.ExperienceRequiredForLevel(_save.talkingSkill), settings.maximumTalkingSkill);
-            healthGauge?.SetLevelProgress(_save.healthStat, _save.healthStatExperience,
-                settings.ExperienceRequiredForLevel(_save.healthStat), settings.maximumHealthStat);
+            // These labels are rewritten every refresh, so they must match what
+            // StatusUI.prefab authors ("팔로워 1,349" / "소지금 10,000 ₩") or the scene
+            // text visibly flips to another language the moment the room starts.
+            if (hudFollowersText != null) hudFollowersText.text = $"팔로워 {_save.subscribers:N0}";
+            if (hudMoneyText != null) hudMoneyText.text = $"소지금 {_save.cash:N0} ₩";
+            int maximumWit = BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Wit);
+            int maximumComposure = BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Composure);
+            int maximumControl = BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Control);
+            SetHudGauge(hudWitLabel, hudWitLevelText, hudWitFill,
+                "재치", _save.witRank, maximumWit);
+            SetHudGauge(hudComposureLabel, hudComposureLevelText, hudComposureFill,
+                "평정심", _save.ComposureRank, maximumComposure);
+            SetHudGauge(hudControlLabel, hudControlLevelText, hudControlFill,
+                "통제력", _save.ControlRank, maximumControl);
+
+            bool atMaxLevel = _save.broadcasterLevel >= settings.maximumBroadcasterLevel;
+            if (hudXpLabel != null)
+                hudXpLabel.text = atMaxLevel ? "Lvl. MAX" : $"Lvl. {_save.broadcasterLevel}";
+            if (hudXpFill != null)
+            {
+                float xpProgress = 0f;
+                if (!atMaxLevel)
+                {
+                    BroadcasterLevelRule xpRule = settings.broadcasterLevels?.Find(r => r != null && r.level == _save.broadcasterLevel);
+                    int required = Mathf.Max(1, xpRule != null ? xpRule.experienceToNextLevel : 100);
+                    xpProgress = Mathf.Clamp01(_save.broadcasterExperience / (float)required);
+                }
+                hudXpFill.rectTransform.anchorMax = new Vector2(xpProgress, 1f);
+            }
+
+            if (statusText != null && statusHudCanvas == null)
+                statusText.text = $"팔로워 {_save.subscribers:N0}    보유금 {_save.cash:N0}원    방송인 Lv.{_save.broadcasterLevel}    남은 포인트 {_save.unspentStatPoints}";
         }
     }
 }

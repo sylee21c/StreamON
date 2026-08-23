@@ -414,12 +414,15 @@ namespace StreamOn.Minigames.Runner
             {
                 data.broadcasterLevel = Mathf.Max(1, settings.startingBroadcasterLevel);
                 data.broadcasterExperience = 0;
-                data.witRank = Mathf.Clamp(data.talkingSkill - settings.startingTalkingSkill, 0, 5);
-                data.mentalRank = Mathf.Clamp(data.mentalLevel - settings.startingMentalLevel, 0, 5);
-                data.staminaRank = Mathf.Clamp(data.healthStat - settings.startingHealthStat, 0, 5);
+                data.witRank = Mathf.Clamp(data.talkingSkill - settings.startingTalkingSkill, 0,
+                    BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Wit));
+                data.ComposureRank = Mathf.Clamp(data.mentalLevel - settings.startingMentalLevel, 0,
+                    BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Composure));
+                data.ControlRank = Mathf.Clamp(data.healthStat - settings.startingHealthStat, 0,
+                    BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Control));
                 int spent = data.witRank * (data.witRank + 1) / 2
-                    + data.mentalRank * (data.mentalRank + 1) / 2
-                    + data.staminaRank * (data.staminaRank + 1) / 2;
+                    + data.ComposureRank * (data.ComposureRank + 1) / 2
+                    + data.ControlRank * (data.ControlRank + 1) / 2;
                 data.unspentStatPoints = Mathf.Max(0, settings.startingStatPoints - spent);
                 data.broadcastSessionActive = false;
                 data.version = 8;
@@ -446,9 +449,9 @@ namespace StreamOn.Minigames.Runner
             data.broadcasterLevel = Mathf.Clamp(data.broadcasterLevel, 1, Mathf.Max(1, settings.maximumBroadcasterLevel));
             data.broadcasterExperience = Mathf.Max(0, data.broadcasterExperience);
             data.unspentStatPoints = Mathf.Max(0, data.unspentStatPoints);
-            data.witRank = Mathf.Clamp(data.witRank, 0, 5);
-            data.mentalRank = Mathf.Clamp(data.mentalRank, 0, 5);
-            data.staminaRank = Mathf.Clamp(data.staminaRank, 0, 5);
+            data.witRank = Mathf.Clamp(data.witRank, 0, BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Wit));
+            data.ComposureRank = Mathf.Clamp(data.ComposureRank, 0, BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Composure));
+            data.ControlRank = Mathf.Clamp(data.ControlRank, 0, BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Control));
             data.unlockedManagerTier = Mathf.Max(0, data.unlockedManagerTier);
             data.hiredManagerTier = Mathf.Clamp(data.hiredManagerTier, 0, data.unlockedManagerTier);
             data.managerUsesRemaining = Mathf.Max(0, data.managerUsesRemaining);

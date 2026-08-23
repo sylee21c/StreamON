@@ -165,7 +165,7 @@ namespace StreamOn.Minigames.Runner
             else
             {
                 _viewerSeconds += _currentViewers * Time.unscaledDeltaTime;
-                MentalRankRule mental = CurrentMentalRule();
+                ComposureRankRule mental = CurrentComposureRule();
                 float performanceStep = _performanceMeter.Tick(Time.unscaledTime, growthSettings,
                     mental != null ? mental.poorStateTickInterval : -1f,
                     mental != null ? mental.extraMistakesRequiredForPoorState : 0,
@@ -224,10 +224,7 @@ namespace StreamOn.Minigames.Runner
         {
             if (!_initialized || _finishing) return;
             _spawner?.NotifyGameOver();
-            int previousBest = _save != null ? _save.bestPlasticGameScoreAtNight : 0;
-            float survival = _nightStarted ? Time.unscaledTime - _nightStartedAt : 0f;
-            GameOverUIController.ConfigureFinalResult(_rawScore, previousBest,
-                _spawner != null ? _spawner.CurrentAssault : _night, _ghostsDefeated, survival);
+            GameOverUIController.SuppressRetryForBroadcastEnd();
             chat?.React(RunnerChatEvent.GameOver);
             FinishBroadcast(false, _spawner != null ? _spawner.CurrentAssault : _night);
         }
@@ -279,7 +276,7 @@ namespace StreamOn.Minigames.Runner
         {
             if (amount < 0f && applyMentalReduction)
             {
-                MentalRankRule mental = CurrentMentalRule();
+                ComposureRankRule mental = CurrentComposureRule();
                 float reduction = mental != null ? mental.ordinaryPenaltyReduction : 0f;
                 if (!_largePenaltyProtectionUsed && Mathf.Abs(amount) >= settings.largeHeatPenaltyThreshold
                     && mental != null && mental.oncePerBroadcastLargePenaltyReduction > 0f)
@@ -341,7 +338,7 @@ namespace StreamOn.Minigames.Runner
             if (quality >= 2)
             {
                 WitRankRule wit = CurrentWitRule();
-                MentalRankRule mental = CurrentMentalRule();
+                ComposureRankRule mental = CurrentComposureRule();
                 float perk = quality >= 5 ? (wit != null ? wit.comebackRewardMultiplier : 1f)
                     : quality >= 4 ? (wit != null ? wit.correctStreakRewardMultiplier : 1f)
                     : quality >= 3 ? (wit != null ? wit.advancedAnswerRewardMultiplier : 1f) : 1f;
@@ -389,7 +386,7 @@ namespace StreamOn.Minigames.Runner
         private void HandleProtectedHealthChanged(float current, float maximum)
         {
             if (!_nightStarted || current >= maximum) return;
-            MentalRankRule mental = CurrentMentalRule();
+            ComposureRankRule mental = CurrentComposureRule();
             if (mental != null && mental.protectsFirstMistakeAfterGoodPlay
                 && _performanceMeter.State == BroadcastPerformanceState.Good && !_cleanMistakeProtectionUsed)
             {
@@ -400,10 +397,10 @@ namespace StreamOn.Minigames.Runner
             AddHeat(heatLossPerProtectedObjectHit);
         }
 
-        private MentalRankRule CurrentMentalRule()
+        private ComposureRankRule CurrentComposureRule()
         {
             if (settings == null || _save == null) return null;
-            return settings.MentalRule(_save.mentalRank);
+            return settings.ComposureRule(_save.ComposureRank);
         }
 
         private WitRankRule CurrentWitRule()
@@ -586,7 +583,7 @@ namespace StreamOn.Minigames.Runner
                 subscriberDelta = followerDelta,
                 subscribersAfter = _save.subscribers,
                 cashAfter = _save.cash,
-                mentalLevel = _save.mentalRank,
+                mentalLevel = _save.ComposureRank,
                 experienceGained = experience,
                 levelAfter = _save.broadcasterLevel,
                 broadcastResult = result

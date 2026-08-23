@@ -285,7 +285,7 @@ MonoBehaviour:
     correctStreakRewardMultiplier: 1.45
     comebackHeatThreshold: 40
     comebackRewardMultiplier: 1.7
-  mentalRanks:
+  composureRanks:
   - rank: 0
     upgradeCost: 0
     ordinaryPenaltyReduction: 0
@@ -346,12 +346,11 @@ MonoBehaviour:
     protectsFirstMistakeAfterGoodPlay: 1
     correctWitClearsRecentMistakes: 1
     mistakeClearCooldownSeconds: 20
-  staminaRanks:
+  controlRanks:
   - rank: 0
     upgradeCost: 0
     maximumFocus: 100
     focusRecoveryBonus: 0
-    gameOverTimeLoss: 8
     focusRecoveryDelayReduction: 0
     focusDrainReduction: 0
     depletionRecoveryAmount: 0
@@ -359,7 +358,6 @@ MonoBehaviour:
     upgradeCost: 1
     maximumFocus: 120
     focusRecoveryBonus: 0.15
-    gameOverTimeLoss: 7.5
     focusRecoveryDelayReduction: 0
     focusDrainReduction: 0
     depletionRecoveryAmount: 0
@@ -367,7 +365,6 @@ MonoBehaviour:
     upgradeCost: 2
     maximumFocus: 140
     focusRecoveryBonus: 0.3
-    gameOverTimeLoss: 7
     focusRecoveryDelayReduction: 0.7
     focusDrainReduction: 0
     depletionRecoveryAmount: 0
@@ -375,7 +372,6 @@ MonoBehaviour:
     upgradeCost: 3
     maximumFocus: 160
     focusRecoveryBonus: 0.45
-    gameOverTimeLoss: 6.5
     focusRecoveryDelayReduction: 0.7
     focusDrainReduction: 0.08
     depletionRecoveryAmount: 0
@@ -383,7 +379,6 @@ MonoBehaviour:
     upgradeCost: 4
     maximumFocus: 190
     focusRecoveryBonus: 0.6
-    gameOverTimeLoss: 6
     focusRecoveryDelayReduction: 0.7
     focusDrainReduction: 0.15
     depletionRecoveryAmount: 0
@@ -391,7 +386,6 @@ MonoBehaviour:
     upgradeCost: 5
     maximumFocus: 220
     focusRecoveryBonus: 0.8
-    gameOverTimeLoss: 5.5
     focusRecoveryDelayReduction: 0.7
     focusDrainReduction: 0.2
     depletionRecoveryAmount: 35

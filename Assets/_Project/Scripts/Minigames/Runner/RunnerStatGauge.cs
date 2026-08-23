@@ -37,6 +37,14 @@ namespace StreamOn.Minigames.Runner
             SetNormalizedFill(level >= maximumLevel ? 1f : progress);
         }
 
+        public void SetRank(int rank, int maximumRank)
+        {
+            maximumRank = Mathf.Max(1, maximumRank);
+            rank = Mathf.Clamp(rank, 0, maximumRank);
+            if (label != null) label.text = $"{displayName}  {rank}/{maximumRank}";
+            SetNormalizedFill(rank / (float)maximumRank);
+        }
+
         private void SetNormalizedFill(float value)
         {
             if (fill == null) return;

@@ -68,12 +68,12 @@ namespace StreamOn.Minigames.TileArena
             BestAttemptScore = Mathf.Max(BestAttemptScore, score);
             TotalHitsTaken += Mathf.Max(0, hitsTaken);
             float penalty = settings.GameRule(BroadcastGameId.TileArena).baseGameOverTimeLoss;
-            StaminaRankRule stamina = settings.StaminaRule(_save.staminaRank);
-            if (stamina != null) penalty = stamina.gameOverTimeLoss;
             RunnerBroadcastSessionStore.ApplyPenalty(penalty);
             RemainingSeconds = RunnerBroadcastSessionStore.RemainingSeconds;
             RefreshHud();
-            if (RemainingSeconds <= 0f) FinishBroadcast();
+            // There are no additional attempts after game over; immediately enter the
+            // common broadcast-ending presentation and settlement flow.
+            FinishBroadcast();
         }
 
         private void BeginBroadcast()

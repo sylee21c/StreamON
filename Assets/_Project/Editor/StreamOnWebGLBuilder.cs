@@ -16,6 +16,7 @@ namespace StreamOn.Editor
         public static void PrepareProject()
         {
             ApplyRecommendedSettings();
+            RunnerSceneUiBaker.BakeRoomSceneIfNeeded();
             NewBroadcastFeatureBaker.Bake();
         }
 

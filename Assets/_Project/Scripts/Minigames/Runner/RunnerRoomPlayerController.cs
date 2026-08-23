@@ -57,7 +57,10 @@ namespace StreamOn.Minigames.Runner
 
             Vector3 forward = cameraTransform != null ? cameraTransform.forward : Vector3.forward;
             Vector3 right = cameraTransform != null ? cameraTransform.right : Vector3.right;
-            forward.y = 0f; right.y = 0f; forward.Normalize(); right.Normalize();
+            forward.y = 0f;
+            right.y = 0f;
+            forward.Normalize();
+            right.Normalize();
             Vector3 movement = forward * input.y + right * input.x;
             _controller.Move((movement * moveSpeed + Physics.gravity) * Time.deltaTime);
             SetMoving(movement.sqrMagnitude > 0.01f);

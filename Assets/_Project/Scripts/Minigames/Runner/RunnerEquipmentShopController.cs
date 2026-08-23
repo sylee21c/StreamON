@@ -104,7 +104,7 @@ namespace StreamOn.Minigames.Runner
         {
             RunnerEquipmentType.Pc => "PC",
             RunnerEquipmentType.Microphone => "마이크",
-            RunnerEquipmentType.Fitness => "체력 장비",
+            RunnerEquipmentType.Fitness => "집중 장비",
             _ => "방 인테리어"
         };
 

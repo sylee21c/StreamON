@@ -60,6 +60,7 @@ public sealed class GameOverUIController : MonoBehaviour
     private int rewardCountFrom;
     private int rewardCountTo;
     private bool showing;
+    private bool suppressNextPresentation;
     private string finalResultText;
 
     // 게임오버 진행 중 여부. Player/Ghost/Companion 이 움직임을 멈추기 위해 참조.
@@ -142,6 +143,14 @@ public sealed class GameOverUIController : MonoBehaviour
     {
         if (showing) return;
         NightFailed?.Invoke();
+        if (suppressNextPresentation)
+        {
+            suppressNextPresentation = false;
+            showing = false;
+            IsGameOver = true;
+            HideInstant();
+            return;
+        }
         rewardCountFrom = CoinWallet.Instance != null ? CoinWallet.Instance.Coins : 0;
         rewardCountTo = rewardCountFrom;
 
@@ -197,6 +206,13 @@ public sealed class GameOverUIController : MonoBehaviour
         instance.finalResultText = $"최종 점수 {score:N0}\n{(newRecord ? "신기록!" : $"최고 기록 {previousBest:N0}")}  |  "
             + $"생존 {minutes:00}:{seconds:00}  |  공세 {assault}  |  처치 {kills:N0}";
         if (instance.rewardCoinImage != null) instance.rewardCoinImage.gameObject.SetActive(false);
+    }
+
+    public static void SuppressRetryForBroadcastEnd()
+    {
+        if (instance == null) return;
+        instance.suppressNextPresentation = true;
+        instance.HideInstant();
     }
 
     private IEnumerator PlayRewardCountDown()

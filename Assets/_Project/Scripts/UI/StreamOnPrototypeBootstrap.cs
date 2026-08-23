@@ -105,7 +105,7 @@ namespace StreamOn.UI
             _bodyText = CreateText("Day Description", _dayPanel.transform,
                 "낮 행동을 하나 선택하세요. 선택 즉시 60초 방송이 시작됩니다.", 23, FontStyles.Normal, TextAlignmentOptions.Center);
             SetRect(_bodyText.rectTransform, new Vector2(0.5f, 0.68f), new Vector2(650f, 100f), Vector2.zero);
-            Button train = CreateButton("Train Button", _dayPanel.transform, "게임 훈련  (+1 게임 실력)", Accent);
+            Button train = CreateButton("Train Button", _dayPanel.transform, "플레이 연습", Accent);
             SetRect(train.GetComponent<RectTransform>(), new Vector2(0.5f, 0.43f), new Vector2(330f, 64f), Vector2.zero);
             train.onClick.AddListener(ChooseTrain);
             Button rest = CreateButton("Rest Button", _dayPanel.transform, "멘탈 케어  (+30 멘탈)", new Color(0.35f, 0.55f, 0.95f));
@@ -259,7 +259,7 @@ namespace StreamOn.UI
         private void ShowCurrentPhase()
         {
             PlayerState player = _session.Player;
-            _statusText.text = $"DAY {player.Day}/{GameSession.MaxDays}     구독자 {player.Subscribers:N0}명     멘탈 {player.Mental:0}     게임 실력 Lv.{player.GameSkill}";
+            _statusText.text = $"DAY {player.Day}/{GameSession.MaxDays}     팔로워 {player.Subscribers:N0}명";
             _dayPanel.SetActive(_session.Phase == GamePhase.Day);
             _broadcastPanel.SetActive(_session.Phase == GamePhase.Broadcast);
             _chatPanel.SetActive(_session.Phase == GamePhase.Broadcast);

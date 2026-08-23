@@ -76,7 +76,7 @@ namespace StreamOn.Minigames.TileArena
             if (_broadcastSessionActive) TryAmbientDonation();
             if (_broadcastSessionActive && gameController.IsRunning)
             {
-                MentalRankRule mental = CurrentMentalRule();
+                ComposureRankRule mental = CurrentComposureRule();
                 float performanceStep = _performanceMeter.Tick(Time.time, growthSettings,
                     mental != null ? mental.poorStateTickInterval : -1f,
                     mental != null ? mental.extraMistakesRequiredForPoorState : 0,
@@ -124,7 +124,7 @@ namespace StreamOn.Minigames.TileArena
 
         public void OnPlayerHit(bool lowLives)
         {
-            MentalRankRule mental = CurrentMentalRule();
+            ComposureRankRule mental = CurrentComposureRule();
             if (mental != null && mental.protectsFirstMistakeAfterGoodPlay
                 && _performanceMeter.State == BroadcastPerformanceState.Good && !_cleanMistakeProtectionUsed)
             {
@@ -303,11 +303,11 @@ namespace StreamOn.Minigames.TileArena
             if (quality >= 2)
             {
                 WitRankRule wit = null;
-                MentalRankRule mental = null;
+                ComposureRankRule mental = null;
                 if (campaignSettings != null && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
                 {
                     wit = campaignSettings.WitRule(save.witRank);
-                    mental = campaignSettings.MentalRule(save.mentalRank);
+                    mental = campaignSettings.ComposureRule(save.ComposureRank);
                 }
                 float perkMultiplier = quality >= 5 ? (wit != null ? wit.comebackRewardMultiplier : 1f)
                     : quality >= 4 ? (wit != null ? wit.correctStreakRewardMultiplier : 1f)
@@ -425,7 +425,7 @@ namespace StreamOn.Minigames.TileArena
             if (amount < 0f && campaignSettings != null
                 && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
             {
-                MentalRankRule mental = campaignSettings.MentalRule(save.mentalRank);
+                ComposureRankRule mental = campaignSettings.ComposureRule(save.ComposureRank);
                 float reduction = (mental?.ordinaryPenaltyReduction ?? 0f) * Mathf.Clamp01(mentalReductionScale);
                 if (!_largePenaltyProtectionUsed && Mathf.Abs(amount) >= campaignSettings.largeHeatPenaltyThreshold
                     && mental != null && mental.oncePerBroadcastLargePenaltyReduction > 0f && mentalReductionScale > 0f)
@@ -439,10 +439,10 @@ namespace StreamOn.Minigames.TileArena
                 -growthSettings.maximumBufferedHeatChange, growthSettings.maximumBufferedHeatChange);
         }
 
-        private MentalRankRule CurrentMentalRule()
+        private ComposureRankRule CurrentComposureRule()
         {
             if (campaignSettings == null || !RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save)) return null;
-            return campaignSettings.MentalRule(save.mentalRank);
+            return campaignSettings.ComposureRule(save.ComposureRank);
         }
 
         private void GrantGameplayExperience(int amount)

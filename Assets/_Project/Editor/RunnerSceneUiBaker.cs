@@ -47,26 +47,12 @@ namespace StreamOn.Editor
 
             TMP_FontAsset font = canvas.GetComponentsInChildren<TMP_Text>(true).Select(text => text.font).FirstOrDefault(item => item != null);
             EnsureKidRoomPlayer(controller);
-            Transform existing = canvas.transform.Find("Stat Gauges");
-            GameObject panel = existing != null ? existing.gameObject : CreatePanel(canvas.transform);
-            RunnerStatGauge[] gauges = panel.GetComponentsInChildren<RunnerStatGauge>(true);
-            if (gauges.Length != 4)
-            {
-                foreach (Transform child in panel.transform.Cast<Transform>().ToArray()) Object.DestroyImmediate(child.gameObject);
-                CreateGauge(panel.transform, "Mental Gauge", "멘탈", 100f, 78f, font);
-                CreateGauge(panel.transform, "Game Skill Gauge", "게임", 100f, 26f, font);
-                CreateGauge(panel.transform, "Talking Skill Gauge", "소통", 100f, -26f, font);
-                CreateGauge(panel.transform, "Health Gauge", "체력", 250f, -78f, font);
-                gauges = panel.GetComponentsInChildren<RunnerStatGauge>(true);
-            }
+
+            // Stat Gauges 패널은 StatusUI로 대체되어 제거됨
+            Transform legacyStatGauges = canvas.transform.Find("Stat Gauges");
+            if (legacyStatGauges != null) Object.DestroyImmediate(legacyStatGauges.gameObject);
 
             SerializedObject serialized = new SerializedObject(controller);
-            serialized.FindProperty("statGaugePanel").objectReferenceValue = panel;
-            serialized.FindProperty("mentalGauge").objectReferenceValue = gauges.First(item => item.name == "Mental Gauge");
-            serialized.FindProperty("gameSkillGauge").objectReferenceValue = gauges.First(item => item.name == "Game Skill Gauge");
-            serialized.FindProperty("talkingSkillGauge").objectReferenceValue = gauges.First(item => item.name == "Talking Skill Gauge");
-            serialized.FindProperty("healthGauge").objectReferenceValue = gauges.First(item => item.name == "Health Gauge");
-
             CanvasGroup fade = EnsureFadeOverlay(canvas.transform);
             GameObject gameSelection = EnsureGameSelectionPanel(canvas.transform, font, out Button runnerButton, out Button tileArenaButton);
             serialized.FindProperty("transitionFade").objectReferenceValue = fade;
@@ -78,14 +64,14 @@ namespace StreamOn.Editor
             TMP_Text status = canvas.GetComponentsInChildren<TMP_Text>(true).FirstOrDefault(text => text.name == "Status");
             if (status != null)
             {
-                status.text = "DAY 1    팔로워 0    누적 후원 0원";
-                status.rectTransform.sizeDelta = new Vector2(650f, 45f);
+                status.text = "팔로워 0    보유금 0원    방송인 Lv.1    남은 포인트 1";
+                status.rectTransform.sizeDelta = new Vector2(760f, 45f);
             }
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
             if (openedHere) EditorSceneManager.CloseScene(scene, true);
-            Debug.Log("STREAM ON UI: stat XP gauges, fade overlay, and broadcast game selection are scene-authored in StreamerRoom.");
+            Debug.Log("STREAM ON UI: wit, composure, and control gauges are scene-authored in StreamerRoom.");
         }
 
         private static void EnsureKidRoomPlayer(RunnerRoomController roomController)
@@ -126,72 +112,6 @@ namespace StreamOn.Editor
             SerializedObject movementSerialized = new SerializedObject(movement);
             movementSerialized.FindProperty("characterAnimator").objectReferenceValue = animator;
             movementSerialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static GameObject CreatePanel(Transform parent)
-        {
-            GameObject panel = new GameObject("Stat Gauges", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            panel.transform.SetParent(parent, false);
-            RectTransform rect = panel.GetComponent<RectTransform>();
-            rect.anchorMin = Vector2.one;
-            rect.anchorMax = Vector2.one;
-            rect.pivot = Vector2.one;
-            rect.anchoredPosition = new Vector2(-35f, -88f);
-            rect.sizeDelta = new Vector2(370f, 230f);
-            panel.GetComponent<Image>().color = new Color(0.025f, 0.035f, 0.06f, 0.90f);
-            return panel;
-        }
-
-        private static void CreateGauge(Transform parent, string objectName, string labelValue, float maximum, float y, TMP_FontAsset font)
-        {
-            GameObject row = new GameObject(objectName, typeof(RectTransform), typeof(RunnerStatGauge));
-            row.transform.SetParent(parent, false);
-            RectTransform rowRect = row.GetComponent<RectTransform>();
-            rowRect.anchorMin = rowRect.anchorMax = new Vector2(0.5f, 0.5f);
-            rowRect.sizeDelta = new Vector2(330f, 36f);
-            rowRect.anchoredPosition = new Vector2(0f, y);
-
-            GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
-            labelObject.transform.SetParent(row.transform, false);
-            TextMeshProUGUI label = labelObject.GetComponent<TextMeshProUGUI>();
-            label.font = font;
-            label.fontSize = 19f;
-            label.text = labelValue;
-            label.color = Color.white;
-            label.alignment = TextAlignmentOptions.MidlineLeft;
-            RectTransform labelRect = label.rectTransform;
-            labelRect.anchorMin = labelRect.anchorMax = new Vector2(0.5f, 0.5f);
-            labelRect.sizeDelta = new Vector2(118f, 34f);
-            labelRect.anchoredPosition = new Vector2(-105f, 0f);
-
-            GameObject background = new GameObject("Background", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            background.transform.SetParent(row.transform, false);
-            RectTransform backgroundRect = background.GetComponent<RectTransform>();
-            backgroundRect.anchorMin = backgroundRect.anchorMax = new Vector2(0.5f, 0.5f);
-            backgroundRect.sizeDelta = new Vector2(190f, 22f);
-            backgroundRect.anchoredPosition = new Vector2(68f, 0f);
-            background.GetComponent<Image>().color = new Color(0.10f, 0.13f, 0.16f, 1f);
-
-            GameObject fillObject = new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            fillObject.transform.SetParent(background.transform, false);
-            RectTransform fillRect = fillObject.GetComponent<RectTransform>();
-            fillRect.anchorMin = Vector2.zero;
-            fillRect.anchorMax = Vector2.one;
-            fillRect.offsetMin = new Vector2(2f, 2f);
-            fillRect.offsetMax = new Vector2(-2f, -2f);
-            Image fill = fillObject.GetComponent<Image>();
-            fill.color = new Color(0.20f, 0.84f, 0.43f, 1f);
-            fill.type = Image.Type.Filled;
-            fill.fillMethod = Image.FillMethod.Horizontal;
-            fill.fillOrigin = 0;
-            fill.fillAmount = labelValue == "체력" ? 0.4f : 0.5f;
-
-            SerializedObject gauge = new SerializedObject(row.GetComponent<RunnerStatGauge>());
-            gauge.FindProperty("label").objectReferenceValue = label;
-            gauge.FindProperty("fill").objectReferenceValue = fill;
-            gauge.FindProperty("displayName").stringValue = labelValue;
-            gauge.FindProperty("maximumValue").floatValue = maximum;
-            gauge.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static CanvasGroup EnsureFadeOverlay(Transform parent)

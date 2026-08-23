@@ -937,9 +937,20 @@ MonoBehaviour:
   - {fileID: 7372645490070407352}
   - {fileID: 4226370793776415820}
   - {fileID: 8573759361541460387}
+  campaignSettings: {fileID: 0}
+  managerStatusText: {fileID: 0}
   chatFont: {fileID: 11400000, guid: b66e46f0a2f777e4b9490294fc66fd53, type: 2}
   minimumDelay: 0.2
   maximumDelay: 0.6
+  farewellInitialDelay: 0.8
+  farewellRepeatDelay: 0.95
+  postGameReactionDelays:
+  - 0.9
+  - 1.7
+  - 2.8
+  minimumHitReactionChance: 0.45
+  minimumEnemyDefeatReactionChance: 0.3
+  minimumAudienceDelayMultiplier: 0.2
   useAiChat: 1
   endpoint: https://api.openai.com/v1/responses
   webProxyEndpoint: /api/stream-on-chat
@@ -962,6 +973,24 @@ MonoBehaviour:
   maximumViewersPerPersona: 3
   maximumActiveViewers: 40
   ensureConflictPersona: 1
+  socialEventMinimumViewers: 3
+  socialEventMinimumChatters: 3
+  conflictChanceAtZeroHeat: 0.48
+  conflictChanceAtFullHeat: 0.01
+  conflictHeatCurvePower: 0.65
+  conflictTargetsStreamerChance: 0.32
+  fraternizationChanceAtZeroHeat: 0.34
+  fraternizationChanceAtFullHeat: 0.005
+  fraternizationHeatCurvePower: 0.72
+  thirdFraternizerChance: 0.48
+  socialReplyMinimumSeconds: 3
+  socialReplyMaximumSeconds: 5
+  socialOpeningDelayMinimumSeconds: 13
+  socialOpeningDelayMaximumSeconds: 16
+  wrongBanReactionMinimumCount: 3
+  wrongBanReactionMaximumCount: 5
+  wrongBanReactionMinimumDelay: 0.35
+  wrongBanReactionMaximumDelay: 0.9
 --- !u!1 &4261862925270038290
 GameObject:
   m_ObjectHideFlags: 0

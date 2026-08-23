@@ -281,8 +281,6 @@ namespace StreamOn.Minigames.Runner
                 if (RunnerBroadcastSessionStore.IsActive)
                 {
                     float penalty = gameOverTimePenaltySeconds;
-                    if (CampaignSettings != null && RunnerCampaignSaveStore.TryLoad(CampaignSettings, out RunnerCampaignSaveData penaltySave))
-                        penalty = CampaignSettings.StaminaRule(penaltySave.staminaRank)?.gameOverTimeLoss ?? penalty;
                     RunnerBroadcastSessionStore.ApplyPenalty(penalty);
                     BroadcastSecondsRemaining = RunnerBroadcastSessionStore.RemainingSeconds;
                 }
@@ -290,8 +288,15 @@ namespace StreamOn.Minigames.Runner
             }
             else if (reason == RunnerRunEndReason.TimeLimitCompleted)
                 BroadcastSecondsRemaining = 0f;
-            chat.BeginRunEndedChat(isNewHighScore, false);
             hud.SetScore(Score, HighScore, WorldSpeed, Mathf.Max(0f, BroadcastSecondsRemaining));
+            // A failed attempt now ends the broadcast. Do not expose the retry panel
+            // or wait for the remaining broadcast timer after game over.
+            if (_broadcastActive)
+            {
+                FinishBroadcast();
+                return;
+            }
+            chat.BeginRunEndedChat(isNewHighScore, false);
             if (reason == RunnerRunEndReason.PlayerDefeated && deathAnimationDisplaySeconds > 0f)
             {
                 hud.ShowGameOver(false);
@@ -341,6 +346,9 @@ namespace StreamOn.Minigames.Runner
             hud.SetScore(Score, HighScore, WorldSpeed, 0f);
             hud.SetRetryAvailable(false, 0f);
             hud.ShowGameOver(false);
+            // Commit the result and open settlement immediately. Viewer drain is a
+            // background presentation and must not hold the result UI hostage.
+            if (campaign != null && campaign.IsActive) campaign.HandleRunEnded();
             if (_broadcastFinishRoutine != null) StopCoroutine(_broadcastFinishRoutine);
             _broadcastFinishRoutine = StartCoroutine(FinishBroadcastPresentation());
         }
@@ -351,8 +359,7 @@ namespace StreamOn.Minigames.Runner
                 ? campaign.GrowthSettings.viewerExitDuration : 3.2f;
             if (audience != null) yield return audience.DrainViewersToZero(exitDuration);
             _broadcastFinishRoutine = null;
-            if (campaign != null && campaign.IsActive) campaign.HandleRunEnded();
-            else hud.ShowGameOver(true);
+            if (campaign == null || !campaign.IsActive) hud.ShowGameOver(true);
         }
 
         public void RestartRun()

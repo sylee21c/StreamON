@@ -103,9 +103,9 @@ namespace StreamOn.Minigames.Runner
 
         private void ConfigureFromSave()
         {
-            StaminaRankRule rule = null;
+            ControlRankRule rule = null;
             if (settings != null && RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData save))
-                rule = settings.StaminaRule(save.staminaRank);
+                rule = settings.ControlRule(save.ControlRank);
             int fitnessUpgrades = 0;
             if (settings != null && RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData equipmentSave))
                 fitnessUpgrades = Mathf.Max(0, equipmentSave.fitnessLevel - 1);
@@ -147,15 +147,15 @@ namespace StreamOn.Minigames.Runner
             }
             if (_slowMotionActive && Time.timeScale > 0f)
             {
-                StaminaRankRule stamina = CurrentStaminaRule();
-                float drainReduction = stamina != null ? stamina.focusDrainReduction : 0f;
+                ControlRankRule control = CurrentControlRule();
+                float drainReduction = control != null ? control.focusDrainReduction : 0f;
                 _focus = Mathf.Max(0f, _focus - settings.focusDrainPerSecond * (1f - drainReduction) * Time.unscaledDeltaTime);
                 if (_focus <= 0f)
                 {
                     SetSlowMotion(false);
-                    if (!_depletionRecoveryUsed && stamina != null && stamina.depletionRecoveryAmount > 0f)
+                    if (!_depletionRecoveryUsed && control != null && control.depletionRecoveryAmount > 0f)
                     {
-                        _focus = Mathf.Min(_maximumFocus, stamina.depletionRecoveryAmount);
+                        _focus = Mathf.Min(_maximumFocus, control.depletionRecoveryAmount);
                         _depletionRecoveryUsed = true;
                     }
                 }
@@ -163,8 +163,8 @@ namespace StreamOn.Minigames.Runner
             }
             else if (!_slowMotionActive && Time.unscaledTime >= _lastSlowMotionStoppedAt + RecoveryDelay())
             {
-                StaminaRankRule stamina = CurrentStaminaRule();
-                float recoveryBonus = stamina != null ? stamina.focusRecoveryBonus : 0f;
+                ControlRankRule control = CurrentControlRule();
+                float recoveryBonus = control != null ? control.focusRecoveryBonus : 0f;
                 if (settings != null && RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData equipmentSave))
                     recoveryBonus += Mathf.Max(0, equipmentSave.fitnessLevel - 1) * settings.focusRecoveryPerFitnessUpgrade;
                 _focus = Mathf.Min(_maximumFocus, _focus + settings.focusRecoveryPerSecond * (1f + recoveryBonus) * Time.unscaledDeltaTime);
@@ -199,16 +199,16 @@ namespace StreamOn.Minigames.Runner
             focusLabel.color = _slowMotionActive ? slowMotionLabelColor : focusColor;
         }
 
-        private StaminaRankRule CurrentStaminaRule()
+        private ControlRankRule CurrentControlRule()
         {
             if (settings == null || !RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData save)) return null;
-            return settings.StaminaRule(save.staminaRank);
+            return settings.ControlRule(save.ControlRank);
         }
 
         private float RecoveryDelay()
         {
-            StaminaRankRule stamina = CurrentStaminaRule();
-            return Mathf.Max(0f, settings.focusRecoveryDelaySeconds - (stamina != null ? stamina.focusRecoveryDelayReduction : 0f));
+            ControlRankRule control = CurrentControlRule();
+            return Mathf.Max(0f, settings.focusRecoveryDelaySeconds - (control != null ? control.focusRecoveryDelayReduction : 0f));
         }
 
         private void OnDisable() => SetSlowMotion(false);

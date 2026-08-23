@@ -117,7 +117,7 @@ namespace StreamOn.Minigames.Runner
         {
             if (!_running || _settings == null || _gameManager == null || !_gameManager.BroadcastActive) return;
             _viewerSeconds += CurrentViewers * Time.deltaTime;
-            MentalRankRule mental = CurrentMentalRule();
+            ComposureRankRule mental = CurrentComposureRule();
             float performanceStep = _performanceMeter.Tick(Time.time, _settings,
                 mental != null ? mental.poorStateTickInterval : -1f,
                 mental != null ? mental.extraMistakesRequiredForPoorState : 0,
@@ -154,7 +154,7 @@ namespace StreamOn.Minigames.Runner
         public void OnPlayerHit(bool lowHealth)
         {
             if (_settings == null) return;
-            MentalRankRule mental = CurrentMentalRule();
+            ComposureRankRule mental = CurrentComposureRule();
             if (mental != null && mental.protectsFirstMistakeAfterGoodPlay
                 && _performanceMeter.State == BroadcastPerformanceState.Good && !_cleanMistakeProtectionUsed)
             {
@@ -313,7 +313,7 @@ namespace StreamOn.Minigames.Runner
             if (amount < 0f && campaignSettings != null
                 && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
             {
-                MentalRankRule mental = campaignSettings.MentalRule(save.mentalRank);
+                ComposureRankRule mental = campaignSettings.ComposureRule(save.ComposureRank);
                 float reduction = (mental?.ordinaryPenaltyReduction ?? 0f) * Mathf.Clamp01(mentalReductionScale);
                 if (!_largePenaltyProtectionUsed && Mathf.Abs(amount) >= campaignSettings.largeHeatPenaltyThreshold
                     && mental != null && mental.oncePerBroadcastLargePenaltyReduction > 0f && mentalReductionScale > 0f)
@@ -327,11 +327,11 @@ namespace StreamOn.Minigames.Runner
                 -_settings.maximumBufferedHeatChange, _settings.maximumBufferedHeatChange);
         }
 
-        private MentalRankRule CurrentMentalRule()
+        private ComposureRankRule CurrentComposureRule()
         {
             RunnerCampaignSettings campaignSettings = _gameManager != null ? _gameManager.CampaignSettings : null;
             if (campaignSettings == null || !RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save)) return null;
-            return campaignSettings.MentalRule(save.mentalRank);
+            return campaignSettings.ComposureRule(save.ComposureRank);
         }
 
         private void GrantGameplayExperience(int amount)
@@ -366,11 +366,11 @@ namespace StreamOn.Minigames.Runner
             {
                 RunnerCampaignSettings campaignSettings = _gameManager != null ? _gameManager.CampaignSettings : null;
                 WitRankRule wit = null;
-                MentalRankRule mental = null;
+                ComposureRankRule mental = null;
                 if (campaignSettings != null && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
                 {
                     wit = campaignSettings.WitRule(save.witRank);
-                    mental = campaignSettings.MentalRule(save.mentalRank);
+                    mental = campaignSettings.ComposureRule(save.ComposureRank);
                 }
                 float perkMultiplier = quality >= 5 ? (wit != null ? wit.comebackRewardMultiplier : 1f)
                     : quality >= 4 ? (wit != null ? wit.correctStreakRewardMultiplier : 1f)
