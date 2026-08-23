@@ -158,6 +158,7 @@ namespace StreamOn.Minigames.Runner
             SetPlayerLocked(false);
             SetStatusHudVisible(true);
             if (_slotPanel != null) _slotPanel.SetActive(false);
+            HideRoomModalPanels();
             if (roomUi != null) roomUi.SetActive(false);
             RefreshStatus();
             if (RunnerBroadcastSessionStore.OpenGameSelectionOnRoomLoad)
@@ -319,10 +320,8 @@ namespace StreamOn.Minigames.Runner
             // Room UI is a shared container. Several of its panels are left active in the
             // scene and stay hidden only because the container itself is off, so turning
             // it on for one panel would reveal every sibling along with it.
-            for (int index = 0; _roomSiblingPanels != null && index < _roomSiblingPanels.Length; index++)
-                if (_roomSiblingPanels[index] != null) _roomSiblingPanels[index].SetActive(false);
+            ShowOnlyRoomModal(growthAndLeaderboardPanel);
             if (roomUi != null) roomUi.SetActive(true);
-            growthAndLeaderboardPanel.SetActive(true);
             _growthPanelToggle?.Open();
             SetPlayerLocked(true);
         }
@@ -479,8 +478,8 @@ namespace StreamOn.Minigames.Runner
             }
 
             if (mainRoomCamera != null) mainRoomCamera.gameObject.SetActive(true);
+            ShowOnlyRoomModal(gameSelectionPanel);
             if (roomUi != null) roomUi.SetActive(true);
-            gameSelectionPanel.SetActive(true);
             ArmGameSelectionInput();
             _transitioning = false;
         }
@@ -496,8 +495,8 @@ namespace StreamOn.Minigames.Runner
                 return;
             }
             SetPlayerLocked(true);
+            ShowOnlyRoomModal(slotPanel);
             if (roomUi != null) roomUi.SetActive(true);
-            slotPanel.SetActive(true);
             RefreshSlotMenu();
         }
 
@@ -664,19 +663,31 @@ namespace StreamOn.Minigames.Runner
             SetLaptopPromptVisible(false);
         }
 
-        // Every Room UI child except the growth panel and the two pass-through overlays
-        // is a modal panel that must not ride along when the container is turned on.
+        // Modal children retain their own active state while Room UI is hidden. Always
+        // select exactly one before enabling the container, otherwise the game explorer,
+        // growth dashboard, and slot menu can appear on top of one another.
         private void CacheRoomSiblingPanels()
         {
             if (roomUi == null) return;
             _roomSiblingPanels = roomUi.transform.Cast<Transform>()
                 .Where(child => child != null
-                    && child.gameObject != growthAndLeaderboardPanel
                     && child.name != "Broadcast Fade Overlay"
                     && child.name != "UGS Service Notification UI")
                 .Select(child => child.gameObject)
                 .ToArray();
         }
+
+        private void ShowOnlyRoomModal(GameObject panel)
+        {
+            for (int index = 0; _roomSiblingPanels != null && index < _roomSiblingPanels.Length; index++)
+            {
+                GameObject candidate = _roomSiblingPanels[index];
+                if (candidate != null) candidate.SetActive(candidate == panel);
+            }
+            if (panel != null) panel.SetActive(true);
+        }
+
+        private void HideRoomModalPanels() => ShowOnlyRoomModal(null);
 
         private static void SetHudGauge(TMP_Text label, TMP_Text levelText, Image fill,
             string name, int rank, int maximum)

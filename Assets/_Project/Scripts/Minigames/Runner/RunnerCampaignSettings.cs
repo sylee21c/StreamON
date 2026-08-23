@@ -631,10 +631,13 @@ namespace StreamOn.Minigames.Runner
         public int broadcastSessionExperienceEarned;
         public int unspentStatPoints = 1;
         public int witRank;
+        public int witInvestedPoints;
         // These legacy JSON field names are intentionally retained so existing saves
         // migrate without losing invested points. Runtime code uses the semantic aliases below.
         public int mentalRank;
         public int staminaRank;
+        public int composureInvestedPoints;
+        public int controlInvestedPoints;
         public int ComposureRank { get => mentalRank; set => mentalRank = value; }
         public int ControlRank { get => staminaRank; set => staminaRank = value; }
         public bool freeRespecUsed;

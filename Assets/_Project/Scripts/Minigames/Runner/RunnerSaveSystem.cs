@@ -452,6 +452,9 @@ namespace StreamOn.Minigames.Runner
             data.witRank = Mathf.Clamp(data.witRank, 0, BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Wit));
             data.ComposureRank = Mathf.Clamp(data.ComposureRank, 0, BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Composure));
             data.ControlRank = Mathf.Clamp(data.ControlRank, 0, BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Control));
+            data.witInvestedPoints = NormalizeInvestedPoints(settings, data, BroadcasterStatType.Wit, data.witInvestedPoints);
+            data.composureInvestedPoints = NormalizeInvestedPoints(settings, data, BroadcasterStatType.Composure, data.composureInvestedPoints);
+            data.controlInvestedPoints = NormalizeInvestedPoints(settings, data, BroadcasterStatType.Control, data.controlInvestedPoints);
             data.unlockedManagerTier = Mathf.Max(0, data.unlockedManagerTier);
             data.hiredManagerTier = Mathf.Clamp(data.hiredManagerTier, 0, data.unlockedManagerTier);
             data.managerUsesRemaining = Mathf.Max(0, data.managerUsesRemaining);
@@ -466,6 +469,13 @@ namespace StreamOn.Minigames.Runner
             if (data.mentalLevel >= settings.maximumMentalLevel) data.mentalExperience = 0;
             data.campaignFailed = false;
             if (data.records == null) data.records = new List<RunnerCampaignDayRecord>();
+        }
+
+        private static int NormalizeInvestedPoints(RunnerCampaignSettings settings, RunnerCampaignSaveData data,
+            BroadcasterStatType type, int invested)
+        {
+            int required = BroadcasterProgression.NextUpgradeCost(settings, data, type);
+            return required <= 0 ? 0 : Mathf.Clamp(invested, 0, required - 1);
         }
 
         private static void EnsureLegacyMigrated(RunnerCampaignSettings settings)

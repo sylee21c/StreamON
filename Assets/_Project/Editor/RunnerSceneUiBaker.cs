@@ -61,13 +61,6 @@ namespace StreamOn.Editor
             serialized.FindProperty("tileArenaGameButton").objectReferenceValue = tileArenaButton;
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
-            TMP_Text status = canvas.GetComponentsInChildren<TMP_Text>(true).FirstOrDefault(text => text.name == "Status");
-            if (status != null)
-            {
-                status.text = "팔로워 0    보유금 0원    방송인 Lv.1    남은 포인트 1";
-                status.rectTransform.sizeDelta = new Vector2(760f, 45f);
-            }
-
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
             if (openedHere) EditorSceneManager.CloseScene(scene, true);

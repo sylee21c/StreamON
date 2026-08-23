@@ -590,7 +590,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8711258782488125863}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 41f9a70dd2834eb18cbf5182f1d9af5b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StreamOn.Minigames.Runner.RunnerBroadcastHeatGauge
   settings: {fileID: 11400000, guid: 59be096373b140e79a9144aec542c1c6, type: 2}

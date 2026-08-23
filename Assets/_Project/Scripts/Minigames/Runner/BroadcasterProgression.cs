@@ -44,9 +44,16 @@ namespace StreamOn.Minigames.Runner
             if (settings == null || save == null) return false;
             int rank = Rank(save, type);
             int cost = UpgradeCost(settings, type, rank + 1);
-            if (rank >= MaximumRank(settings, type) || cost <= 0 || save.unspentStatPoints < cost) return false;
-            save.unspentStatPoints -= cost;
-            SetRank(save, type, rank + 1);
+            if (rank >= MaximumRank(settings, type) || cost <= 0 || save.unspentStatPoints <= 0) return false;
+
+            save.unspentStatPoints--;
+            int invested = InvestedPoints(save, type) + 1;
+            if (invested >= cost)
+            {
+                SetRank(save, type, rank + 1);
+                invested = 0;
+            }
+            SetInvestedPoints(save, type, invested);
             RunnerCampaignSaveStore.Save(settings, save, true);
             return true;
         }
@@ -58,10 +65,14 @@ namespace StreamOn.Minigames.Runner
             if (save.cash < cost) return false;
             save.cash -= cost;
             save.freeRespecUsed = true;
-            save.unspentStatPoints += SpentPoints(settings, save);
+            save.unspentStatPoints += SpentPoints(settings, save)
+                + save.witInvestedPoints + save.composureInvestedPoints + save.controlInvestedPoints;
             save.witRank = 0;
             save.ComposureRank = 0;
             save.ControlRank = 0;
+            save.witInvestedPoints = 0;
+            save.composureInvestedPoints = 0;
+            save.controlInvestedPoints = 0;
             RunnerCampaignSaveStore.Save(settings, save, true);
             return true;
         }
@@ -114,6 +125,31 @@ namespace StreamOn.Minigames.Runner
             };
         }
 
+        public static int NextUpgradeCost(RunnerCampaignSettings settings, RunnerCampaignSaveData save,
+            BroadcasterStatType type)
+        {
+            if (settings == null || save == null || Rank(save, type) >= MaximumRank(settings, type)) return 0;
+            return Mathf.Max(1, UpgradeCost(settings, type, Rank(save, type) + 1));
+        }
+
+        public static int InvestedPoints(RunnerCampaignSaveData save, BroadcasterStatType type)
+        {
+            if (save == null) return 0;
+            return type switch
+            {
+                BroadcasterStatType.Wit => save.witInvestedPoints,
+                BroadcasterStatType.Composure => save.composureInvestedPoints,
+                _ => save.controlInvestedPoints
+            };
+        }
+
+        public static int Rank(RunnerCampaignSaveData save, BroadcasterStatType type) => type switch
+        {
+            BroadcasterStatType.Wit => save.witRank,
+            BroadcasterStatType.Composure => save.ComposureRank,
+            _ => save.ControlRank
+        };
+
         private static int SpentPoints(RunnerCampaignSettings settings, RunnerCampaignSaveData save)
         {
             int total = 0;
@@ -123,18 +159,19 @@ namespace StreamOn.Minigames.Runner
             return total;
         }
 
-        private static int Rank(RunnerCampaignSaveData save, BroadcasterStatType type) => type switch
-        {
-            BroadcasterStatType.Wit => save.witRank,
-            BroadcasterStatType.Composure => save.ComposureRank,
-            _ => save.ControlRank
-        };
-
         private static void SetRank(RunnerCampaignSaveData save, BroadcasterStatType type, int rank)
         {
             if (type == BroadcasterStatType.Wit) save.witRank = rank;
             else if (type == BroadcasterStatType.Composure) save.ComposureRank = rank;
             else save.ControlRank = rank;
+        }
+
+        private static void SetInvestedPoints(RunnerCampaignSaveData save, BroadcasterStatType type, int value)
+        {
+            value = Mathf.Max(0, value);
+            if (type == BroadcasterStatType.Wit) save.witInvestedPoints = value;
+            else if (type == BroadcasterStatType.Composure) save.composureInvestedPoints = value;
+            else save.controlInvestedPoints = value;
         }
     }
 }
