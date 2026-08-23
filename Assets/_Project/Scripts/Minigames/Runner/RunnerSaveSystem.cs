@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using StreamOn.Platform;
 using UnityEngine;
 
 namespace StreamOn.Minigames.Runner
@@ -18,17 +19,41 @@ namespace StreamOn.Minigames.Runner
         public int mentalLevel;
         public int healthStat;
         public int bestBroadcastScore;
+        public int broadcasterLevel;
         public string savedAtUtc;
     }
 
     [Serializable]
     public sealed class RunnerUserSettingsData
     {
-        public int version = 1;
+        public int version = 2;
         public int activeSaveSlot = 1;
         public float masterVolume = 1f;
         public bool aiChatEnabled = true;
         public int runnerHighScore;
+        public List<BroadcastPendingLeaderboardSubmission> pendingLeaderboardSubmissions = new List<BroadcastPendingLeaderboardSubmission>();
+        public List<BroadcastLeaderboardUploadState> leaderboardUploadStates = new List<BroadcastLeaderboardUploadState>();
+    }
+
+    [Serializable]
+    public sealed class BroadcastPendingLeaderboardSubmission
+    {
+        public string boardId;
+        public BroadcastGameId gameId;
+        public bool followerBoard;
+        public int score;
+        public int clearedNight;
+        public string displayName;
+        public string achievedAtUtc;
+    }
+
+    [Serializable]
+    public sealed class BroadcastLeaderboardUploadState
+    {
+        public string boardId;
+        public int score;
+        public string displayName;
+        public bool hasUploadedValue;
     }
 
     public static class RunnerUserSettingsStore
@@ -61,6 +86,11 @@ namespace StreamOn.Minigames.Runner
             }
             _cached.activeSaveSlot = Mathf.Max(1, _cached.activeSaveSlot);
             _cached.masterVolume = Mathf.Clamp01(_cached.masterVolume);
+            _cached.version = Mathf.Max(2, _cached.version);
+            if (_cached.pendingLeaderboardSubmissions == null)
+                _cached.pendingLeaderboardSubmissions = new List<BroadcastPendingLeaderboardSubmission>();
+            if (_cached.leaderboardUploadStates == null)
+                _cached.leaderboardUploadStates = new List<BroadcastLeaderboardUploadState>();
             return _cached;
         }
 
@@ -68,7 +98,8 @@ namespace StreamOn.Minigames.Runner
         {
             if (data == null) return;
             _cached = data;
-            WriteAtomic(SettingsDirectory, SettingsPath, BackupPath, JsonUtility.ToJson(data, true));
+            if (WriteAtomic(SettingsDirectory, SettingsPath, BackupPath, JsonUtility.ToJson(data, true)))
+                WebGLPlatformBridge.RequestFileSystemSync();
         }
 
         private static bool TryRead(string path, out RunnerUserSettingsData data)
@@ -108,6 +139,89 @@ namespace StreamOn.Minigames.Runner
         }
     }
 
+    /// <summary>
+    /// WebGL에서도 브라우저의 persistentDataPath에 남는 최신 기록 전송 대기열입니다.
+    /// 같은 리더보드의 오래된 요청은 보관하지 않고 항상 가장 최신 값 하나로 합칩니다.
+    /// </summary>
+    public static class BroadcastLeaderboardPendingStore
+    {
+        public static void QueueFromSave(RunnerCampaignSettings settings, RunnerCampaignSaveData save)
+        {
+            if (settings == null || save == null || !settings.useOnlineLeaderboard
+                || !settings.automaticallySubmitLeaderboardRecords) return;
+
+            Queue(settings, save, BroadcastGameId.Runner, false, save.bestRunnerGameScore, 0);
+            Queue(settings, save, BroadcastGameId.TileArena, false, save.bestTileArenaGameScore, 0);
+            Queue(settings, save, BroadcastGameId.PlasticKnightmare, false, save.bestPlasticGameScoreAtNight, save.bestPlasticNight);
+            Queue(settings, save, BroadcastGameId.Runner, true, save.subscribers, 0);
+        }
+
+        public static List<BroadcastPendingLeaderboardSubmission> Snapshot()
+        {
+            RunnerUserSettingsData data = RunnerUserSettingsStore.Load();
+            return data.pendingLeaderboardSubmissions != null
+                ? new List<BroadcastPendingLeaderboardSubmission>(data.pendingLeaderboardSubmissions)
+                : new List<BroadcastPendingLeaderboardSubmission>();
+        }
+
+        public static void MarkUploaded(BroadcastPendingLeaderboardSubmission uploaded)
+        {
+            if (uploaded == null || string.IsNullOrWhiteSpace(uploaded.boardId)) return;
+            RunnerUserSettingsData data = RunnerUserSettingsStore.Load();
+            data.pendingLeaderboardSubmissions ??= new List<BroadcastPendingLeaderboardSubmission>();
+            data.leaderboardUploadStates ??= new List<BroadcastLeaderboardUploadState>();
+
+            data.pendingLeaderboardSubmissions.RemoveAll(item => item != null
+                && item.boardId == uploaded.boardId
+                && item.score == uploaded.score
+                && item.displayName == uploaded.displayName);
+            BroadcastLeaderboardUploadState state = data.leaderboardUploadStates.Find(item => item != null && item.boardId == uploaded.boardId);
+            if (state == null)
+            {
+                state = new BroadcastLeaderboardUploadState { boardId = uploaded.boardId };
+                data.leaderboardUploadStates.Add(state);
+            }
+            state.score = uploaded.score;
+            state.displayName = uploaded.displayName;
+            state.hasUploadedValue = true;
+            RunnerUserSettingsStore.Save(data);
+        }
+
+        private static void Queue(RunnerCampaignSettings settings, RunnerCampaignSaveData save,
+            BroadcastGameId gameId, bool followerBoard, int score, int clearedNight)
+        {
+            string boardId = settings.LeaderboardId(gameId, followerBoard);
+            if (string.IsNullOrWhiteSpace(boardId)) return;
+            RunnerUserSettingsData data = RunnerUserSettingsStore.Load();
+            data.pendingLeaderboardSubmissions ??= new List<BroadcastPendingLeaderboardSubmission>();
+            data.leaderboardUploadStates ??= new List<BroadcastLeaderboardUploadState>();
+            string displayName = string.IsNullOrWhiteSpace(save.streamerName) ? settings.defaultStreamerName : save.streamerName;
+            BroadcastLeaderboardUploadState uploaded = data.leaderboardUploadStates.Find(item => item != null && item.boardId == boardId);
+            if (uploaded != null && uploaded.hasUploadedValue && uploaded.score == score && uploaded.displayName == displayName) return;
+
+            BroadcastPendingLeaderboardSubmission pending = data.pendingLeaderboardSubmissions.Find(item => item != null && item.boardId == boardId);
+            if (pending != null && pending.score == Mathf.Max(0, score)
+                && pending.clearedNight == Mathf.Max(0, clearedNight)
+                && pending.displayName == displayName) return;
+            if (pending == null)
+            {
+                pending = new BroadcastPendingLeaderboardSubmission { boardId = boardId };
+                data.pendingLeaderboardSubmissions.Add(pending);
+            }
+            pending.gameId = gameId;
+            pending.followerBoard = followerBoard;
+            pending.score = Mathf.Max(0, score);
+            pending.clearedNight = Mathf.Max(0, clearedNight);
+            pending.displayName = displayName;
+            pending.achievedAtUtc = save.savedAtUtc;
+
+            int maximum = Mathf.Max(1, settings.maximumPendingLeaderboardSubmissions);
+            while (data.pendingLeaderboardSubmissions.Count > maximum)
+                data.pendingLeaderboardSubmissions.RemoveAt(0);
+            RunnerUserSettingsStore.Save(data);
+        }
+    }
+
     public static class RunnerSaveSession
     {
         public static bool RequireSlotSelection { get; set; } = true;
@@ -118,7 +232,7 @@ namespace StreamOn.Minigames.Runner
 
     public static class RunnerCampaignSaveStore
     {
-        public const int CurrentVersion = 7;
+        public const int CurrentVersion = 9;
         private const string LegacyMigrationKey = "StreamOn.Save.LegacyMigrated.v2";
 
         public static int ActiveSlot
@@ -144,6 +258,8 @@ namespace StreamOn.Minigames.Runner
             savedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
             day = 1,
             subscribers = settings.startingSubscribers,
+            streamerName = settings.defaultStreamerName,
+            playerId = Guid.NewGuid().ToString("N"),
             mentalLevel = settings.startingMentalLevel,
             mentalExperience = 0,
             gameSkill = settings.startingGameSkill,
@@ -152,6 +268,8 @@ namespace StreamOn.Minigames.Runner
             talkingSkillExperience = 0,
             healthStat = settings.startingHealthStat,
             healthStatExperience = 0,
+            broadcasterLevel = Mathf.Max(1, settings.startingBroadcasterLevel),
+            unspentStatPoints = Mathf.Max(0, settings.startingStatPoints),
             cash = 0,
             pcLevel = 1,
             microphoneLevel = 1,
@@ -181,6 +299,7 @@ namespace StreamOn.Minigames.Runner
                 info.mentalLevel = data.mentalLevel;
                 info.healthStat = data.healthStat;
                 info.bestBroadcastScore = data.bestBroadcastScore;
+                info.broadcasterLevel = data.broadcasterLevel;
                 info.savedAtUtc = data.savedAtUtc;
             }
             else info.corrupted = File.Exists(SlotPath(settings, slot)) || File.Exists(BackupPath(settings, slot));
@@ -189,6 +308,7 @@ namespace StreamOn.Minigames.Runner
 
         public static bool TryLoad(RunnerCampaignSettings settings, out RunnerCampaignSaveData data)
         {
+            if (RunnerBroadcastSessionStore.TryGetStagedSave(settings, out data)) return true;
             EnsureLegacyMigrated(settings);
             return TryLoadSlot(settings, ActiveSlot, out data, out _, true);
         }
@@ -200,7 +320,11 @@ namespace StreamOn.Minigames.Runner
             data.version = CurrentVersion;
             data.slot = slot;
             data.savedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-            return RunnerUserSettingsStore.WriteAtomic(SaveDirectory(settings), SlotPath(settings, slot), BackupPath(settings, slot), JsonUtility.ToJson(data, true));
+            if (RunnerBroadcastSessionStore.TryStageSave(settings, data)) return true;
+            bool saved = RunnerUserSettingsStore.WriteAtomic(SaveDirectory(settings), SlotPath(settings, slot), BackupPath(settings, slot), JsonUtility.ToJson(data, true));
+            if (saved) BroadcastLeaderboardPendingStore.QueueFromSave(settings, data);
+            if (saved) WebGLPlatformBridge.RequestFileSystemSync();
+            return saved;
         }
 
         public static void Delete(RunnerCampaignSettings settings, int slot = -1)
@@ -286,6 +410,29 @@ namespace StreamOn.Minigames.Runner
                 data.broadcastSessionElapsedSeconds = 0f;
                 data.version = 7;
             }
+            if (data.version < 8)
+            {
+                data.broadcasterLevel = Mathf.Max(1, settings.startingBroadcasterLevel);
+                data.broadcasterExperience = 0;
+                data.witRank = Mathf.Clamp(data.talkingSkill - settings.startingTalkingSkill, 0, 5);
+                data.mentalRank = Mathf.Clamp(data.mentalLevel - settings.startingMentalLevel, 0, 5);
+                data.staminaRank = Mathf.Clamp(data.healthStat - settings.startingHealthStat, 0, 5);
+                int spent = data.witRank * (data.witRank + 1) / 2
+                    + data.mentalRank * (data.mentalRank + 1) / 2
+                    + data.staminaRank * (data.staminaRank + 1) / 2;
+                data.unspentStatPoints = Mathf.Max(0, settings.startingStatPoints - spent);
+                data.broadcastSessionActive = false;
+                data.version = 8;
+            }
+            if (data.version < 9)
+            {
+                // v9 separates visible per-game records from the hidden broadcast
+                // score used only for time bonuses.
+                data.bestRunnerGameScore = 0;
+                data.bestTileArenaGameScore = 0;
+                data.bestPlasticGameScoreAtNight = 0;
+                data.version = 9;
+            }
             data.slot = slot;
             data.day = Mathf.Max(1, data.day);
             data.mentalLevel = Mathf.Clamp(data.mentalLevel, 1, settings.maximumMentalLevel);
@@ -294,6 +441,18 @@ namespace StreamOn.Minigames.Runner
             data.talkingSkill = Mathf.Clamp(data.talkingSkill, 1, settings.maximumTalkingSkill);
             data.healthStat = Mathf.Clamp(data.healthStat, 1, settings.maximumHealthStat);
             data.cash = Math.Max(0L, data.cash);
+            if (string.IsNullOrWhiteSpace(data.streamerName)) data.streamerName = settings.defaultStreamerName;
+            if (string.IsNullOrWhiteSpace(data.playerId)) data.playerId = Guid.NewGuid().ToString("N");
+            data.broadcasterLevel = Mathf.Clamp(data.broadcasterLevel, 1, Mathf.Max(1, settings.maximumBroadcasterLevel));
+            data.broadcasterExperience = Mathf.Max(0, data.broadcasterExperience);
+            data.unspentStatPoints = Mathf.Max(0, data.unspentStatPoints);
+            data.witRank = Mathf.Clamp(data.witRank, 0, 5);
+            data.mentalRank = Mathf.Clamp(data.mentalRank, 0, 5);
+            data.staminaRank = Mathf.Clamp(data.staminaRank, 0, 5);
+            data.unlockedManagerTier = Mathf.Max(0, data.unlockedManagerTier);
+            data.hiredManagerTier = Mathf.Clamp(data.hiredManagerTier, 0, data.unlockedManagerTier);
+            data.managerUsesRemaining = Mathf.Max(0, data.managerUsesRemaining);
+            if (data.leaderboardRecords == null) data.leaderboardRecords = new List<BroadcastLeaderboardRecord>();
             data.pcLevel = Mathf.Clamp(data.pcLevel, 1, 3);
             data.microphoneLevel = Mathf.Clamp(data.microphoneLevel, 1, 3);
             data.fitnessLevel = Mathf.Clamp(data.fitnessLevel, 1, 3);

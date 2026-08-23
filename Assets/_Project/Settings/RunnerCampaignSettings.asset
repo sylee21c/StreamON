@@ -15,6 +15,7 @@ MonoBehaviour:
   lengthMode: 0
   fixedMaximumDays: 7
   startingSubscribers: 0
+  defaultStreamerName: "\uC2E0\uC785\uC2A4\uD2B8\uB9AC\uBA38"
   startingMentalLevel: 1
   startingGameSkill: 1
   startingTalkingSkill: 1
@@ -29,8 +30,8 @@ MonoBehaviour:
   hypePenaltyReductionPerMentalLevel: 0.15
   dayActions:
   - id: game_training
-    displayName: 게임 훈련
-    description: 게임 경험치 +40
+    displayName: "\uAC8C\uC784 \uD6C8\uB828"
+    description: "\uAC8C\uC784 \uACBD\uD5D8\uCE58 +40"
     gameSkillDelta: 40
     talkingSkillDelta: 0
     healthStatDelta: 0
@@ -42,8 +43,8 @@ MonoBehaviour:
     roomColor: {r: 0.18, g: 0.72, b: 0.64, a: 1}
     roomPrefab: {fileID: 0}
   - id: talking_training
-    displayName: 소통 연습
-    description: 소통 경험치 +40
+    displayName: "\uC18C\uD1B5 \uC5F0\uC2B5"
+    description: "\uC18C\uD1B5 \uACBD\uD5D8\uCE58 +40"
     gameSkillDelta: 0
     talkingSkillDelta: 40
     healthStatDelta: 0
@@ -55,8 +56,8 @@ MonoBehaviour:
     roomColor: {r: 0.35, g: 0.55, b: 0.92, a: 1}
     roomPrefab: {fileID: 0}
   - id: rest
-    displayName: 휴식
-    description: 멘탈 경험치 +40
+    displayName: "\uD734\uC2DD"
+    description: "\uBA58\uD0C8 \uACBD\uD5D8\uCE58 +40"
     gameSkillDelta: 0
     talkingSkillDelta: 0
     healthStatDelta: 0
@@ -68,8 +69,9 @@ MonoBehaviour:
     roomColor: {r: 0.66, g: 0.45, b: 0.8, a: 1}
     roomPrefab: {fileID: 0}
   - id: health_training
-    displayName: 체력 단련
-    description: 체력 경험치 +40 / 레벨업 시 방송 시간 증가
+    displayName: "\uCCB4\uB825 \uB2E8\uB828"
+    description: "\uCCB4\uB825 \uACBD\uD5D8\uCE58 +40 / \uB808\uBCA8\uC5C5 \uC2DC
+      \uBC29\uC1A1 \uC2DC\uAC04 \uC99D\uAC00"
     gameSkillDelta: 0
     talkingSkillDelta: 0
     healthStatDelta: 40
@@ -88,29 +90,393 @@ MonoBehaviour:
   minimumBroadcastSeconds: 300
   maximumBroadcastSeconds: 600
   secondsPerHealthStatLevel: 60
+  gameRules:
+  - gameId: 0
+    displayName: "\uB7EC\uB108"
+    baseDurationSeconds: 300
+    maximumBonusSeconds: 20
+    baseGameOverTimeLoss: 8
+    timeBonuses:
+    - broadcastScoreThreshold: 2500
+      bonusSeconds: 10
+    - broadcastScoreThreshold: 6000
+      bonusSeconds: 10
+  - gameId: 1
+    displayName: "\uD0C0\uC77C \uC544\uB808\uB098"
+    baseDurationSeconds: 300
+    maximumBonusSeconds: 20
+    baseGameOverTimeLoss: 8
+    timeBonuses:
+    - broadcastScoreThreshold: 120
+      bonusSeconds: 10
+    - broadcastScoreThreshold: 300
+      bonusSeconds: 10
+  - gameId: 2
+    displayName: Plastic Knightmare
+    baseDurationSeconds: 60
+    maximumBonusSeconds: 20
+    baseGameOverTimeLoss: 8
+    timeBonuses: []
+  heatScoreMultiplier:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0.85
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 50
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 100
+      value: 1.25
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  sessionAutosaveIntervalSeconds: 5
+  leaderboardMaximumRows: 50
+  useOnlineLeaderboard: 0
+  leaderboardEnvironmentName: production
+  runnerLeaderboardId: stream-on-runner
+  tileArenaLeaderboardId: stream-on-tile-arena
+  plasticKnightmareLeaderboardId: stream-on-plastic-knightmare
+  followerLeaderboardId: stream-on-followers
+  automaticallySubmitLeaderboardRecords: 1
+  maximumPendingLeaderboardSubmissions: 4
+  maximumBroadcasterLevel: 20
+  startingBroadcasterLevel: 1
+  startingStatPoints: 1
+  broadcasterLevels:
+  - level: 1
+    experienceToNextLevel: 85
+    statPointsGranted: 1
+  - level: 2
+    experienceToNextLevel: 100
+    statPointsGranted: 1
+  - level: 3
+    experienceToNextLevel: 115
+    statPointsGranted: 1
+  - level: 4
+    experienceToNextLevel: 130
+    statPointsGranted: 1
+  - level: 5
+    experienceToNextLevel: 145
+    statPointsGranted: 1
+  - level: 6
+    experienceToNextLevel: 160
+    statPointsGranted: 1
+  - level: 7
+    experienceToNextLevel: 175
+    statPointsGranted: 1
+  - level: 8
+    experienceToNextLevel: 190
+    statPointsGranted: 1
+  - level: 9
+    experienceToNextLevel: 205
+    statPointsGranted: 1
+  - level: 10
+    experienceToNextLevel: 220
+    statPointsGranted: 2
+  - level: 11
+    experienceToNextLevel: 235
+    statPointsGranted: 1
+  - level: 12
+    experienceToNextLevel: 250
+    statPointsGranted: 1
+  - level: 13
+    experienceToNextLevel: 265
+    statPointsGranted: 1
+  - level: 14
+    experienceToNextLevel: 280
+    statPointsGranted: 1
+  - level: 15
+    experienceToNextLevel: 295
+    statPointsGranted: 1
+  - level: 16
+    experienceToNextLevel: 310
+    statPointsGranted: 1
+  - level: 17
+    experienceToNextLevel: 325
+    statPointsGranted: 1
+  - level: 18
+    experienceToNextLevel: 340
+    statPointsGranted: 1
+  - level: 19
+    experienceToNextLevel: 355
+    statPointsGranted: 1
+  - level: 20
+    experienceToNextLevel: 370
+    statPointsGranted: 2
+  witRanks:
+  - rank: 0
+    upgradeCost: 0
+    correctHeatGainBonus: 0
+    responseTimeBonusSeconds: 0
+    twoCorrectAnswerChance: 0
+    advancedAnswerRewardMultiplier: 1
+    correctStreakRequired: 0
+    correctStreakRewardMultiplier: 1
+    comebackHeatThreshold: 0
+    comebackRewardMultiplier: 1
+  - rank: 1
+    upgradeCost: 1
+    correctHeatGainBonus: 0.15
+    responseTimeBonusSeconds: 0.75
+    twoCorrectAnswerChance: 0
+    advancedAnswerRewardMultiplier: 1
+    correctStreakRequired: 0
+    correctStreakRewardMultiplier: 1
+    comebackHeatThreshold: 0
+    comebackRewardMultiplier: 1
+  - rank: 2
+    upgradeCost: 2
+    correctHeatGainBonus: 0.3
+    responseTimeBonusSeconds: 1.5
+    twoCorrectAnswerChance: 0.25
+    advancedAnswerRewardMultiplier: 1
+    correctStreakRequired: 0
+    correctStreakRewardMultiplier: 1
+    comebackHeatThreshold: 0
+    comebackRewardMultiplier: 1
+  - rank: 3
+    upgradeCost: 3
+    correctHeatGainBonus: 0.45
+    responseTimeBonusSeconds: 2.25
+    twoCorrectAnswerChance: 0.5
+    advancedAnswerRewardMultiplier: 1
+    correctStreakRequired: 3
+    correctStreakRewardMultiplier: 1.35
+    comebackHeatThreshold: 0
+    comebackRewardMultiplier: 1
+  - rank: 4
+    upgradeCost: 4
+    correctHeatGainBonus: 0.6
+    responseTimeBonusSeconds: 3
+    twoCorrectAnswerChance: 0.75
+    advancedAnswerRewardMultiplier: 1
+    correctStreakRequired: 3
+    correctStreakRewardMultiplier: 1.35
+    comebackHeatThreshold: 35
+    comebackRewardMultiplier: 1.55
+  - rank: 5
+    upgradeCost: 5
+    correctHeatGainBonus: 0.8
+    responseTimeBonusSeconds: 4
+    twoCorrectAnswerChance: 1
+    advancedAnswerRewardMultiplier: 1.3
+    correctStreakRequired: 3
+    correctStreakRewardMultiplier: 1.45
+    comebackHeatThreshold: 40
+    comebackRewardMultiplier: 1.7
+  mentalRanks:
+  - rank: 0
+    upgradeCost: 0
+    ordinaryPenaltyReduction: 0
+    poorStateTickInterval: 2
+    neutralRecoveryTimeReduction: 0
+    extraMistakesRequiredForPoorState: 0
+    oncePerBroadcastLargePenaltyReduction: 0
+    protectsFirstMistakeAfterGoodPlay: 0
+    correctWitClearsRecentMistakes: 0
+    mistakeClearCooldownSeconds: 20
+  - rank: 1
+    upgradeCost: 1
+    ordinaryPenaltyReduction: 0.12
+    poorStateTickInterval: 2.3
+    neutralRecoveryTimeReduction: 0.1
+    extraMistakesRequiredForPoorState: 0
+    oncePerBroadcastLargePenaltyReduction: 0
+    protectsFirstMistakeAfterGoodPlay: 0
+    correctWitClearsRecentMistakes: 0
+    mistakeClearCooldownSeconds: 20
+  - rank: 2
+    upgradeCost: 2
+    ordinaryPenaltyReduction: 0.24
+    poorStateTickInterval: 2.6
+    neutralRecoveryTimeReduction: 0.2
+    extraMistakesRequiredForPoorState: 0
+    oncePerBroadcastLargePenaltyReduction: 0
+    protectsFirstMistakeAfterGoodPlay: 1
+    correctWitClearsRecentMistakes: 0
+    mistakeClearCooldownSeconds: 20
+  - rank: 3
+    upgradeCost: 3
+    ordinaryPenaltyReduction: 0.36
+    poorStateTickInterval: 3
+    neutralRecoveryTimeReduction: 0.3
+    extraMistakesRequiredForPoorState: 0
+    oncePerBroadcastLargePenaltyReduction: 0
+    protectsFirstMistakeAfterGoodPlay: 1
+    correctWitClearsRecentMistakes: 1
+    mistakeClearCooldownSeconds: 20
+  - rank: 4
+    upgradeCost: 4
+    ordinaryPenaltyReduction: 0.48
+    poorStateTickInterval: 3.5
+    neutralRecoveryTimeReduction: 0.4
+    extraMistakesRequiredForPoorState: 1
+    oncePerBroadcastLargePenaltyReduction: 0
+    protectsFirstMistakeAfterGoodPlay: 1
+    correctWitClearsRecentMistakes: 1
+    mistakeClearCooldownSeconds: 20
+  - rank: 5
+    upgradeCost: 5
+    ordinaryPenaltyReduction: 0.6
+    poorStateTickInterval: 4
+    neutralRecoveryTimeReduction: 0.5
+    extraMistakesRequiredForPoorState: 1
+    oncePerBroadcastLargePenaltyReduction: 0.8
+    protectsFirstMistakeAfterGoodPlay: 1
+    correctWitClearsRecentMistakes: 1
+    mistakeClearCooldownSeconds: 20
+  staminaRanks:
+  - rank: 0
+    upgradeCost: 0
+    maximumFocus: 100
+    focusRecoveryBonus: 0
+    gameOverTimeLoss: 8
+    focusRecoveryDelayReduction: 0
+    focusDrainReduction: 0
+    depletionRecoveryAmount: 0
+  - rank: 1
+    upgradeCost: 1
+    maximumFocus: 120
+    focusRecoveryBonus: 0.15
+    gameOverTimeLoss: 7.5
+    focusRecoveryDelayReduction: 0
+    focusDrainReduction: 0
+    depletionRecoveryAmount: 0
+  - rank: 2
+    upgradeCost: 2
+    maximumFocus: 140
+    focusRecoveryBonus: 0.3
+    gameOverTimeLoss: 7
+    focusRecoveryDelayReduction: 0.7
+    focusDrainReduction: 0
+    depletionRecoveryAmount: 0
+  - rank: 3
+    upgradeCost: 3
+    maximumFocus: 160
+    focusRecoveryBonus: 0.45
+    gameOverTimeLoss: 6.5
+    focusRecoveryDelayReduction: 0.7
+    focusDrainReduction: 0.08
+    depletionRecoveryAmount: 0
+  - rank: 4
+    upgradeCost: 4
+    maximumFocus: 190
+    focusRecoveryBonus: 0.6
+    gameOverTimeLoss: 6
+    focusRecoveryDelayReduction: 0.7
+    focusDrainReduction: 0.15
+    depletionRecoveryAmount: 0
+  - rank: 5
+    upgradeCost: 5
+    maximumFocus: 220
+    focusRecoveryBonus: 0.8
+    gameOverTimeLoss: 5.5
+    focusRecoveryDelayReduction: 0.7
+    focusDrainReduction: 0.2
+    depletionRecoveryAmount: 35
+  broadcastCompletionExperience: 45
+  broadcastRatingExperiencePerPoint: 5
+  newRecordExperience: 30
+  correctModerationExperience: 15
+  correctWitExperience: 6
+  runnerObstacleClearExperience: 1
+  runnerEnemyDefeatExperience: 2
+  tileStageClearExperience: 8
+  plasticNightClearExperience: 25
+  maximumExperiencePerBroadcast: 120
+  respecCashCost: 2500
+  firstRespecIsFree: 1
+  slowMotionTimeScale: 0.24
+  focusDrainPerSecond: 24
+  focusRecoveryPerSecond: 13
+  focusRecoveryDelaySeconds: 1.5
+  heatGaugeVisualSpeed: 55
+  largeHeatPenaltyThreshold: 8
+  managerTiers:
+  - tier: 1
+    displayName: "\uC5F0\uC2B5\uC0DD \uB9E4\uB2C8\uC800"
+    unlockCost: 2500
+    hireCostPerBroadcast: 500
+    usesPerBroadcast: 1
+    handlingDelaySeconds: 12
+    handlesFraternization: 0
+  - tier: 2
+    displayName: "\uC77C\uBC18 \uB9E4\uB2C8\uC800"
+    unlockCost: 8000
+    hireCostPerBroadcast: 1200
+    usesPerBroadcast: 2
+    handlingDelaySeconds: 8
+    handlesFraternization: 0
+  - tier: 3
+    displayName: "\uD504\uB85C \uB9E4\uB2C8\uC800"
+    unlockCost: 20000
+    hireCostPerBroadcast: 2500
+    usesPerBroadcast: 3
+    handlingDelaySeconds: 5
+    handlesFraternization: 1
+  plasticDayPreparationSeconds: 60
+  plasticNightStartingHeatMinimum: 40
+  plasticNightStartingHeatMaximum: 60
+  plasticBedHealthScore: 200
+  plasticSurvivingFacilityScore: 40
+  plasticNoHitBonus: 250
+  plasticFollowerGainPerClearedNight: 8
+  plasticFollowerLossOnFailure: 4
+  plasticDonationCapPerNight: 10000
+  plasticDonationWonPerBroadcastPoint: 0.4
+  plasticStartingViewers: 3
+  plasticMaximumViewers: 100000
+  plasticViewersPerNight: 1.5
+  plasticGhostDonationChance: 0.08
+  plasticFollowersPerHeatBand: 2
+  plasticFollowerHeatBandSize: 25
+  plasticRatingScoreTargetMultiplier: 3
+  plasticGhostTierScoreMultipliers: 010000000200000003000000
+  plasticNightScoreRules:
+  - night: 1
+    ghostBaseScore: 25
+    clearBonus: 400
+  - night: 5
+    ghostBaseScore: 40
+    clearBonus: 700
+  - night: 10
+    ghostBaseScore: 60
+    clearBonus: 1100
   gameOverTimePenaltySeconds: 8
   broadcastGrowthSettings: {fileID: 11400000, guid: af962f6fba2d418eaa50113295cd3263, type: 2}
-  pcUpgradeCosts:
-  - 0
-  - 5000
-  - 15000
-  microphoneUpgradeCosts:
-  - 0
-  - 4000
-  - 12000
-  fitnessUpgradeCosts:
-  - 0
-  - 3500
-  - 10000
-  interiorUpgradeCosts:
-  - 0
-  - 3000
-  - 9000
+  pcUpgradeCosts: 0000000088130000983a0000
+  microphoneUpgradeCosts: 00000000a00f0000e02e0000
+  fitnessUpgradeCosts: 00000000ac0d000010270000
+  interiorUpgradeCosts: 00000000b80b000028230000
   scoreBonusPerPcUpgrade: 0.06
   followerConversionBonusPerMicrophoneUpgrade: 0.008
   donationBonusPerMicrophoneUpgrade: 0.08
   broadcastSecondsPerFitnessUpgrade: 30
   startingViewersPerInteriorUpgrade: 2
+  managerDelayReductionPerPcUpgrade: 0.08
+  focusCapacityPerFitnessUpgrade: 15
+  focusRecoveryPerFitnessUpgrade: 0.1
   successBaseSubscriberGain: 10
   failureBaseSubscriberLoss: 16
   failureSubscriberLossIncreasePerDay: 2
@@ -131,3 +497,5 @@ MonoBehaviour:
   broadcastSceneName: BroadcastRunner
   runnerSceneName: BroadcastRunner
   tileArenaSceneName: TileArena
+  plasticKnightmareMenuSceneName: MainMenu
+  plasticKnightmareSceneName: MainScene

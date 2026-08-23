@@ -3,6 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem.UI;
 #endif
@@ -49,13 +50,7 @@ public sealed class GameOverUIController : MonoBehaviour
     [Tooltip("배경이 서서히 완전 암전되는 시간")]
     [SerializeField] private float blackoutFadeDuration = 2.2f;
 
-    [Header("Coin Penalty")]
-    [Tooltip("Game over removes this percentage of coins earned during the current night. 0.5 = lose 50%, keep 50%.")]
-    [SerializeField, Range(0f, 1f)] private float nightCoinLossPercent = 0.5f;
-
     [Header("Fallback")]
-    [Tooltip("씬에서 레퍼런스를 연결하지 않았을 때만 기본 UI 자식을 자동 생성합니다.")]
-    [SerializeField] private bool buildMissingUi = true;
     [Tooltip("Keep existing scene Canvas and CanvasScaler values instead of forcing generated defaults.")]
     [SerializeField] private bool preserveSceneCanvasSettings = true;
 
@@ -65,6 +60,7 @@ public sealed class GameOverUIController : MonoBehaviour
     private int rewardCountFrom;
     private int rewardCountTo;
     private bool showing;
+    private string finalResultText;
 
     // 게임오버 진행 중 여부. Player/Ghost/Companion 이 움직임을 멈추기 위해 참조.
     public static bool IsGameOver { get; private set; }
@@ -80,8 +76,7 @@ public sealed class GameOverUIController : MonoBehaviour
             return;
         }
 
-        GameObject go = new GameObject("Game Over UI Controller");
-        instance = go.AddComponent<GameOverUIController>();
+        Debug.LogError("MainScene에 씬 기반 GameOverUIController가 없습니다. 런타임 UI는 자동 생성하지 않습니다.");
     }
 
     private void Awake()
@@ -147,17 +142,8 @@ public sealed class GameOverUIController : MonoBehaviour
     {
         if (showing) return;
         NightFailed?.Invoke();
-
-        int currentCoins = CoinWallet.Instance != null ? CoinWallet.Instance.Coins : 0;
-        int earnedThisNight = CoinWallet.Instance != null ? CoinWallet.Instance.CoinsEarnedThisNight : 0;
-        int loss = Mathf.FloorToInt(earnedThisNight * Mathf.Clamp01(nightCoinLossPercent));
-        int finalCoins = Mathf.Max(0, currentCoins - loss);
-
-        if (CoinWallet.Instance != null)
-            CoinWallet.Instance.SetCoins(finalCoins);
-
-        rewardCountFrom = currentCoins;
-        rewardCountTo = finalCoins;
+        rewardCountFrom = CoinWallet.Instance != null ? CoinWallet.Instance.Coins : 0;
+        rewardCountTo = rewardCountFrom;
 
         // 밤 BGM 페이드아웃 → 게임오버 전용 곡 페이드인 (1회 재생)
         BGMManager.Instance?.EnterGameOverMusic();
@@ -175,7 +161,7 @@ public sealed class GameOverUIController : MonoBehaviour
         SetGroup(iconGroup, 0f, false);
         SetGroup(retryGroup, 0f, false);
         if (rewardText != null)
-            rewardText.text = rewardCountFrom.ToString("N0");
+            rewardText.text = string.IsNullOrEmpty(finalResultText) ? rewardCountFrom.ToString("N0") : finalResultText;
 
         // 배경 암전은 별도로 병렬 진행 (다른 UI 페이드와 동시에)
         StartCoroutine(FadeGroup(backgroundGroup, 0f, 1f, blackoutFadeDuration));
@@ -184,7 +170,7 @@ public sealed class GameOverUIController : MonoBehaviour
         yield return new WaitForSecondsRealtime(retryDelay);
         yield return FadeGroup(retryGroup, 0f, 1f, retryFadeDuration);
 
-        yield return PlayRewardCountDown();
+        if (string.IsNullOrEmpty(finalResultText)) yield return PlayRewardCountDown();
         SetGroup(retryGroup, 1f, true);
     }
 
@@ -199,12 +185,18 @@ public sealed class GameOverUIController : MonoBehaviour
             StopCoroutine(rewardCountRoutine);
             rewardCountRoutine = null;
         }
-        if (rewardText != null)
-            rewardText.text = rewardCountTo.ToString("N0");
-        HideInstant();
-        // 게임오버 곡 페이드아웃 → 낮 BGM 페이드인
-        BGMManager.Instance?.ReturnToDayMusic();
-        DayNightManager.Instance?.ReturnToCurrentDayAfterGameOver();
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    public static void ConfigureFinalResult(int score, int previousBest, int assault, int kills, float survivalSeconds)
+    {
+        if (instance == null) return;
+        bool newRecord = score > previousBest;
+        int minutes = Mathf.FloorToInt(survivalSeconds / 60f);
+        int seconds = Mathf.FloorToInt(survivalSeconds % 60f);
+        instance.finalResultText = $"최종 점수 {score:N0}\n{(newRecord ? "신기록!" : $"최고 기록 {previousBest:N0}")}  |  "
+            + $"생존 {minutes:00}:{seconds:00}  |  공세 {assault}  |  처치 {kills:N0}";
+        if (instance.rewardCoinImage != null) instance.rewardCoinImage.gameObject.SetActive(false);
     }
 
     private IEnumerator PlayRewardCountDown()
@@ -259,14 +251,11 @@ public sealed class GameOverUIController : MonoBehaviour
 
     private void ConfigureForSceneEditing()
     {
-        EnsureEventSystem();
-        EnsureCanvasInfrastructure();
-
-        if (buildMissingUi)
-            BuildMissingEditableUi();
-
         AutoAssignMissingReferences();
         ApplyDefaultSprites();
+
+        if (rootGroup == null || iconGroup == null || retryGroup == null || retryButton == null)
+            Debug.LogError("GameOverUIController의 씬 UI 참조가 비어 있습니다.", this);
 
         if (retryButtonText != null)
             retryButtonText.text = "Retry";

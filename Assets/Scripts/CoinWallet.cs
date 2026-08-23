@@ -69,4 +69,11 @@ public sealed class CoinWallet : MonoBehaviour
         Coins = Mathf.Max(0, amount);
         OnCoinsChanged?.Invoke(Coins);
     }
+
+    public void ResetForNewRun()
+    {
+        Coins = Mathf.Max(0, startingCoins);
+        CoinsEarnedThisNight = 0;
+        OnCoinsChanged?.Invoke(Coins);
+    }
 }

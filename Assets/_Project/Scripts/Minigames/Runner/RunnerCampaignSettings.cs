@@ -6,6 +6,97 @@ namespace StreamOn.Minigames.Runner
 {
     public enum RunnerCampaignLengthMode { Endless, FixedDays }
     public enum RunnerEquipmentType { Pc, Microphone, Fitness, Interior }
+    public enum BroadcastGameId { Runner, TileArena, PlasticKnightmare }
+
+    [Serializable]
+    public sealed class BroadcastTimeBonusRule
+    {
+        [Min(1)] public int broadcastScoreThreshold = 1000;
+        [Min(0f)] public float bonusSeconds = 10f;
+    }
+
+    [Serializable]
+    public sealed class BroadcastGameRule
+    {
+        public BroadcastGameId gameId;
+        public string displayName = "게임";
+        [Tooltip("러너/타일 아레나 방송의 기본 실제 시간입니다. Plastic Knightmare에서는 사용하지 않습니다.")]
+        [Min(1f)] public float baseDurationSeconds = 300f;
+        [Min(0f)] public float maximumBonusSeconds = 20f;
+        [Min(0f)] public float baseGameOverTimeLoss = 8f;
+        public List<BroadcastTimeBonusRule> timeBonuses = new List<BroadcastTimeBonusRule>();
+    }
+
+    [Serializable]
+    public sealed class BroadcasterLevelRule
+    {
+        [Min(1)] public int level = 1;
+        [Min(0)] public int experienceToNextLevel = 100;
+        [Min(0)] public int statPointsGranted = 1;
+    }
+
+    [Serializable]
+    public sealed class WitRankRule
+    {
+        [Min(0)] public int rank;
+        [Min(0)] public int upgradeCost;
+        [Min(0f)] public float correctHeatGainBonus;
+        [Min(0f)] public float responseTimeBonusSeconds;
+        [Range(0f, 1f)] public float twoCorrectAnswerChance;
+        [Min(0f)] public float advancedAnswerRewardMultiplier = 1f;
+        [Min(0)] public int correctStreakRequired;
+        [Min(1f)] public float correctStreakRewardMultiplier = 1f;
+        [Range(0f, 100f)] public float comebackHeatThreshold;
+        [Min(1f)] public float comebackRewardMultiplier = 1f;
+    }
+
+    [Serializable]
+        public sealed class MentalRankRule
+    {
+        [Min(0)] public int rank;
+        [Min(0)] public int upgradeCost;
+        [Range(0f, 1f)] public float ordinaryPenaltyReduction;
+        [Min(0.1f)] public float poorStateTickInterval = 2f;
+        [Range(0f, 1f)] public float neutralRecoveryTimeReduction;
+        [Min(0)] public int extraMistakesRequiredForPoorState;
+        [Range(0f, 1f)] public float oncePerBroadcastLargePenaltyReduction;
+        public bool protectsFirstMistakeAfterGoodPlay;
+        public bool correctWitClearsRecentMistakes;
+        [Min(0f)] public float mistakeClearCooldownSeconds = 20f;
+    }
+
+    [Serializable]
+    public sealed class StaminaRankRule
+    {
+        [Min(0)] public int rank;
+        [Min(0)] public int upgradeCost;
+        [Min(1f)] public float maximumFocus = 100f;
+        [Min(0f)] public float focusRecoveryBonus;
+        [Min(0f)] public float gameOverTimeLoss = 8f;
+        [Min(0f)] public float focusRecoveryDelayReduction;
+        [Range(0f, 1f)] public float focusDrainReduction;
+        [Min(0f)] public float depletionRecoveryAmount;
+    }
+
+    [Serializable]
+    public sealed class ManagerTierRule
+    {
+        [Min(0)] public int tier;
+        public string displayName = "매니저";
+        [Min(0)] public long unlockCost;
+        [Min(0)] public long hireCostPerBroadcast;
+        [Min(0)] public int usesPerBroadcast = 1;
+        [Min(0f)] public float handlingDelaySeconds = 12f;
+        public bool handlesFraternization;
+    }
+
+    [Serializable]
+    public sealed class PlasticNightScoreRule
+    {
+        [Min(1)] public int night = 1;
+        [Min(0)] public int ghostBaseScore = 25;
+        [Min(0)] public int clearBonus = 400;
+    }
 
     [Serializable]
     public sealed class RunnerCampaignActionDefinition
@@ -37,6 +128,7 @@ namespace StreamOn.Minigames.Runner
 
         [Header("Starting State")]
         [Min(0)] public int startingSubscribers = 0;
+        public string defaultStreamerName = "신입스트리머";
         [Range(1, 3)] public int startingMentalLevel = 1;
         [Min(1)] public int startingGameSkill = 1;
         [Min(1)] public int startingTalkingSkill = 1;
@@ -73,6 +165,100 @@ namespace StreamOn.Minigames.Runner
         [Min(1f)] public float maximumBroadcastSeconds = 600f;
         [Min(0f)] public float secondsPerHealthStatLevel = 60f;
 
+        [Header("New Broadcast Session Rules")]
+        public List<BroadcastGameRule> gameRules = new List<BroadcastGameRule>
+        {
+            new BroadcastGameRule { gameId = BroadcastGameId.Runner, displayName = "러너", baseDurationSeconds = 300f,
+                maximumBonusSeconds = 20f, baseGameOverTimeLoss = 8f,
+                timeBonuses = new List<BroadcastTimeBonusRule> { new BroadcastTimeBonusRule { broadcastScoreThreshold = 2500, bonusSeconds = 10f }, new BroadcastTimeBonusRule { broadcastScoreThreshold = 6000, bonusSeconds = 10f } } },
+            new BroadcastGameRule { gameId = BroadcastGameId.TileArena, displayName = "타일 아레나", baseDurationSeconds = 300f,
+                maximumBonusSeconds = 20f, baseGameOverTimeLoss = 8f,
+                timeBonuses = new List<BroadcastTimeBonusRule> { new BroadcastTimeBonusRule { broadcastScoreThreshold = 120, bonusSeconds = 10f }, new BroadcastTimeBonusRule { broadcastScoreThreshold = 300, bonusSeconds = 10f } } },
+            new BroadcastGameRule { gameId = BroadcastGameId.PlasticKnightmare, displayName = "Plastic Knightmare", baseDurationSeconds = 60f }
+        };
+        [Tooltip("열기 0/50/100에서 방송 점수에 곱해지는 배율입니다.")]
+        public AnimationCurve heatScoreMultiplier = new AnimationCurve(new Keyframe(0f, 0.85f), new Keyframe(50f, 1f), new Keyframe(100f, 1.25f));
+        [Min(0f)] public float sessionAutosaveIntervalSeconds = 5f;
+        [Header("Leaderboard")]
+        [Min(1)] public int leaderboardMaximumRows = 50;
+        public bool useOnlineLeaderboard;
+        [Tooltip("Unity Dashboard에서 만든 UGS Environment 이름입니다.")]
+        public string leaderboardEnvironmentName = "production";
+        [Tooltip("러너 게임 최고점수 UGS Leaderboard ID")]
+        public string runnerLeaderboardId = "stream-on-runner";
+        [Tooltip("타일 아레나 최고점수 UGS Leaderboard ID")]
+        public string tileArenaLeaderboardId = "stream-on-tile-arena";
+        [Tooltip("Plastic Knightmare 최고점수 UGS Leaderboard ID")]
+        public string plasticKnightmareLeaderboardId = "stream-on-plastic-knightmare";
+        [Tooltip("현재 팔로워 수 UGS Leaderboard ID. Dashboard에서는 Update Type을 Latest Score로 설정합니다.")]
+        public string followerLeaderboardId = "stream-on-followers";
+        [Tooltip("기록 저장 시 전송 대기열에 자동 등록하고, 온라인 연결 시 전송합니다.")]
+        public bool automaticallySubmitLeaderboardRecords = true;
+        [Min(1)] public int maximumPendingLeaderboardSubmissions = 4;
+
+        [Header("Broadcaster Level & Stat Points")]
+        [Min(1)] public int maximumBroadcasterLevel = 20;
+        [Min(0)] public int startingBroadcasterLevel = 1;
+        [Min(0)] public int startingStatPoints = 1;
+        public List<BroadcasterLevelRule> broadcasterLevels = new List<BroadcasterLevelRule>();
+        public List<WitRankRule> witRanks = new List<WitRankRule>();
+        public List<MentalRankRule> mentalRanks = new List<MentalRankRule>();
+        public List<StaminaRankRule> staminaRanks = new List<StaminaRankRule>();
+        [Min(0)] public int broadcastCompletionExperience = 45;
+        [Min(0)] public int broadcastRatingExperiencePerPoint = 5;
+        [Min(0)] public int newRecordExperience = 30;
+        [Min(0)] public int correctModerationExperience = 15;
+        [Min(0)] public int correctWitExperience = 6;
+        [Min(0)] public int runnerObstacleClearExperience = 1;
+        [Min(0)] public int runnerEnemyDefeatExperience = 2;
+        [Min(0)] public int tileStageClearExperience = 8;
+        [Min(0)] public int plasticNightClearExperience = 25;
+        [Min(0)] public int maximumExperiencePerBroadcast = 120;
+        [Min(0)] public long respecCashCost = 2500;
+        public bool firstRespecIsFree = true;
+
+        [Header("Focus / Slow Motion")]
+        [Range(0.01f, 1f)] public float slowMotionTimeScale = 0.24f;
+        [Min(0f)] public float focusDrainPerSecond = 24f;
+        [Min(0f)] public float focusRecoveryPerSecond = 13f;
+        [Min(0f)] public float focusRecoveryDelaySeconds = 1.5f;
+        [Min(0f)] public float heatGaugeVisualSpeed = 55f;
+        [Min(0f)] public float largeHeatPenaltyThreshold = 8f;
+
+        [Header("Manager")]
+        public List<ManagerTierRule> managerTiers = new List<ManagerTierRule>
+        {
+            new ManagerTierRule { tier = 1, displayName = "연습생 매니저", unlockCost = 2500, hireCostPerBroadcast = 500, usesPerBroadcast = 1, handlingDelaySeconds = 12f },
+            new ManagerTierRule { tier = 2, displayName = "일반 매니저", unlockCost = 8000, hireCostPerBroadcast = 1200, usesPerBroadcast = 2, handlingDelaySeconds = 8f },
+            new ManagerTierRule { tier = 3, displayName = "프로 매니저", unlockCost = 20000, hireCostPerBroadcast = 2500, usesPerBroadcast = 3, handlingDelaySeconds = 5f, handlesFraternization = true }
+        };
+
+        [Header("Plastic Knightmare Broadcast")]
+        [Min(1f)] public float plasticDayPreparationSeconds = 60f;
+        [Range(0f, 100f)] public float plasticNightStartingHeatMinimum = 40f;
+        [Range(0f, 100f)] public float plasticNightStartingHeatMaximum = 60f;
+        [Min(0)] public int plasticBedHealthScore = 200;
+        [Min(0)] public int plasticSurvivingFacilityScore = 40;
+        [Min(0)] public int plasticNoHitBonus = 250;
+        [Min(0)] public int plasticFollowerGainPerClearedNight = 8;
+        [Min(0)] public int plasticFollowerLossOnFailure = 4;
+        [Min(0)] public int plasticDonationCapPerNight = 10000;
+        [Min(0f)] public float plasticDonationWonPerBroadcastPoint = 0.4f;
+        [Min(0)] public int plasticStartingViewers = 3;
+        [Min(0)] public int plasticMaximumViewers = 100000;
+        [Min(0f)] public float plasticViewersPerNight = 1.5f;
+        [Range(0f, 1f)] public float plasticGhostDonationChance = .08f;
+        [Min(0)] public int plasticFollowersPerHeatBand = 2;
+        [Min(1f)] public float plasticFollowerHeatBandSize = 25f;
+        [Min(0f)] public float plasticRatingScoreTargetMultiplier = 3f;
+        public int[] plasticGhostTierScoreMultipliers = { 1, 2, 3 };
+        public List<PlasticNightScoreRule> plasticNightScoreRules = new List<PlasticNightScoreRule>
+        {
+            new PlasticNightScoreRule { night = 1, ghostBaseScore = 25, clearBonus = 400 },
+            new PlasticNightScoreRule { night = 5, ghostBaseScore = 40, clearBonus = 700 },
+            new PlasticNightScoreRule { night = 10, ghostBaseScore = 60, clearBonus = 1100 }
+        };
+
         [Header("Broadcast Retry Rules")]
         [Tooltip("게임오버 한 번마다 방송의 남은 시간에서 차감되는 시간입니다.")]
         [Min(0f)] public float gameOverTimePenaltySeconds = 8f;
@@ -91,6 +277,9 @@ namespace StreamOn.Minigames.Runner
         [Min(0f)] public float donationBonusPerMicrophoneUpgrade = 0.08f;
         [Min(0f)] public float broadcastSecondsPerFitnessUpgrade = 30f;
         [Min(0f)] public float startingViewersPerInteriorUpgrade = 2f;
+        [Min(0f)] public float managerDelayReductionPerPcUpgrade = 0.08f;
+        [Min(0f)] public float focusCapacityPerFitnessUpgrade = 15f;
+        [Min(0f)] public float focusRecoveryPerFitnessUpgrade = 0.10f;
 
         [Header("Result Balance")]
         public int successBaseSubscriberGain = 10;
@@ -138,6 +327,26 @@ namespace StreamOn.Minigames.Runner
             return Mathf.Clamp(duration, minimumBroadcastSeconds, maximumBroadcastSeconds + broadcastSecondsPerFitnessUpgrade * 2f);
         }
 
+        public BroadcastGameRule GameRule(BroadcastGameId gameId)
+        {
+            BroadcastGameRule rule = gameRules?.Find(candidate => candidate != null && candidate.gameId == gameId);
+            return rule ?? new BroadcastGameRule { gameId = gameId, displayName = gameId.ToString(), baseDurationSeconds = baseBroadcastSeconds, baseGameOverTimeLoss = gameOverTimePenaltySeconds };
+        }
+
+        public string LeaderboardId(BroadcastGameId gameId, bool followerBoard)
+        {
+            if (followerBoard) return followerLeaderboardId;
+            return gameId == BroadcastGameId.Runner ? runnerLeaderboardId
+                : gameId == BroadcastGameId.TileArena ? tileArenaLeaderboardId
+                : plasticKnightmareLeaderboardId;
+        }
+
+        public float HeatScoreMultiplier(float heat) => Mathf.Max(0f, heatScoreMultiplier != null ? heatScoreMultiplier.Evaluate(Mathf.Clamp(heat, 0f, 100f)) : 1f);
+        public WitRankRule WitRule(int rank) => RuleAt(witRanks, rank);
+        public MentalRankRule MentalRule(int rank) => RuleAt(mentalRanks, rank);
+        public StaminaRankRule StaminaRule(int rank) => RuleAt(staminaRanks, rank);
+        private static T RuleAt<T>(List<T> rules, int rank) where T : class => rules != null && rules.Count > 0 ? rules[Mathf.Clamp(rank, 0, rules.Count - 1)] : null;
+
         public int UpgradeCost(RunnerEquipmentType type, int targetLevel)
         {
             int[] costs = type switch
@@ -172,6 +381,7 @@ namespace StreamOn.Minigames.Runner
 
         private void OnValidate()
         {
+            EnsureNewProgressionRules();
             fixedMaximumDays = Mathf.Max(1, fixedMaximumDays);
             scorePerSubscriber = Mathf.Max(1, scorePerSubscriber);
             maximumTargetScore = Mathf.Max(firstDayTargetScore, maximumTargetScore);
@@ -195,6 +405,97 @@ namespace StreamOn.Minigames.Runner
             EnsureUpgradeCosts(ref microphoneUpgradeCosts, 4000, 12000);
             EnsureUpgradeCosts(ref fitnessUpgradeCosts, 3500, 10000);
             EnsureUpgradeCosts(ref interiorUpgradeCosts, 3000, 9000);
+        }
+
+        private void EnsureNewProgressionRules()
+        {
+            if (gameRules == null) gameRules = new List<BroadcastGameRule>();
+            if (!gameRules.Exists(rule => rule != null && rule.gameId == BroadcastGameId.Runner))
+                gameRules.Add(new BroadcastGameRule
+                {
+                    gameId = BroadcastGameId.Runner, displayName = "러너", baseDurationSeconds = 300f,
+                    maximumBonusSeconds = 20f, baseGameOverTimeLoss = 8f,
+                    timeBonuses = new List<BroadcastTimeBonusRule>
+                    {
+                        new BroadcastTimeBonusRule { broadcastScoreThreshold = 2500, bonusSeconds = 10f },
+                        new BroadcastTimeBonusRule { broadcastScoreThreshold = 6000, bonusSeconds = 10f }
+                    }
+                });
+            if (!gameRules.Exists(rule => rule != null && rule.gameId == BroadcastGameId.TileArena))
+                gameRules.Add(new BroadcastGameRule
+                {
+                    gameId = BroadcastGameId.TileArena, displayName = "타일 아레나", baseDurationSeconds = 300f,
+                    maximumBonusSeconds = 20f, baseGameOverTimeLoss = 8f,
+                    timeBonuses = new List<BroadcastTimeBonusRule>
+                    {
+                        new BroadcastTimeBonusRule { broadcastScoreThreshold = 120, bonusSeconds = 10f },
+                        new BroadcastTimeBonusRule { broadcastScoreThreshold = 300, bonusSeconds = 10f }
+                    }
+                });
+            if (!gameRules.Exists(rule => rule != null && rule.gameId == BroadcastGameId.PlasticKnightmare))
+                gameRules.Add(new BroadcastGameRule
+                {
+                    gameId = BroadcastGameId.PlasticKnightmare, displayName = "Plastic Knightmare", baseDurationSeconds = 60f
+                });
+            maximumBroadcasterLevel = Mathf.Max(1, maximumBroadcasterLevel);
+            if (broadcasterLevels == null) broadcasterLevels = new List<BroadcasterLevelRule>();
+            if (broadcasterLevels.Count == 0)
+                for (int level = 1; level <= maximumBroadcasterLevel; level++)
+                    broadcasterLevels.Add(new BroadcasterLevelRule
+                    {
+                        level = level,
+                        experienceToNextLevel = 70 + level * 15,
+                        statPointsGranted = level == 10 || level == 20 ? 2 : 1
+                    });
+            if (witRanks == null || witRanks.Count != 6)
+                witRanks = new List<WitRankRule>
+                {
+                    new WitRankRule { rank = 0, upgradeCost = 0, advancedAnswerRewardMultiplier = 1f },
+                    new WitRankRule { rank = 1, upgradeCost = 1, correctHeatGainBonus = .15f, responseTimeBonusSeconds = .75f, advancedAnswerRewardMultiplier = 1f },
+                    new WitRankRule { rank = 2, upgradeCost = 2, correctHeatGainBonus = .30f, responseTimeBonusSeconds = 1.5f, twoCorrectAnswerChance = .25f, advancedAnswerRewardMultiplier = 1f },
+                    new WitRankRule { rank = 3, upgradeCost = 3, correctHeatGainBonus = .45f, responseTimeBonusSeconds = 2.25f, twoCorrectAnswerChance = .50f, advancedAnswerRewardMultiplier = 1f, correctStreakRequired = 3, correctStreakRewardMultiplier = 1.35f },
+                    new WitRankRule { rank = 4, upgradeCost = 4, correctHeatGainBonus = .60f, responseTimeBonusSeconds = 3f, twoCorrectAnswerChance = .75f, advancedAnswerRewardMultiplier = 1f, correctStreakRequired = 3, correctStreakRewardMultiplier = 1.35f, comebackHeatThreshold = 35f, comebackRewardMultiplier = 1.55f },
+                    new WitRankRule { rank = 5, upgradeCost = 5, correctHeatGainBonus = .80f, responseTimeBonusSeconds = 4f, twoCorrectAnswerChance = 1f, advancedAnswerRewardMultiplier = 1.3f, correctStreakRequired = 3, correctStreakRewardMultiplier = 1.45f, comebackHeatThreshold = 40f, comebackRewardMultiplier = 1.7f }
+                };
+            foreach (WitRankRule rule in witRanks)
+            {
+                if (rule == null) continue;
+                rule.advancedAnswerRewardMultiplier = Mathf.Max(1f, rule.advancedAnswerRewardMultiplier);
+                rule.correctStreakRewardMultiplier = Mathf.Max(1f, rule.correctStreakRewardMultiplier);
+                rule.comebackRewardMultiplier = Mathf.Max(1f, rule.comebackRewardMultiplier);
+                // Existing serialized assets predate these traits. Populate only the
+                // missing high-rank defaults; afterwards every value stays editable.
+                if (rule.rank >= 3 && rule.correctStreakRequired <= 0)
+                {
+                    rule.correctStreakRequired = 3;
+                    rule.correctStreakRewardMultiplier = rule.rank >= 5 ? 1.45f : 1.35f;
+                }
+                if (rule.rank >= 4 && rule.comebackHeatThreshold <= 0f)
+                {
+                    rule.comebackHeatThreshold = rule.rank >= 5 ? 40f : 35f;
+                    rule.comebackRewardMultiplier = rule.rank >= 5 ? 1.7f : 1.55f;
+                }
+            }
+            if (mentalRanks == null || mentalRanks.Count != 6)
+                mentalRanks = new List<MentalRankRule>
+                {
+                    new MentalRankRule { rank = 0, upgradeCost = 0, poorStateTickInterval = 2f },
+                    new MentalRankRule { rank = 1, upgradeCost = 1, ordinaryPenaltyReduction = .12f, poorStateTickInterval = 2.3f, neutralRecoveryTimeReduction = .10f },
+                    new MentalRankRule { rank = 2, upgradeCost = 2, ordinaryPenaltyReduction = .24f, poorStateTickInterval = 2.6f, neutralRecoveryTimeReduction = .20f, protectsFirstMistakeAfterGoodPlay = true },
+                    new MentalRankRule { rank = 3, upgradeCost = 3, ordinaryPenaltyReduction = .36f, poorStateTickInterval = 3f, neutralRecoveryTimeReduction = .30f, protectsFirstMistakeAfterGoodPlay = true, correctWitClearsRecentMistakes = true, mistakeClearCooldownSeconds = 20f },
+                    new MentalRankRule { rank = 4, upgradeCost = 4, ordinaryPenaltyReduction = .48f, poorStateTickInterval = 3.5f, neutralRecoveryTimeReduction = .40f, extraMistakesRequiredForPoorState = 1, protectsFirstMistakeAfterGoodPlay = true, correctWitClearsRecentMistakes = true, mistakeClearCooldownSeconds = 20f },
+                    new MentalRankRule { rank = 5, upgradeCost = 5, ordinaryPenaltyReduction = .60f, poorStateTickInterval = 4f, neutralRecoveryTimeReduction = .50f, extraMistakesRequiredForPoorState = 1, oncePerBroadcastLargePenaltyReduction = .80f, protectsFirstMistakeAfterGoodPlay = true, correctWitClearsRecentMistakes = true, mistakeClearCooldownSeconds = 20f }
+                };
+            if (staminaRanks == null || staminaRanks.Count != 6)
+                staminaRanks = new List<StaminaRankRule>
+                {
+                    new StaminaRankRule { rank = 0, upgradeCost = 0, maximumFocus = 100f, gameOverTimeLoss = 8f },
+                    new StaminaRankRule { rank = 1, upgradeCost = 1, maximumFocus = 120f, focusRecoveryBonus = .15f, gameOverTimeLoss = 7.5f },
+                    new StaminaRankRule { rank = 2, upgradeCost = 2, maximumFocus = 140f, focusRecoveryBonus = .30f, gameOverTimeLoss = 7f, focusRecoveryDelayReduction = .7f },
+                    new StaminaRankRule { rank = 3, upgradeCost = 3, maximumFocus = 160f, focusRecoveryBonus = .45f, gameOverTimeLoss = 6.5f, focusRecoveryDelayReduction = .7f, focusDrainReduction = .08f },
+                    new StaminaRankRule { rank = 4, upgradeCost = 4, maximumFocus = 190f, focusRecoveryBonus = .60f, gameOverTimeLoss = 6f, focusRecoveryDelayReduction = .7f, focusDrainReduction = .15f },
+                    new StaminaRankRule { rank = 5, upgradeCost = 5, maximumFocus = 220f, focusRecoveryBonus = .80f, gameOverTimeLoss = 5.5f, focusRecoveryDelayReduction = .7f, focusDrainReduction = .20f, depletionRecoveryAmount = 35f }
+                };
         }
 
         private static void EnsureUpgradeCosts(ref int[] values, int level2, int level3)
@@ -261,9 +562,20 @@ namespace StreamOn.Minigames.Runner
     }
 
     [Serializable]
+    public sealed class BroadcastLeaderboardRecord
+    {
+        public BroadcastGameId gameId;
+        public int highestClearedNight;
+        public int bestBroadcastScore;
+        public string achievedAtUtc;
+    }
+
+    [Serializable]
     public sealed class RunnerCampaignSaveData
     {
         public int version = RunnerCampaignSaveStore.CurrentVersion;
+        public string streamerName;
+        public string playerId;
         public int slot;
         public string savedAtUtc;
         public int day;
@@ -297,6 +609,30 @@ namespace StreamOn.Minigames.Runner
         public float broadcastSessionDurationSeconds;
         public float broadcastSessionRemainingSeconds;
         public float broadcastSessionElapsedSeconds;
+        public string broadcastSessionGameId;
+        public int broadcastSessionRawScore;
+        public int broadcastSessionScore;
+        public float broadcastSessionGrantedBonusSeconds;
+        public int broadcastSessionNextBonusIndex;
+        public int broadcasterLevel = 1;
+        public int broadcasterExperience;
+        public int broadcastSessionExperienceEarned;
+        public int unspentStatPoints = 1;
+        public int witRank;
+        public int mentalRank;
+        public int staminaRank;
+        public bool freeRespecUsed;
+        public int unlockedManagerTier;
+        public int hiredManagerTier;
+        public int managerUsesRemaining;
+        public int bestRunnerBroadcastScore;
+        public int bestTileArenaBroadcastScore;
+        public int bestRunnerGameScore;
+        public int bestTileArenaGameScore;
+        public int bestPlasticNight;
+        public int bestPlasticBroadcastScoreAtNight;
+        public int bestPlasticGameScoreAtNight;
+        public List<BroadcastLeaderboardRecord> leaderboardRecords = new List<BroadcastLeaderboardRecord>();
         public PlasticKnightmareSaveData plasticKnightmare = new PlasticKnightmareSaveData();
         public List<RunnerCampaignDayRecord> records = new List<RunnerCampaignDayRecord>();
     }

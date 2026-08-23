@@ -60,6 +60,9 @@ namespace StreamOn.Minigames.Runner
         private int _moderationFollowerBonus;
         private readonly RunnerBroadcastPerformanceMeter _performanceMeter = new RunnerBroadcastPerformanceMeter();
         private float _bufferedHypeChange;
+        private bool _cleanMistakeProtectionUsed;
+        private bool _largePenaltyProtectionUsed;
+        private float _nextMistakeClearAt;
 
         public void Configure(RunnerBroadcastGrowthSettings settings, RunnerGameManager gameManager, RunnerChatController chat)
         {
@@ -80,13 +83,12 @@ namespace StreamOn.Minigames.Runner
         {
             if (_settings == null) return;
             _followers = Mathf.Max(0, followers);
-            _gameSkill = Mathf.Max(1, gameSkill);
-            _talkingSkill = Mathf.Max(1, talkingSkill);
-            _mentalLevel = Mathf.Clamp(mentalLevel, 1, 3);
+            _gameSkill = 0;
+            _talkingSkill = 1;
+            _mentalLevel = 1;
             Hype = _settings.startingHype;
             CurrentViewers = Mathf.Max(0, Mathf.RoundToInt(_settings.baseDiscoveryViewers
                 + _followers * _settings.followerNotificationRate
-                + _talkingSkill * _settings.viewersPerTalkingSkill
                 + Mathf.Max(0, _interiorLevel - 1) * (_gameManager != null && _gameManager.CampaignSettings != null
                     ? _gameManager.CampaignSettings.startingViewersPerInteriorUpgrade : 0f)));
             PeakViewers = CurrentViewers;
@@ -104,6 +106,9 @@ namespace StreamOn.Minigames.Runner
             _socialFollowerPenalty = 0f;
             _moderationFollowerBonus = 0;
             _running = true;
+            _cleanMistakeProtectionUsed = false;
+            _largePenaltyProtectionUsed = false;
+            _nextMistakeClearAt = 0f;
             RunnerBroadcastHeatGauge.Show(Hype);
             RefreshChatScale();
         }
@@ -112,8 +117,13 @@ namespace StreamOn.Minigames.Runner
         {
             if (!_running || _settings == null || _gameManager == null || !_gameManager.BroadcastActive) return;
             _viewerSeconds += CurrentViewers * Time.deltaTime;
-            float performanceStep = _performanceMeter.Tick(Time.time, _settings);
+            MentalRankRule mental = CurrentMentalRule();
+            float performanceStep = _performanceMeter.Tick(Time.time, _settings,
+                mental != null ? mental.poorStateTickInterval : -1f,
+                mental != null ? mental.extraMistakesRequiredForPoorState : 0,
+                mental != null ? mental.neutralRecoveryTimeReduction : 0f);
             if (!Mathf.Approximately(performanceStep, 0f)) ApplyPerformanceHeatStep(performanceStep);
+            if (_performanceMeter.State != BroadcastPerformanceState.Good) _cleanMistakeProtectionUsed = false;
             ApplyBufferedHype(Time.deltaTime);
             Hype = Mathf.MoveTowards(Hype, _settings.restingHype, _settings.hypeReturnPerSecond * Time.deltaTime);
             RunnerBroadcastHeatGauge.SetValue(Hype);
@@ -126,6 +136,8 @@ namespace StreamOn.Minigames.Runner
         public void OnObstacleCleared()
         {
             _performanceMeter.RecordSuccess(Time.time, _settings);
+            GrantGameplayExperience(_gameManager != null && _gameManager.CampaignSettings != null
+                ? _gameManager.CampaignSettings.runnerObstacleClearExperience : 0);
             _witInteraction?.NotifySafeMoment("러너에서 방금 장애물을 깔끔하게 통과함");
             TryLiveDonation(_settings != null ? _settings.obstacleClearDonationChance : 0f, "깔끔하게 피하네! 계속 가자");
         }
@@ -133,6 +145,8 @@ namespace StreamOn.Minigames.Runner
         public void OnEnemyDefeated()
         {
             _performanceMeter.RecordSuccess(Time.time, _settings);
+            GrantGameplayExperience(_gameManager != null && _gameManager.CampaignSettings != null
+                ? _gameManager.CampaignSettings.runnerEnemyDefeatExperience : 0);
             _witInteraction?.NotifySafeMoment("러너에서 방금 적을 정확한 타이밍에 처치함");
             TryLiveDonation(_settings != null ? _settings.enemyDefeatDonationChance : 0f, "방금 공격 타이밍 좋았다!");
         }
@@ -140,6 +154,13 @@ namespace StreamOn.Minigames.Runner
         public void OnPlayerHit(bool lowHealth)
         {
             if (_settings == null) return;
+            MentalRankRule mental = CurrentMentalRule();
+            if (mental != null && mental.protectsFirstMistakeAfterGoodPlay
+                && _performanceMeter.State == BroadcastPerformanceState.Good && !_cleanMistakeProtectionUsed)
+            {
+                _cleanMistakeProtectionUsed = true;
+                return;
+            }
             _performanceMeter.RecordMistake(Time.time, _settings);
         }
 
@@ -152,14 +173,16 @@ namespace StreamOn.Minigames.Runner
         public void OnNewHighScore() => AddHype(_settings != null ? _settings.newHighScoreHype : 0f);
 
         public void OnModerationResult(bool correct) => AddHype(_settings == null ? 0f
-            : correct ? _settings.correctModerationHype : _settings.wrongModerationHype);
+            : correct ? _settings.correctModerationHype : _settings.wrongModerationHype, correct ? 1f : 0f);
 
         public void OnFraternizationTick()
         {
-            AddHype(_settings != null ? _settings.fraternizationOngoingHype : 0f);
-            int leaving = Mathf.Max(1, Mathf.CeilToInt(CurrentViewers * 0.018f));
+            AddHype(_settings != null ? _settings.fraternizationOngoingHype : 0f, .5f);
+            int leaving = Mathf.Max(_settings.socialMinimumViewerLeave,
+                Mathf.CeilToInt(CurrentViewers * _settings.socialViewerLeaveFraction));
             CurrentViewers = Mathf.Max(0, CurrentViewers - leaving);
-            _socialFollowerPenalty += Mathf.Max(0.18f, _followers * 0.0008f);
+            _socialFollowerPenalty += Mathf.Max(_settings.socialFollowerPenaltyMinimum,
+                _followers * _settings.socialFollowerPenaltyPerFollower);
             RefreshChatScale();
         }
 
@@ -169,11 +192,12 @@ namespace StreamOn.Minigames.Runner
                 _settings.quickFraternizationResponseSeconds, responseSeconds) : 0f;
             AddHype(_settings != null ? Mathf.Lerp(_settings.slowFraternizationResolutionHype,
                 _settings.quickFraternizationResolutionHype, quick) : 0f);
-            int returning = Mathf.Max(1, Mathf.CeilToInt(CurrentViewers * Mathf.Lerp(0.02f, 0.07f, quick)));
+            int returning = Mathf.Max(_settings.socialMinimumViewerLeave, Mathf.CeilToInt(CurrentViewers
+                * Mathf.Lerp(_settings.socialResolutionViewerReturnMinimum, _settings.socialResolutionViewerReturnMaximum, quick)));
             CurrentViewers += returning;
             TotalVisitors += returning;
             PeakViewers = Mathf.Max(PeakViewers, CurrentViewers);
-            _moderationFollowerBonus += Mathf.RoundToInt(Mathf.Lerp(0f, 3f, quick));
+            _moderationFollowerBonus += Mathf.RoundToInt(Mathf.Lerp(0f, _settings.socialResolutionFollowerBonusMaximum, quick));
             RefreshChatScale();
         }
 
@@ -190,10 +214,14 @@ namespace StreamOn.Minigames.Runner
             float survivalRatio = completed ? 1f : Mathf.Clamp01(elapsedSeconds / Mathf.Max(1f, durationSeconds));
             float gameplayRating = 1f + scoreRatio * 4f;
             float survivalRating = 1f + survivalRatio * 4f;
-            float safetyRating = Mathf.Clamp(5f - hitsTaken * 1.15f, 1f, 5f);
-            float combatRating = Mathf.Clamp(2.5f + enemiesDefeated * 0.35f - hitsTaken * 0.35f, 1f, 5f);
+            float safetyRating = Mathf.Clamp(5f - hitsTaken * _settings.runnerSafetyPenaltyPerHit, 1f, 5f);
+            float combatRating = Mathf.Clamp(_settings.runnerCombatRatingBase
+                + enemiesDefeated * _settings.runnerCombatRatingPerEnemy
+                - hitsTaken * _settings.runnerCombatRatingPenaltyPerHit, 1f, 5f);
             float finalHeat = Mathf.Clamp(Hype + _bufferedHypeChange, 0f, 100f);
-            float hostingRating = Mathf.Clamp(2.2f + (_talkingSkill - 1) * 0.28f + finalHeat / 100f * 1.6f
+            float hostingRating = Mathf.Clamp(_settings.runnerHostingRatingBase
+                + (_talkingSkill - 1) * _settings.runnerHostingRatingPerTalkingLevel
+                + finalHeat / 100f * _settings.runnerHostingRatingHeatRange
                 + _witHostingBonus, 1f, 5f);
             float weight = Mathf.Max(0.01f, _settings.gameplayRatingWeight + _settings.survivalRatingWeight
                 + _settings.safetyRatingWeight + _settings.combatRatingWeight + _settings.hostingRatingWeight);
@@ -210,7 +238,8 @@ namespace StreamOn.Minigames.Runner
                     ? _gameManager.CampaignSettings.followerConversionBonusPerMicrophoneUpgrade : 0f)
                 + (completed ? _settings.completionFollowBonus : 0f);
             float heat01 = finalHeat / 100f;
-            conversion *= Mathf.Lerp(0f, 1.4f, Mathf.InverseLerp(20f, 100f, finalHeat));
+            conversion *= Mathf.Lerp(0f, _settings.followHeatMaximumMultiplier,
+                Mathf.InverseLerp(_settings.followHeatMinimum, _settings.followHeatMaximum, finalHeat));
             conversion = Mathf.Clamp(conversion, 0f, _settings.maximumFollowConversion);
             int gained = Mathf.Max(0, Mathf.RoundToInt(TotalVisitors * conversion) + _moderationFollowerBonus);
             int lost = finalRating < _settings.unfollowRatingThreshold
@@ -226,7 +255,8 @@ namespace StreamOn.Minigames.Runner
                 * (1f + Mathf.Max(0, _talkingSkill - 1) * _settings.donationBonusPerTalkingLevel)
                 * (1f + Mathf.Max(0, _microphoneLevel - 1) * (_gameManager != null && _gameManager.CampaignSettings != null
                     ? _gameManager.CampaignSettings.donationBonusPerMicrophoneUpgrade : 0f))
-                * _settings.wonPerViewerRatingPoint * Mathf.Lerp(0.45f, 1.65f, heat01) * donationVariation));
+                * _settings.wonPerViewerRatingPoint * Mathf.Lerp(_settings.donationValueMultiplierAtZeroHeat,
+                    _settings.donationValueMultiplierAtFullHeat, heat01) * donationVariation));
 
             LastResult = new RunnerBroadcastResult
             {
@@ -258,15 +288,14 @@ namespace StreamOn.Minigames.Runner
             float target = _settings.baseDiscoveryViewers
                 + _followers * _settings.followerNotificationRate
                 + Hype * _settings.viewersPerHypePoint
-                + _gameSkill * _settings.viewersPerGameSkill
-                + _talkingSkill * _settings.viewersPerTalkingSkill;
+                ;
             float heat01 = Hype / 100f;
-            target *= Mathf.Lerp(0.55f, 1.25f, heat01);
+            target *= Mathf.Lerp(_settings.viewerTargetMultiplierAtZeroHeat, _settings.viewerTargetMultiplierAtFullHeat, heat01);
             target *= UnityEngine.Random.Range(1f - _settings.viewerRandomVariation, 1f + _settings.viewerRandomVariation);
             bool growing = target >= CurrentViewers;
             float adjustment = _settings.viewerAdjustmentRate * (growing
-                ? Mathf.Lerp(0.65f, 1.35f, heat01)
-                : Mathf.Lerp(1.55f, 0.70f, heat01));
+                ? Mathf.Lerp(_settings.viewerGrowthRateMultiplierAtZeroHeat, _settings.viewerGrowthRateMultiplierAtFullHeat, heat01)
+                : Mathf.Lerp(_settings.viewerDeclineRateMultiplierAtZeroHeat, _settings.viewerDeclineRateMultiplierAtFullHeat, heat01));
             int next = Mathf.Max(0, Mathf.RoundToInt(Mathf.Lerp(CurrentViewers, target, Mathf.Clamp01(adjustment))));
             if (next == CurrentViewers && CurrentViewers <= _settings.idleFluctuationMaximumViewers
                 && UnityEngine.Random.value < _settings.idleViewerFluctuationChance)
@@ -277,21 +306,41 @@ namespace StreamOn.Minigames.Runner
             RefreshChatScale();
         }
 
-        private void AddHype(float amount)
+        private void AddHype(float amount, float mentalReductionScale = 1f)
         {
             if (_settings == null) return;
             RunnerCampaignSettings campaignSettings = _gameManager != null ? _gameManager.CampaignSettings : null;
-            if (amount > 0f)
-                amount *= (1f + Mathf.Max(0, _mentalLevel - 1)
-                    * (campaignSettings != null ? campaignSettings.hypeGainBonusPerMentalLevel : 0f))
-                    * (1f + Mathf.Max(0, _talkingSkill - 1) * _settings.heatGainBonusPerTalkingLevel);
-            else if (amount < 0f)
-                amount *= Mathf.Max(0.1f, 1f - Mathf.Max(0, _mentalLevel - 1)
-                    * (campaignSettings != null ? campaignSettings.hypePenaltyReductionPerMentalLevel : 0f))
-                    * Mathf.Max(0.1f, 1f - Mathf.Max(0, _talkingSkill - 1)
-                        * _settings.heatPenaltyReductionPerTalkingLevel);
+            if (amount < 0f && campaignSettings != null
+                && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
+            {
+                MentalRankRule mental = campaignSettings.MentalRule(save.mentalRank);
+                float reduction = (mental?.ordinaryPenaltyReduction ?? 0f) * Mathf.Clamp01(mentalReductionScale);
+                if (!_largePenaltyProtectionUsed && Mathf.Abs(amount) >= campaignSettings.largeHeatPenaltyThreshold
+                    && mental != null && mental.oncePerBroadcastLargePenaltyReduction > 0f && mentalReductionScale > 0f)
+                {
+                    reduction = Mathf.Max(reduction, mental.oncePerBroadcastLargePenaltyReduction);
+                    _largePenaltyProtectionUsed = true;
+                }
+                amount *= 1f - reduction;
+            }
             _bufferedHypeChange = Mathf.Clamp(_bufferedHypeChange + amount,
                 -_settings.maximumBufferedHeatChange, _settings.maximumBufferedHeatChange);
+        }
+
+        private MentalRankRule CurrentMentalRule()
+        {
+            RunnerCampaignSettings campaignSettings = _gameManager != null ? _gameManager.CampaignSettings : null;
+            if (campaignSettings == null || !RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save)) return null;
+            return campaignSettings.MentalRule(save.mentalRank);
+        }
+
+        private void GrantGameplayExperience(int amount)
+        {
+            RunnerCampaignSettings campaignSettings = _gameManager != null ? _gameManager.CampaignSettings : null;
+            if (amount <= 0 || campaignSettings == null
+                || !RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save)) return;
+            BroadcasterProgression.AddBroadcastExperience(campaignSettings, save, amount);
+            RunnerCampaignSaveStore.Save(campaignSettings, save, true);
         }
 
         private void ApplyBufferedHype(float deltaTime)
@@ -315,8 +364,24 @@ namespace StreamOn.Minigames.Runner
             if (!_running || _settings == null) return;
             if (quality >= 2)
             {
-                float levelThreeMultiplier = quality >= 3 ? 1.35f : 1f;
+                RunnerCampaignSettings campaignSettings = _gameManager != null ? _gameManager.CampaignSettings : null;
+                WitRankRule wit = null;
+                MentalRankRule mental = null;
+                if (campaignSettings != null && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
+                {
+                    wit = campaignSettings.WitRule(save.witRank);
+                    mental = campaignSettings.MentalRule(save.mentalRank);
+                }
+                float perkMultiplier = quality >= 5 ? (wit != null ? wit.comebackRewardMultiplier : 1f)
+                    : quality >= 4 ? (wit != null ? wit.correctStreakRewardMultiplier : 1f)
+                    : quality >= 3 ? (wit != null ? wit.advancedAnswerRewardMultiplier : 1f) : 1f;
+                float levelThreeMultiplier = (1f + (wit != null ? wit.correctHeatGainBonus : 0f)) * perkMultiplier;
                 AddHype(_settings.witSuccessHype * levelThreeMultiplier);
+                if (mental != null && mental.correctWitClearsRecentMistakes && Time.unscaledTime >= _nextMistakeClearAt)
+                {
+                    _performanceMeter.ClearRecentMistakes();
+                    _nextMistakeClearAt = Time.unscaledTime + mental.mistakeClearCooldownSeconds;
+                }
                 _witHostingBonus = Mathf.Min(_settings.maximumWitHostingBonus,
                     _witHostingBonus + _settings.witHostingRatingBonus * levelThreeMultiplier);
                 _witFollowBonus = Mathf.Min(_settings.maximumWitFollowBonus,
@@ -342,7 +407,8 @@ namespace StreamOn.Minigames.Runner
             if (!_running || _settings == null || CurrentViewers < _settings.minimumViewersForDonation
                 || Time.unscaledTime < _nextDonationAt) return;
             float chance = baseChance * (1f + Mathf.Max(0, _talkingSkill - 1) * _settings.donationChancePerTalkingLevel);
-            chance *= Mathf.Lerp(0.25f, 1.85f, Hype / 100f);
+            chance *= Mathf.Lerp(_settings.donationEventChanceMultiplierAtZeroHeat,
+                _settings.donationEventChanceMultiplierAtFullHeat, Hype / 100f);
             if (UnityEngine.Random.value > chance) return;
             GrantLiveDonation(message);
         }
@@ -373,7 +439,8 @@ namespace StreamOn.Minigames.Runner
             if (_settings == null) { _nextAmbientDonationAt = float.PositiveInfinity; return; }
             float minimum = Mathf.Max(_settings.liveDonationCooldown, _settings.ambientDonationMinimumInterval);
             float maximum = Mathf.Max(minimum, _settings.ambientDonationMaximumInterval);
-            float intervalMultiplier = Mathf.Lerp(1.8f, 0.62f, Hype / 100f);
+            float intervalMultiplier = Mathf.Lerp(_settings.donationIntervalMultiplierAtZeroHeat,
+                _settings.donationIntervalMultiplierAtFullHeat, Hype / 100f);
             minimum *= intervalMultiplier;
             maximum *= intervalMultiplier;
             _nextAmbientDonationAt = Time.unscaledTime + UnityEngine.Random.Range(minimum, maximum);
@@ -391,8 +458,10 @@ namespace StreamOn.Minigames.Runner
         {
             float roll = UnityEngine.Random.value;
             float heat01 = Mathf.Clamp01(heat / 100f);
-            float largeChance = Mathf.Clamp01(settings.largeDonationChance * Mathf.Lerp(0.2f, 2.6f, heat01));
-            float mediumChance = Mathf.Clamp01(settings.mediumDonationChance * Mathf.Lerp(0.45f, 1.75f, heat01));
+            float largeChance = Mathf.Clamp01(settings.largeDonationChance * Mathf.Lerp(
+                settings.largeDonationChanceMultiplierAtZeroHeat, settings.largeDonationChanceMultiplierAtFullHeat, heat01));
+            float mediumChance = Mathf.Clamp01(settings.mediumDonationChance * Mathf.Lerp(
+                settings.mediumDonationChanceMultiplierAtZeroHeat, settings.mediumDonationChanceMultiplierAtFullHeat, heat01));
             if (roll < largeChance) return settings.largeDonationWon;
             if (roll < largeChance + mediumChance) return settings.mediumDonationWon;
             return settings.smallDonationWon;
@@ -423,7 +492,7 @@ namespace StreamOn.Minigames.Runner
             _chat?.ConfigureAudience(CurrentViewers, ChattingViewers,
                 _settings != null ? _settings.ChatDelayMultiplierForViewers(CurrentViewers) : 1f,
                 (_settings != null ? _settings.EventReactionChanceForViewers(CurrentViewers) : 1f)
-                    * Mathf.Lerp(0.72f, 1.18f, heat01),
+                    * Mathf.Lerp(_settings.eventReactionMultiplierAtZeroHeat, _settings.eventReactionMultiplierAtFullHeat, heat01),
                 _settings != null ? _settings.EventCooldownForViewers(CurrentViewers) : 0f, Hype);
         }
     }

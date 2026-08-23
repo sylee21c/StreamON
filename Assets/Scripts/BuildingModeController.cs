@@ -97,6 +97,11 @@ public sealed class BuildingModeController : MonoBehaviour
     [Tooltip("씬의 BuildableCellMarker 오브젝트가 위치한 칸에만 배치 허용")]
     [SerializeField] private bool restrictToBuildableMarkers = false;
 
+    [Header("Per-run Placement Limits")]
+    [SerializeField, Min(1)] private int maximumBricks = 80;
+    [SerializeField, Min(1)] private int maximumCompanions = 8;
+    [SerializeField, Min(1)] private int maximumTraps = 6;
+
     [Header("Brick Health")]
     [SerializeField] private float brickBaseHealth = 100f;
     [SerializeField] private float brickStackBonus = 30f;
@@ -687,6 +692,20 @@ public sealed class BuildingModeController : MonoBehaviour
         CompanionDefinition def = GetCompanionForCurrentSlot();
         if (def == null) return false;
 
+        int aliveCompanions = 0;
+        int aliveTraps = 0;
+        foreach (GameObject placed in placedCompanions.Values)
+        {
+            if (placed == null) continue;
+            aliveCompanions++;
+            if (placed.GetComponent<ChickenTrapCompanionAI>() != null) aliveTraps++;
+        }
+        if (aliveCompanions >= maximumCompanions || def.kind == CompanionKind.Trap && aliveTraps >= maximumTraps)
+        {
+            Debug.Log("[Companion] 이번 판의 배치 한도에 도달했습니다.");
+            return true;
+        }
+
         if (!hasHighlightedCell)
         {
             // 슬롯은 동료지만 아직 배치 못 함 (셀 조준 안 됨)
@@ -781,6 +800,11 @@ public sealed class BuildingModeController : MonoBehaviour
     private bool TryConsumeInventoryForBrick(BrickDefinition brick)
     {
         if (brick == null) return false;
+        if (CapturePlacedBricks().Count >= maximumBricks)
+        {
+            Debug.Log("[BuildingMode] 이번 판의 방벽 배치 한도에 도달했습니다.");
+            return false;
+        }
         BrickInventory.EnsureExists();
         if (!BrickInventory.Instance.TryConsume(brick.DisplayName, 1))
         {

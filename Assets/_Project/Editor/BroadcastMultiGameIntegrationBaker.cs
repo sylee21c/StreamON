@@ -150,7 +150,8 @@ namespace StreamOn.EditorTools
 
             TMP_Text file = CreateText(go.transform, "File Name", fileName, 21);
             file.color = new Color32(31, 34, 39, 255); file.fontStyle = FontStyles.Bold;
-            file.enableWordWrapping = false;
+            file.textWrappingMode = TextWrappingModes.NoWrap;
+            file.overflowMode = TextOverflowModes.Ellipsis;
             file.rectTransform.anchorMin = new Vector2(0, 0); file.rectTransform.anchorMax = new Vector2(1, 0);
             file.rectTransform.pivot = new Vector2(.5f, 0); file.rectTransform.anchoredPosition = new Vector2(0, 68); file.rectTransform.sizeDelta = new Vector2(-12, 38);
             TMP_Text kind = CreateText(go.transform, "File Type", typeLabel, 17);
@@ -245,11 +246,12 @@ namespace StreamOn.EditorTools
             TMP_Text timer = EnsureTimerHud(scene);
             SerializedObject so = new SerializedObject(controller);
             so.FindProperty("settings").objectReferenceValue = settings;
+            so.FindProperty("growthSettings").objectReferenceValue = settings.broadcastGrowthSettings;
             so.FindProperty("chat").objectReferenceValue = scene.GetRootGameObjects()
                 .SelectMany(root => root.GetComponentsInChildren<RunnerChatController>(true)).FirstOrDefault();
             so.FindProperty("settlementView").objectReferenceValue = scene.GetRootGameObjects()
                 .SelectMany(root => root.GetComponentsInChildren<RunnerBroadcastSettlementView>(true)).FirstOrDefault();
-            so.FindProperty("remainingTimeText").objectReferenceValue = timer;
+            so.FindProperty("phaseTimeText").objectReferenceValue = timer;
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);

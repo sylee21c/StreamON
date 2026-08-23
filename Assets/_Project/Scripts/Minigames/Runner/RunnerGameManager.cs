@@ -22,6 +22,8 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private float maximumSpeed = 20f;
         [SerializeField] private float speedGainPerSecond = 0.25f;
         [SerializeField] private float scorePerSecond = 10f;
+        [SerializeField, Min(0)] private int obstacleClearScore = 25;
+        [SerializeField, Min(0)] private int enemyDefeatScore = 75;
 
         [Header("Broadcast Retry Rules")]
         [SerializeField, Min(0f)] private float gameOverTimePenaltySeconds = 8f;
@@ -31,8 +33,6 @@ namespace StreamOn.Minigames.Runner
         [SerializeField, Min(1)] private int daysToMaximumDifficulty = 15;
         [SerializeField, Min(0f)] private float maximumStartingSpeedBonus = 3f;
         [SerializeField, Min(0f)] private float maximumSpeedLimitBonus = 4f;
-        [SerializeField, Min(1)] private int maximumEffectiveGameSkill = 10;
-        [SerializeField, Range(0f, 0.5f)] private float scoreBonusPerGameSkill = 0.08f;
 
         public RunnerGameState State { get; private set; } = RunnerGameState.Ready;
         public float WorldSpeed { get; private set; }
@@ -51,6 +51,8 @@ namespace StreamOn.Minigames.Runner
         public int AttemptsPlayed { get; private set; }
         public RunnerRunEndReason LastEndReason { get; private set; }
         public RunnerBroadcastResult BroadcastResult { get; private set; }
+        public int FinalRawGameScore { get; private set; }
+        public int FinalBroadcastScore { get; private set; }
         public RunnerCampaignSettings CampaignSettings => campaign != null ? campaign.Settings : null;
         public event Action<float> SpeedChanged;
 
@@ -62,6 +64,7 @@ namespace StreamOn.Minigames.Runner
         private Coroutine _broadcastFinishRoutine;
         private bool _broadcastActive;
         private int _bestAttemptScore;
+        private int _lastReportedAttemptScore;
 
         private void Awake()
         {
@@ -74,10 +77,13 @@ namespace StreamOn.Minigames.Runner
 
         private void Start()
         {
+            RunnerBroadcastSessionStore.TimeBonusGranted += HandleTimeBonusGranted;
             HighScore = RunnerUserSettingsStore.Load().runnerHighScore;
             if (campaign != null) campaign.Initialize(this);
             else BeginRun();
         }
+
+        private void OnDestroy() => RunnerBroadcastSessionStore.TimeBonusGranted -= HandleTimeBonusGranted;
 
         private void Update()
         {
@@ -85,14 +91,14 @@ namespace StreamOn.Minigames.Runner
             {
                 if (CampaignSettings != null && RunnerBroadcastSessionStore.IsActive)
                 {
-                    RunnerBroadcastSessionStore.Tick(Time.deltaTime);
+                    RunnerBroadcastSessionStore.Tick(Time.unscaledDeltaTime);
                     BroadcastElapsedSeconds = RunnerBroadcastSessionStore.ElapsedSeconds;
                     BroadcastSecondsRemaining = RunnerBroadcastSessionStore.RemainingSeconds;
                 }
                 else
                 {
-                    BroadcastElapsedSeconds += Time.deltaTime;
-                    BroadcastSecondsRemaining = Mathf.Max(0f, BroadcastSecondsRemaining - Time.deltaTime);
+                    BroadcastElapsedSeconds += Time.unscaledDeltaTime;
+                    BroadcastSecondsRemaining = Mathf.Max(0f, BroadcastSecondsRemaining - Time.unscaledDeltaTime);
                 }
                 if (State == RunnerGameState.GameOver)
                 {
@@ -106,6 +112,7 @@ namespace StreamOn.Minigames.Runner
             ElapsedSeconds += Time.deltaTime;
             _rawScore += scorePerSecond * _runScoreMultiplier * Time.deltaTime * (WorldSpeed / _runStartingSpeed);
             Score = Mathf.FloorToInt(_rawScore);
+            ReportRawScoreDelta();
             hud.SetScore(Score, HighScore, WorldSpeed, BroadcastSecondsRemaining);
             SpeedChanged?.Invoke(WorldSpeed);
         }
@@ -114,7 +121,11 @@ namespace StreamOn.Minigames.Runner
         {
             if (CampaignSettings != null && RunnerCampaignSaveStore.TryLoad(CampaignSettings, out RunnerCampaignSaveData sessionSave))
             {
-                RunnerBroadcastSessionStore.BeginOrResume(CampaignSettings, sessionSave);
+                if (!RunnerBroadcastSessionStore.BeginOrResume(CampaignSettings, sessionSave, BroadcastGameId.Runner))
+                {
+                    Debug.LogError("이미 다른 게임 방송이 진행 중이라 러너 방송을 시작할 수 없습니다.", this);
+                    return;
+                }
                 BroadcastDurationSeconds = RunnerBroadcastSessionStore.DurationSeconds;
                 BroadcastSecondsRemaining = RunnerBroadcastSessionStore.RemainingSeconds;
                 BroadcastElapsedSeconds = RunnerBroadcastSessionStore.ElapsedSeconds;
@@ -127,6 +138,8 @@ namespace StreamOn.Minigames.Runner
             HitsTaken = 0;
             LastEndReason = RunnerRunEndReason.None;
             BroadcastResult = null;
+            FinalRawGameScore = 0;
+            FinalBroadcastScore = 0;
             if (!RunnerBroadcastSessionStore.IsActive)
             {
                 BroadcastElapsedSeconds = 0f;
@@ -150,6 +163,7 @@ namespace StreamOn.Minigames.Runner
             WorldSpeed = _runStartingSpeed;
             _rawScore = 0f;
             Score = 0;
+            _lastReportedAttemptScore = 0;
             LastEndReason = RunnerRunEndReason.None;
             groundLooper?.ResetTiles();
             spawner.ResetRun();
@@ -190,17 +204,14 @@ namespace StreamOn.Minigames.Runner
             float gameOverPenaltySeconds = 8f, int pcLevel = 1, int microphoneLevel = 1, int interiorLevel = 1)
         {
             int dayIndex = Mathf.Max(0, day - 1);
-            int skillIndex = Mathf.Clamp(gameSkill - 1, 0, Mathf.Max(0, maximumEffectiveGameSkill - 1));
             float difficulty = Mathf.Clamp01(dayIndex / (float)Mathf.Max(1, daysToMaximumDifficulty));
             _runStartingSpeed = startingSpeed + maximumStartingSpeedBonus * difficulty;
             _runMaximumSpeed = maximumSpeed + maximumSpeedLimitBonus * difficulty;
-            float pcBonus = campaign != null && campaign.Settings != null
-                ? Mathf.Max(0, pcLevel - 1) * campaign.Settings.scoreBonusPerPcUpgrade : 0f;
-            _runScoreMultiplier = 1f + skillIndex * scoreBonusPerGameSkill + pcBonus;
+            _runScoreMultiplier = 1f;
             BroadcastDurationSeconds = Mathf.Max(1f, broadcastDurationSeconds);
             BroadcastSecondsRemaining = BroadcastDurationSeconds;
             gameOverTimePenaltySeconds = Mathf.Max(0f, gameOverPenaltySeconds);
-            player.ConfigureForSkill(gameSkill, healthStat);
+            player.ConfigureForSkill(1, 1);
             spawner.ConfigureDifficulty(difficulty);
             audience.Configure(campaign != null ? campaign.GrowthSettings : null, this, chat);
             audience.ConfigureEquipment(microphoneLevel, interiorLevel);
@@ -209,7 +220,9 @@ namespace StreamOn.Minigames.Runner
         public void OnObstacleCleared(RunnerObstacleType obstacleType)
         {
             if (State != RunnerGameState.Playing) return;
-            _rawScore += 25f * _runScoreMultiplier;
+            _rawScore += obstacleClearScore;
+            Score = Mathf.FloorToInt(_rawScore);
+            ReportRawScoreDelta();
             audience?.OnObstacleCleared();
             chat.React(obstacleType == RunnerObstacleType.Roll
                 ? RunnerChatEvent.PlayerRolled
@@ -238,7 +251,9 @@ namespace StreamOn.Minigames.Runner
         {
             if (State != RunnerGameState.Playing) return;
             EnemiesDefeated++;
-            _rawScore += 75f * _runScoreMultiplier;
+            _rawScore += enemyDefeatScore;
+            Score = Mathf.FloorToInt(_rawScore);
+            ReportRawScoreDelta();
             audience?.OnEnemyDefeated();
             chat.React(RunnerChatEvent.EnemyDefeated);
         }
@@ -265,7 +280,10 @@ namespace StreamOn.Minigames.Runner
                 audience?.OnAttemptDefeated();
                 if (RunnerBroadcastSessionStore.IsActive)
                 {
-                    RunnerBroadcastSessionStore.ApplyPenalty(gameOverTimePenaltySeconds);
+                    float penalty = gameOverTimePenaltySeconds;
+                    if (CampaignSettings != null && RunnerCampaignSaveStore.TryLoad(CampaignSettings, out RunnerCampaignSaveData penaltySave))
+                        penalty = CampaignSettings.StaminaRule(penaltySave.staminaRank)?.gameOverTimeLoss ?? penalty;
+                    RunnerBroadcastSessionStore.ApplyPenalty(penalty);
                     BroadcastSecondsRemaining = RunnerBroadcastSessionStore.RemainingSeconds;
                 }
                 else BroadcastSecondsRemaining = Mathf.Max(0f, BroadcastSecondsRemaining - gameOverTimePenaltySeconds);
@@ -301,10 +319,11 @@ namespace StreamOn.Minigames.Runner
         {
             if (!_broadcastActive) return;
             _broadcastActive = false;
-            RunnerBroadcastSessionStore.End(CampaignSettings);
+            FinalRawGameScore = RunnerBroadcastSessionStore.RawScore;
+            FinalBroadcastScore = RunnerBroadcastSessionStore.BroadcastScore;
             State = RunnerGameState.GameOver;
             LastEndReason = RunnerRunEndReason.TimeLimitCompleted;
-            Score = Mathf.Max(Score, _bestAttemptScore);
+            Score = Mathf.Max(Score, FinalRawGameScore);
             _rawScore = Score;
             bool isNewHighScore = Score > HighScore;
             if (isNewHighScore)
@@ -316,7 +335,7 @@ namespace StreamOn.Minigames.Runner
                 audience?.OnNewHighScore();
             }
             if (campaign != null && campaign.IsActive)
-                BroadcastResult = audience?.FinishBroadcast(Score, campaign.CurrentTargetScore, HitsTaken, EnemiesDefeated,
+                BroadcastResult = audience?.FinishBroadcast(FinalBroadcastScore, campaign.CurrentTargetScore, HitsTaken, EnemiesDefeated,
                     BroadcastElapsedSeconds, BroadcastDurationSeconds, true);
             chat.BeginRunEndedChat(isNewHighScore, true);
             hud.SetScore(Score, HighScore, WorldSpeed, 0f);
@@ -345,10 +364,18 @@ namespace StreamOn.Minigames.Runner
 
         public bool TrySuspendForGameSwitch()
         {
-            if (CampaignSettings != null) RunnerBroadcastSessionStore.SaveProgress(CampaignSettings);
-            _broadcastActive = false;
-            return true;
+            return !_broadcastActive;
         }
+
+        private void ReportRawScoreDelta()
+        {
+            int delta = Score - _lastReportedAttemptScore;
+            if (delta <= 0) return;
+            _lastReportedAttemptScore = Score;
+            RunnerBroadcastSessionStore.AddRawPoints(delta, audience != null ? audience.Hype : 50f);
+        }
+
+        private void HandleTimeBonusGranted(float seconds, int score) => hud?.ShowTimeBonus(seconds);
 
         public void NotifyChat(RunnerChatEvent chatEvent) => chat?.React(chatEvent);
 

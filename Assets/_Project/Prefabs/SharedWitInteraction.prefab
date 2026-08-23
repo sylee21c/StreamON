@@ -383,6 +383,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StreamOn.Minigames.Runner.RunnerWitInteractionController
   settings: {fileID: 11400000, guid: 11ce3385ec3d9444ca08ad81f47d8cd8, type: 2}
+  campaignSettings: {fileID: 0}
   canvasGroup: {fileID: 6394221418274459994}
   viewerText: {fileID: 5884343850901487009}
   timerFill: {fileID: 1669166958181394285}

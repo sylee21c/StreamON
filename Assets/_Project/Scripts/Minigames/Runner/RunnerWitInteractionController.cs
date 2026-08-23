@@ -13,6 +13,7 @@ namespace StreamOn.Minigames.Runner
     {
         [Header("Editable Settings")]
         [SerializeField] private RunnerWitInteractionSettings settings;
+        [SerializeField] private RunnerCampaignSettings campaignSettings;
 
         [Header("Scene-authored UI")]
         [SerializeField] private CanvasGroup canvasGroup;
@@ -26,6 +27,7 @@ namespace StreamOn.Minigames.Runner
 
         private RunnerBroadcastAudienceController _runnerAudience;
         private TileArenaChatAdapter _tileAudience;
+        private PlasticKnightmareBroadcastController _plasticAudience;
         private RunnerChatController _chat;
         private Coroutine _activePrompt;
         private float _nextPromptAt;
@@ -35,12 +37,14 @@ namespace StreamOn.Minigames.Runner
         private float _safeMomentUntil;
         private readonly Queue<string> _recentPromptMessages = new Queue<string>();
         private string _safeMomentContext = "게임 플레이 중 잠깐 여유가 생김";
+        private int _correctAnswerStreak;
 
         private void Awake()
         {
             if (canvasGroup == null) canvasGroup = GetComponent<CanvasGroup>();
             _runnerAudience = FindFirstObjectByType<RunnerBroadcastAudienceController>();
             _tileAudience = FindFirstObjectByType<TileArenaChatAdapter>();
+            _plasticAudience = FindFirstObjectByType<PlasticKnightmareBroadcastController>();
             _chat = FindFirstObjectByType<RunnerChatController>();
             EnsureIgnoreButton();
             for (int i = 0; i < choiceButtons.Length; i++)
@@ -83,17 +87,27 @@ namespace StreamOn.Minigames.Runner
             ResolveTargets();
             if (_runnerAudience != null)
                 return _runnerAudience.CanShowWitInteraction && _runnerAudience.CurrentViewers >= settings.minimumViewers;
-            return _tileAudience != null && _tileAudience.CanShowWitInteraction
+            if (_tileAudience != null) return _tileAudience.CanShowWitInteraction
                 && _tileAudience.CurrentViewers >= settings.minimumViewers;
+            return _plasticAudience != null && _plasticAudience.CanShowWitInteraction
+                && _plasticAudience.CurrentViewers >= settings.minimumViewers;
         }
 
-        private int TalkingLevel => _runnerAudience != null ? _runnerAudience.TalkingSkill
-            : _tileAudience != null ? _tileAudience.TalkingSkill : 1;
+        private int WitRank
+        {
+            get
+            {
+                if (campaignSettings != null && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
+                    return save.witRank;
+                return 0;
+            }
+        }
 
         private void ResolveTargets()
         {
             if (_runnerAudience == null) _runnerAudience = FindFirstObjectByType<RunnerBroadcastAudienceController>();
             if (_tileAudience == null) _tileAudience = FindFirstObjectByType<TileArenaChatAdapter>();
+            if (_plasticAudience == null) _plasticAudience = FindFirstObjectByType<PlasticKnightmareBroadcastController>();
             if (_chat == null) _chat = FindFirstObjectByType<RunnerChatController>();
         }
 
@@ -142,7 +156,8 @@ namespace StreamOn.Minigames.Runner
             _answered = false;
             _chat?.React(RunnerChatEvent.WitPrompt);
 
-            float remaining = settings.ResponseSeconds(TalkingLevel);
+            WitRankRule witRule = campaignSettings != null ? campaignSettings.WitRule(WitRank) : null;
+            float remaining = settings.ResponseSeconds(1) + (witRule != null ? witRule.responseTimeBonusSeconds : 0f);
             float duration = remaining;
             while (!_answered && remaining > 0f && CanPrompt())
             {
@@ -185,7 +200,9 @@ namespace StreamOn.Minigames.Runner
             if (source.Length != 3) return null;
 
             int[] ranked = Enumerable.Range(0, source.Length).OrderByDescending(index => source[index].quality).ToArray();
-            int successfulAnswers = prompt.ignoreIsCorrect ? 0 : Mathf.Clamp(TalkingLevel, 1, 3);
+            WitRankRule rule = campaignSettings != null ? campaignSettings.WitRule(WitRank) : null;
+            int successfulAnswers = prompt.ignoreIsCorrect ? 0 : 1;
+            if (!prompt.ignoreIsCorrect && rule != null && Random.value < rule.twoCorrectAnswerChance) successfulAnswers = 2;
             Dictionary<int, int> rankByIndex = ranked.Select((sourceIndex, rank) => new { sourceIndex, rank })
                 .ToDictionary(item => item.sourceIndex, item => item.rank);
             return new RunnerWitPrompt
@@ -243,10 +260,37 @@ namespace StreamOn.Minigames.Runner
 
         private void ApplyWitQuality(int quality, string feedback)
         {
-            if (quality >= 2 && TalkingLevel >= 3) quality = 3;
+            WitRankRule rule = campaignSettings != null ? campaignSettings.WitRule(WitRank) : null;
+            if (quality >= 2)
+            {
+                _correctAnswerStreak++;
+                float currentHeat = _runnerAudience != null ? _runnerAudience.Hype
+                    : _tileAudience != null ? _tileAudience.Hype
+                    : _plasticAudience != null ? _plasticAudience.Heat : 50f;
+                if (rule != null && rule.comebackHeatThreshold > 0f && currentHeat <= rule.comebackHeatThreshold)
+                {
+                    quality = 5;
+                    feedback = "낮아진 분위기를 한 번에 다시 살렸다!";
+                }
+                else if (rule != null && rule.correctStreakRequired > 0
+                    && _correctAnswerStreak % rule.correctStreakRequired == 0)
+                {
+                    quality = 4;
+                    feedback = "연속으로 제대로 받아치며 채팅 흐름을 탔다!";
+                }
+                else if (WitRank >= 5) quality = 3;
+            }
+            else _correctAnswerStreak = 0;
             feedbackText.text = feedback;
             _runnerAudience?.ApplyWitInteraction(quality);
             _tileAudience?.ApplyWitInteraction(quality);
+            _plasticAudience?.ApplyWitInteraction(quality);
+            if (quality >= 2 && campaignSettings != null
+                && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
+            {
+                BroadcasterProgression.AddBroadcastExperience(campaignSettings, save, campaignSettings.correctWitExperience);
+                RunnerCampaignSaveStore.Save(campaignSettings, save, true);
+            }
         }
 
         private void EnsureIgnoreButton()
@@ -256,24 +300,7 @@ namespace StreamOn.Minigames.Runner
                 if (ignoreLabel == null) ignoreLabel = ignoreButton.GetComponentInChildren<TMP_Text>(true);
                 return;
             }
-            Button template = choiceButtons?.LastOrDefault(button => button != null);
-            if (template == null) return;
-
-            GameObject clone = Instantiate(template.gameObject, template.transform.parent);
-            clone.name = "Choice 4 - Ignore";
-            ignoreButton = clone.GetComponent<Button>();
-            ignoreLabel = clone.GetComponentInChildren<TMP_Text>(true);
-            RectTransform ignoreRect = clone.GetComponent<RectTransform>();
-            RectTransform templateRect = template.GetComponent<RectTransform>();
-            if (ignoreRect != null && templateRect != null)
-                ignoreRect.anchoredPosition = templateRect.anchoredPosition + Vector2.down * 35f;
-            Image background = clone.GetComponent<Image>();
-            if (background != null) background.color = new Color(0.16f, 0.17f, 0.22f, 1f);
-
-            RectTransform panel = transform as RectTransform;
-            if (panel != null) panel.sizeDelta = new Vector2(panel.sizeDelta.x, panel.sizeDelta.y + 75f);
-            RectTransform feedbackRect = feedbackText != null ? feedbackText.rectTransform : null;
-            if (feedbackRect != null) feedbackRect.anchoredPosition += Vector2.down * 38f;
+            Debug.LogWarning("재치 UI의 4번 무반응 버튼이 씬에 연결되지 않았습니다.", this);
         }
 
         private void ScheduleNext() => _nextPromptAt = Time.unscaledTime

@@ -16,6 +16,8 @@ namespace StreamOn.Minigames.TileArena
         [SerializeField] private RunnerBroadcastSettlementView settlementView;
         [SerializeField] private TMP_Text remainingTimeText;
         [SerializeField] private TMP_Text attemptText;
+        [SerializeField] private TMP_Text timeBonusText;
+        [SerializeField, Min(0f)] private float timeBonusVisibleSeconds = 2f;
 
         public bool BroadcastActive { get; private set; }
         public float DurationSeconds { get; private set; }
@@ -37,10 +39,13 @@ namespace StreamOn.Minigames.TileArena
             if (settlementView == null) settlementView = FindFirstObjectByType<RunnerBroadcastSettlementView>();
         }
 
+        private void OnEnable() => RunnerBroadcastSessionStore.TimeBonusGranted += HandleTimeBonus;
+        private void OnDisable() => RunnerBroadcastSessionStore.TimeBonusGranted -= HandleTimeBonus;
+
         private void Update()
         {
             if (!BroadcastActive || _finished || Time.timeScale <= 0f) { RefreshHud(); return; }
-            RunnerBroadcastSessionStore.Tick(Time.deltaTime);
+            RunnerBroadcastSessionStore.Tick(Time.unscaledDeltaTime);
             ElapsedSeconds = RunnerBroadcastSessionStore.ElapsedSeconds;
             RemainingSeconds = RunnerBroadcastSessionStore.RemainingSeconds;
             RefreshHud();
@@ -62,7 +67,10 @@ namespace StreamOn.Minigames.TileArena
             if (!BroadcastActive || _finished) return;
             BestAttemptScore = Mathf.Max(BestAttemptScore, score);
             TotalHitsTaken += Mathf.Max(0, hitsTaken);
-            RunnerBroadcastSessionStore.ApplyPenalty(settings.gameOverTimePenaltySeconds);
+            float penalty = settings.GameRule(BroadcastGameId.TileArena).baseGameOverTimeLoss;
+            StaminaRankRule stamina = settings.StaminaRule(_save.staminaRank);
+            if (stamina != null) penalty = stamina.gameOverTimeLoss;
+            RunnerBroadcastSessionStore.ApplyPenalty(penalty);
             RemainingSeconds = RunnerBroadcastSessionStore.RemainingSeconds;
             RefreshHud();
             if (RemainingSeconds <= 0f) FinishBroadcast();
@@ -81,7 +89,11 @@ namespace StreamOn.Minigames.TileArena
                 _save = RunnerCampaignSaveStore.CreateNew(settings);
                 RunnerCampaignSaveStore.Save(settings, _save, true);
             }
-            RunnerBroadcastSessionStore.BeginOrResume(settings, _save);
+            if (!RunnerBroadcastSessionStore.BeginOrResume(settings, _save, BroadcastGameId.TileArena))
+            {
+                Debug.LogError("이미 다른 게임 방송이 진행 중이라 타일 아레나를 시작할 수 없습니다.", this);
+                return;
+            }
             DurationSeconds = RunnerBroadcastSessionStore.DurationSeconds;
             RemainingSeconds = RunnerBroadcastSessionStore.RemainingSeconds;
             ElapsedSeconds = RunnerBroadcastSessionStore.ElapsedSeconds;
@@ -89,7 +101,7 @@ namespace StreamOn.Minigames.TileArena
             BestAttemptScore = 0;
             TotalHitsTaken = 0;
             BroadcastActive = true;
-            ScoreMultiplier = 1f + Mathf.Max(0, _save.pcLevel - 1) * settings.scoreBonusPerPcUpgrade;
+            ScoreMultiplier = 1f;
             _finished = false;
             audience?.BeginBroadcastSession();
             RefreshHud();
@@ -100,21 +112,23 @@ namespace StreamOn.Minigames.TileArena
             if (!BroadcastActive || _finished || _save == null) return;
             _finished = true;
             BroadcastActive = false;
-            RunnerBroadcastSessionStore.End(settings, _save);
-            int score = Mathf.Max(BestAttemptScore, gameController != null ? gameController.Score : 0);
+            int rawScore = RunnerBroadcastSessionStore.RawScore;
+            int score = RunnerBroadcastSessionStore.BroadcastScore;
             int target = settings.TargetScoreForDay(_save.day);
             RunnerBroadcastResult result = audience?.FinishBroadcast(score, target, TotalHitsTaken,
                 Mathf.Max(1f, ElapsedSeconds), DurationSeconds);
             FindFirstObjectByType<RunnerChatController>()?.BeginBroadcastEndingChat();
-            StartCoroutine(FinishBroadcastPresentation(result, score));
+            StartCoroutine(FinishBroadcastPresentation(result, rawScore, score));
         }
 
-        private IEnumerator FinishBroadcastPresentation(RunnerBroadcastResult result, int score)
+        private IEnumerator FinishBroadcastPresentation(RunnerBroadcastResult result, int rawScore, int score)
         {
             float exitDuration = audience != null ? Mathf.Max(0.5f, audience.ViewerExitDuration) : 3.2f;
             if (audience != null) yield return audience.DrainViewersToZero(exitDuration);
+            if (RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData stagedSave)) _save = stagedSave;
             RunnerSettlementDisplayData display = RunnerBroadcastSettlementService.ApplyTileResult(settings,
-                _save, result, score, TotalHitsTaken);
+                _save, result, rawScore, score, TotalHitsTaken);
+            RunnerBroadcastSessionStore.Complete(settings, _save);
             if (settlementView != null) settlementView.Show(display, ReturnToRoom, "다음 날");
             else ReturnToRoom();
         }
@@ -126,9 +140,28 @@ namespace StreamOn.Minigames.TileArena
 
         public bool TrySuspendForGameSwitch()
         {
-            RunnerBroadcastSessionStore.SaveProgress(settings);
-            BroadcastActive = false;
-            return true;
+            return !BroadcastActive;
+        }
+
+        public void OnRawPointsEarned(int points)
+        {
+            if (!BroadcastActive || points <= 0) return;
+            RunnerBroadcastSessionStore.AddRawPoints(points, audience != null ? audience.Hype : 50f);
+        }
+
+        private void HandleTimeBonus(float seconds, int score)
+        {
+            if (timeBonusText == null || !BroadcastActive) return;
+            StopCoroutine(nameof(HideTimeBonus));
+            timeBonusText.gameObject.SetActive(true);
+            timeBonusText.text = $"방송 호조! 방송 시간 +{seconds:0.#}초";
+            StartCoroutine(nameof(HideTimeBonus));
+        }
+
+        private IEnumerator HideTimeBonus()
+        {
+            yield return new WaitForSecondsRealtime(timeBonusVisibleSeconds);
+            if (timeBonusText != null) timeBonusText.gameObject.SetActive(false);
         }
 
         private void RefreshHud()

@@ -231,10 +231,6 @@ public sealed class PauseMenuController : MonoBehaviour
 
     private static void QuitApplication()
     {
-#if UNITY_EDITOR
-        UnityEditor.EditorApplication.isPlaying = false;
-#else
-        Application.Quit();
-#endif
+        StreamOn.Platform.WebGLPlatformBridge.QuitOrShowBrowserMessage();
     }
 }

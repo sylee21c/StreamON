@@ -22,6 +22,12 @@ MonoBehaviour:
   viewerRandomVariation: 0.12
   idleViewerFluctuationChance: 0.55
   idleFluctuationMaximumViewers: 50
+  viewerTargetMultiplierAtZeroHeat: 0.55
+  viewerTargetMultiplierAtFullHeat: 1.25
+  viewerGrowthRateMultiplierAtZeroHeat: 0.65
+  viewerGrowthRateMultiplierAtFullHeat: 1.35
+  viewerDeclineRateMultiplierAtZeroHeat: 1.55
+  viewerDeclineRateMultiplierAtFullHeat: 0.7
   startingHype: 50
   restingHype: 50
   hypeReturnPerSecond: 0
@@ -29,6 +35,13 @@ MonoBehaviour:
   heatPenaltyReductionPerTalkingLevel: 0.14
   newHighScoreHype: 8
   viewerExitDuration: 3.2
+  socialViewerLeaveFraction: 0.018
+  socialMinimumViewerLeave: 1
+  socialFollowerPenaltyMinimum: 0.18
+  socialFollowerPenaltyPerFollower: 0.0008
+  socialResolutionViewerReturnMinimum: 0.02
+  socialResolutionViewerReturnMaximum: 0.07
+  socialResolutionFollowerBonusMaximum: 3
   performanceWindowSeconds: 12
   performanceEvaluationInterval: 0.5
   goodStateMistakeFreeSeconds: 8
@@ -59,6 +72,8 @@ MonoBehaviour:
   viewersForMaximumChatActivity: 500
   smallAudienceEventCooldown: 4.5
   largeAudienceEventCooldown: 0.75
+  eventReactionMultiplierAtZeroHeat: 0.72
+  eventReactionMultiplierAtFullHeat: 1.18
   baseFollowConversion: 0.08
   followConversionPerRatingPoint: 0.025
   followConversionPerTalkingLevel: 0.01
@@ -68,6 +83,19 @@ MonoBehaviour:
   unfollowRatePerMissingRatingPoint: 0.03
   lowHeatUnfollowThreshold: 28
   lowHeatUnfollowRate: 0.025
+  followHeatMinimum: 20
+  followHeatMaximum: 100
+  followHeatMaximumMultiplier: 1.4
+  runnerSafetyPenaltyPerHit: 1.15
+  runnerCombatRatingBase: 2.5
+  runnerCombatRatingPerEnemy: 0.35
+  runnerCombatRatingPenaltyPerHit: 0.35
+  runnerHostingRatingBase: 2.2
+  runnerHostingRatingPerTalkingLevel: 0.28
+  runnerHostingRatingHeatRange: 1.6
+  tileSafetyPenaltyPerHit: 0.45
+  tileHostingRatingBase: 2.2
+  tileHostingRatingHeatRange: 1.6
   gameplayRatingWeight: 0.4
   survivalRatingWeight: 0.2
   safetyRatingWeight: 0.15
@@ -76,6 +104,8 @@ MonoBehaviour:
   wonPerViewerRatingPoint: 50
   donationBonusPerTalkingLevel: 0.08
   donationRandomVariation: 0.15
+  donationValueMultiplierAtZeroHeat: 0.45
+  donationValueMultiplierAtFullHeat: 1.65
   minimumViewersForDonation: 1
   liveDonationCooldown: 9
   enableAmbientDonations: 1
@@ -97,3 +127,19 @@ MonoBehaviour:
   largeDonationWon: 10000
   mediumDonationChance: 0.22
   largeDonationChance: 0.05
+  donationEventChanceMultiplierAtZeroHeat: 0.25
+  donationEventChanceMultiplierAtFullHeat: 1.85
+  donationIntervalMultiplierAtZeroHeat: 1.8
+  donationIntervalMultiplierAtFullHeat: 0.62
+  largeDonationChanceMultiplierAtZeroHeat: 0.2
+  largeDonationChanceMultiplierAtFullHeat: 2.6
+  mediumDonationChanceMultiplierAtZeroHeat: 0.45
+  mediumDonationChanceMultiplierAtFullHeat: 1.75
+  witSuccessHype: 7
+  witOkayHype: 2
+  witAwkwardHype: -3
+  witSuccessDonationChance: 0.1
+  witHostingRatingBonus: 0.15
+  witFollowConversionBonus: 0.005
+  maximumWitHostingBonus: 0.6
+  maximumWitFollowBonus: 0.02

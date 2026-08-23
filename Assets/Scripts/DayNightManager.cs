@@ -32,7 +32,6 @@ public sealed class DayNightManager : MonoBehaviour
     public event System.Action OnDayBegin;
 
     private BuildingModeController buildingController;
-    private Canvas hotbarCanvas;
     private Coroutine activeTransition;
 
     private void Awake()
@@ -50,14 +49,6 @@ public sealed class DayNightManager : MonoBehaviour
     {
         buildingController = FindAnyObjectByType<BuildingModeController>();
 
-        BuildingHotbarUI hotbarUI = FindAnyObjectByType<BuildingHotbarUI>();
-        if (hotbarUI != null)
-        {
-            hotbarCanvas = hotbarUI.GetComponent<Canvas>();
-            if (hotbarCanvas == null)
-                hotbarCanvas = hotbarUI.GetComponentInParent<Canvas>();
-        }
-
         if (directionalLight == null)
             directionalLight = FindAnyObjectByType<Light>();
 
@@ -74,13 +65,18 @@ public sealed class DayNightManager : MonoBehaviour
         activeTransition = StartCoroutine(TransitionRoutine(Phase.Night));
     }
 
-    // 밤 종료 (전투 완료) 시 호출
+    // Legacy API. Plastic Knightmare no longer returns to day after the night starts.
     public void BeginDay()
     {
-        if (CurrentPhase == Phase.Day) return;
-        DayCount++;
-        if (activeTransition != null) StopCoroutine(activeTransition);
-        activeTransition = StartCoroutine(TransitionRoutine(Phase.Day));
+        if (CurrentPhase == Phase.Night)
+            Debug.LogWarning("[DayNightManager] 끝없는 밤에서는 낮 전환 요청을 무시합니다.", this);
+    }
+
+    // Opens the existing build/shop controls without changing the night lighting or combat phase.
+    public void SetNightMaintenance(bool enabled)
+    {
+        if (CurrentPhase != Phase.Night) return;
+        SetBuildingEnabled(enabled);
     }
 
     public void ReturnToCurrentDayAfterGameOver()
@@ -182,8 +178,8 @@ public sealed class DayNightManager : MonoBehaviour
         if (buildingController != null)
             buildingController.enabled = enabled;
 
-        if (hotbarCanvas != null)
-            hotbarCanvas.gameObject.SetActive(enabled);
+        // The authored combat HUD shares the hotbar Canvas. Keep that Canvas visible;
+        // disabling BuildingModeController alone gates placement outside maintenance.
     }
 
     private void ApplyPhaseInstant(Phase phase)

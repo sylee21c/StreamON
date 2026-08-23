@@ -54,6 +54,9 @@ namespace StreamOn.Minigames.TileArena
         private int _moderationFollowerBonus;
         private readonly RunnerBroadcastPerformanceMeter _performanceMeter = new RunnerBroadcastPerformanceMeter();
         private float _bufferedHypeChange;
+        private bool _cleanMistakeProtectionUsed;
+        private bool _largePenaltyProtectionUsed;
+        private float _nextMistakeClearAt;
 
         public int CurrentViewers => _currentViewers;
         public int PeakViewers => _peakViewers;
@@ -73,8 +76,13 @@ namespace StreamOn.Minigames.TileArena
             if (_broadcastSessionActive) TryAmbientDonation();
             if (_broadcastSessionActive && gameController.IsRunning)
             {
-                float performanceStep = _performanceMeter.Tick(Time.time, growthSettings);
+                MentalRankRule mental = CurrentMentalRule();
+                float performanceStep = _performanceMeter.Tick(Time.time, growthSettings,
+                    mental != null ? mental.poorStateTickInterval : -1f,
+                    mental != null ? mental.extraMistakesRequiredForPoorState : 0,
+                    mental != null ? mental.neutralRecoveryTimeReduction : 0f);
                 if (!Mathf.Approximately(performanceStep, 0f)) ApplyPerformanceHeatStep(performanceStep);
+                if (_performanceMeter.State != BroadcastPerformanceState.Good) _cleanMistakeProtectionUsed = false;
                 ApplyBufferedHype(Time.deltaTime);
                 _hype = Mathf.MoveTowards(_hype, restingHype, hypeReturnPerSecond * Time.unscaledDeltaTime);
                 RunnerBroadcastHeatGauge.SetValue(_hype);
@@ -108,6 +116,7 @@ namespace StreamOn.Minigames.TileArena
         public void OnStageCleared()
         {
             React(RunnerChatEvent.TileArenaStageCleared, stageClearHype);
+            GrantGameplayExperience(campaignSettings != null ? campaignSettings.tileStageClearExperience : 0);
             _witInteraction?.NotifySafeMoment("타일 아레나 스테이지를 방금 클리어함", 4f);
             TryLiveDonation(growthSettings != null ? growthSettings.tileStageClearDonationChance : 0f,
                 "파란 타일 올클리어!");
@@ -115,6 +124,16 @@ namespace StreamOn.Minigames.TileArena
 
         public void OnPlayerHit(bool lowLives)
         {
+            MentalRankRule mental = CurrentMentalRule();
+            if (mental != null && mental.protectsFirstMistakeAfterGoodPlay
+                && _performanceMeter.State == BroadcastPerformanceState.Good && !_cleanMistakeProtectionUsed)
+            {
+                _cleanMistakeProtectionUsed = true;
+                PushSnapshot();
+                chatController?.React(RunnerChatEvent.TileArenaPlayerHit);
+                if (lowLives) chatController?.React(RunnerChatEvent.TileArenaLowLives);
+                return;
+            }
             React(RunnerChatEvent.TileArenaPlayerHit, playerHitHype + (lowLives ? lowLivesDramaHype : 0f));
             if (lowLives) chatController?.React(RunnerChatEvent.TileArenaLowLives);
         }
@@ -131,14 +150,16 @@ namespace StreamOn.Minigames.TileArena
         }
 
         public void OnModerationResult(bool correct) => AddHype(growthSettings == null ? 0f
-            : correct ? growthSettings.correctModerationHype : growthSettings.wrongModerationHype);
+            : correct ? growthSettings.correctModerationHype : growthSettings.wrongModerationHype, correct ? 1f : 0f);
 
         public void OnFraternizationTick()
         {
-            AddHype(growthSettings != null ? growthSettings.fraternizationOngoingHype : 0f);
-            int leaving = Mathf.Max(1, Mathf.CeilToInt(_currentViewers * 0.018f));
+            AddHype(growthSettings != null ? growthSettings.fraternizationOngoingHype : 0f, .5f);
+            int leaving = Mathf.Max(growthSettings.socialMinimumViewerLeave,
+                Mathf.CeilToInt(_currentViewers * growthSettings.socialViewerLeaveFraction));
             _currentViewers = Mathf.Max(0, _currentViewers - leaving);
-            _socialFollowerPenalty += Mathf.Max(0.18f, _followers * 0.0008f);
+            _socialFollowerPenalty += Mathf.Max(growthSettings.socialFollowerPenaltyMinimum,
+                _followers * growthSettings.socialFollowerPenaltyPerFollower);
             RefreshChatScale();
             PushSnapshot();
         }
@@ -149,11 +170,13 @@ namespace StreamOn.Minigames.TileArena
                 growthSettings.quickFraternizationResponseSeconds, responseSeconds) : 0f;
             AddHype(growthSettings != null ? Mathf.Lerp(growthSettings.slowFraternizationResolutionHype,
                 growthSettings.quickFraternizationResolutionHype, quick) : 0f);
-            int returning = Mathf.Max(1, Mathf.CeilToInt(_currentViewers * Mathf.Lerp(0.02f, 0.07f, quick)));
+            int returning = Mathf.Max(growthSettings.socialMinimumViewerLeave, Mathf.CeilToInt(_currentViewers
+                * Mathf.Lerp(growthSettings.socialResolutionViewerReturnMinimum,
+                    growthSettings.socialResolutionViewerReturnMaximum, quick)));
             _currentViewers = Mathf.Min(maximumViewers, _currentViewers + returning);
             _totalVisitors += returning;
             _peakViewers = Mathf.Max(_peakViewers, _currentViewers);
-            _moderationFollowerBonus += Mathf.RoundToInt(Mathf.Lerp(0f, 3f, quick));
+            _moderationFollowerBonus += Mathf.RoundToInt(Mathf.Lerp(0f, growthSettings.socialResolutionFollowerBonusMaximum, quick));
             RefreshChatScale();
             PushSnapshot();
         }
@@ -168,15 +191,14 @@ namespace StreamOn.Minigames.TileArena
             if (_witInteraction == null) _witInteraction = FindFirstObjectByType<RunnerWitInteractionController>();
             if (campaignSettings != null && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
             {
-                _talkingSkill = Mathf.Max(1, save.talkingSkill);
-                _gameSkill = Mathf.Max(1, save.gameSkill);
-                _mentalLevel = Mathf.Clamp(save.mentalLevel, 1, 3);
+                _talkingSkill = 1;
+                _gameSkill = 0;
+                _mentalLevel = 1;
                 _followers = Mathf.Max(0, save.subscribers);
                 _microphoneLevel = Mathf.Clamp(save.microphoneLevel, 1, 3);
                 _interiorLevel = Mathf.Clamp(save.interiorLevel, 1, 3);
             }
-            float initial = startingViewers + (growthSettings != null ? _followers * growthSettings.followerNotificationRate
-                + _talkingSkill * growthSettings.viewersPerTalkingSkill : 0f)
+            float initial = startingViewers + (growthSettings != null ? _followers * growthSettings.followerNotificationRate : 0f)
                 + (campaignSettings != null ? Mathf.Max(0, _interiorLevel - 1) * campaignSettings.startingViewersPerInteriorUpgrade : 0f);
             _currentViewers = Mathf.Clamp(Mathf.RoundToInt(initial), 0, maximumViewers);
             _peakViewers = _currentViewers;
@@ -198,6 +220,9 @@ namespace StreamOn.Minigames.TileArena
             _hype = growthSettings != null ? growthSettings.startingHype : startingHype;
             _performanceMeter.Reset(Time.time);
             _bufferedHypeChange = 0f;
+            _cleanMistakeProtectionUsed = false;
+            _largePenaltyProtectionUsed = false;
+            _nextMistakeClearAt = 0f;
             _socialFollowerPenalty = 0f;
             _moderationFollowerBonus = 0;
             _viewerSeconds = 0f;
@@ -220,20 +245,21 @@ namespace StreamOn.Minigames.TileArena
             float scoreRatio = Mathf.Clamp01(score / (float)Mathf.Max(1, targetScore));
             float gameplayRating = 1f + scoreRatio * 4f;
             float survivalRating = 1f + Mathf.Clamp01(elapsedSeconds / Mathf.Max(1f, durationSeconds)) * 4f;
-            float safetyRating = Mathf.Clamp(5f - hitsTaken * 0.45f, 1f, 5f);
+            float safetyRating = Mathf.Clamp(5f - hitsTaken * growthSettings.tileSafetyPenaltyPerHit, 1f, 5f);
             float finalHeat = Mathf.Clamp(_hype + _bufferedHypeChange, 0f, 100f);
-            float hostingRating = Mathf.Clamp(2.2f + (_talkingSkill - 1) * 0.28f + finalHeat / 100f * 1.6f, 1f, 5f);
+            float hostingRating = Mathf.Clamp(growthSettings.tileHostingRatingBase
+                + finalHeat / 100f * growthSettings.tileHostingRatingHeatRange, 1f, 5f);
             float weight = Mathf.Max(0.01f, growthSettings.gameplayRatingWeight + growthSettings.survivalRatingWeight
                 + growthSettings.safetyRatingWeight + growthSettings.hostingRatingWeight);
             float finalRating = Mathf.Clamp((gameplayRating * growthSettings.gameplayRatingWeight
                 + survivalRating * growthSettings.survivalRatingWeight + safetyRating * growthSettings.safetyRatingWeight
                 + hostingRating * growthSettings.hostingRatingWeight) / weight, 1f, 5f);
             float conversion = growthSettings.baseFollowConversion + finalRating * growthSettings.followConversionPerRatingPoint
-                + Mathf.Max(0, _talkingSkill - 1) * growthSettings.followConversionPerTalkingLevel
                 + Mathf.Max(0, _microphoneLevel - 1) * (campaignSettings != null ? campaignSettings.followerConversionBonusPerMicrophoneUpgrade : 0f)
                 + growthSettings.completionFollowBonus;
             float heat01 = finalHeat / 100f;
-            conversion *= Mathf.Lerp(0f, 1.4f, Mathf.InverseLerp(20f, 100f, finalHeat));
+            conversion *= Mathf.Lerp(0f, growthSettings.followHeatMaximumMultiplier,
+                Mathf.InverseLerp(growthSettings.followHeatMinimum, growthSettings.followHeatMaximum, finalHeat));
             conversion = Mathf.Clamp(conversion, 0f, growthSettings.maximumFollowConversion);
             int gained = Mathf.Max(0, Mathf.RoundToInt(_totalVisitors * conversion) + _moderationFollowerBonus);
             int lost = finalRating < growthSettings.unfollowRatingThreshold
@@ -244,10 +270,11 @@ namespace StreamOn.Minigames.TileArena
                     * Mathf.InverseLerp(growthSettings.lowHeatUnfollowThreshold, 0f, finalHeat)
                     * growthSettings.lowHeatUnfollowRate));
             lost = Mathf.Min(_followers, lost + Mathf.CeilToInt(_socialFollowerPenalty));
-            float donationMultiplier = 1f + Mathf.Max(0, _talkingSkill - 1) * growthSettings.donationBonusPerTalkingLevel
-                + Mathf.Max(0, _microphoneLevel - 1) * (campaignSettings != null ? campaignSettings.donationBonusPerMicrophoneUpgrade : 0f);
+            float donationMultiplier = 1f + Mathf.Max(0, _microphoneLevel - 1) * (campaignSettings != null ? campaignSettings.donationBonusPerMicrophoneUpgrade : 0f);
             int donation = _liveDonationWon + Mathf.Max(0, Mathf.RoundToInt(average * finalRating
-                * donationMultiplier * growthSettings.wonPerViewerRatingPoint * Mathf.Lerp(0.45f, 1.65f, heat01)));
+                * donationMultiplier * growthSettings.wonPerViewerRatingPoint
+                * Mathf.Lerp(growthSettings.donationValueMultiplierAtZeroHeat,
+                    growthSettings.donationValueMultiplierAtFullHeat, heat01)));
             return new RunnerBroadcastResult
             {
                 startingFollowers = _followers, endingViewers = _currentViewers, peakViewers = _peakViewers,
@@ -275,9 +302,24 @@ namespace StreamOn.Minigames.TileArena
             if (!_initialized || growthSettings == null) return;
             if (quality >= 2)
             {
-                AddHype(growthSettings.witSuccessHype * (quality >= 3 ? 1.35f : 1f));
-                TryLiveDonation(growthSettings.witSuccessDonationChance
-                    * (1f + Mathf.Max(0, _talkingSkill - 1) * growthSettings.donationChancePerTalkingLevel),
+                WitRankRule wit = null;
+                MentalRankRule mental = null;
+                if (campaignSettings != null && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
+                {
+                    wit = campaignSettings.WitRule(save.witRank);
+                    mental = campaignSettings.MentalRule(save.mentalRank);
+                }
+                float perkMultiplier = quality >= 5 ? (wit != null ? wit.comebackRewardMultiplier : 1f)
+                    : quality >= 4 ? (wit != null ? wit.correctStreakRewardMultiplier : 1f)
+                    : quality >= 3 ? (wit != null ? wit.advancedAnswerRewardMultiplier : 1f) : 1f;
+                float multiplier = (1f + (wit != null ? wit.correctHeatGainBonus : 0f)) * perkMultiplier;
+                AddHype(growthSettings.witSuccessHype * multiplier);
+                if (mental != null && mental.correctWitClearsRecentMistakes && Time.unscaledTime >= _nextMistakeClearAt)
+                {
+                    _performanceMeter.ClearRecentMistakes();
+                    _nextMistakeClearAt = Time.unscaledTime + mental.mistakeClearCooldownSeconds;
+                }
+                TryLiveDonation(growthSettings.witSuccessDonationChance,
                     "이런 받아치기 좋다 ㅋㅋ");
                 chatController.React(RunnerChatEvent.WitReplySuccess);
             }
@@ -303,12 +345,15 @@ namespace StreamOn.Minigames.TileArena
                 + _talkingSkill * (growthSettings != null ? growthSettings.viewersPerTalkingSkill : 0f)
                 + Mathf.Max(0, _interiorLevel - 1) * (campaignSettings != null ? campaignSettings.startingViewersPerInteriorUpgrade : 0f);
             float heat01 = _hype / 100f;
-            target *= Mathf.Lerp(0.55f, 1.25f, heat01);
+            target *= Mathf.Lerp(growthSettings.viewerTargetMultiplierAtZeroHeat,
+                growthSettings.viewerTargetMultiplierAtFullHeat, heat01);
             target *= Random.Range(1f - randomVariation, 1f + randomVariation);
             bool growing = target >= _currentViewers;
             float adjustment = viewerAdjustmentRate * (growing
-                ? Mathf.Lerp(0.65f, 1.35f, heat01)
-                : Mathf.Lerp(1.55f, 0.70f, heat01));
+                ? Mathf.Lerp(growthSettings.viewerGrowthRateMultiplierAtZeroHeat,
+                    growthSettings.viewerGrowthRateMultiplierAtFullHeat, heat01)
+                : Mathf.Lerp(growthSettings.viewerDeclineRateMultiplierAtZeroHeat,
+                    growthSettings.viewerDeclineRateMultiplierAtFullHeat, heat01));
             int next = Mathf.Clamp(Mathf.RoundToInt(Mathf.Lerp(_currentViewers, target,
                 Mathf.Clamp01(adjustment))), 0, maximumViewers);
             if (next == _currentViewers && _currentViewers > 0 && _currentViewers < maximumViewers && Random.value < 0.45f)
@@ -326,7 +371,8 @@ namespace StreamOn.Minigames.TileArena
             chatController.ConfigureAudience(_currentViewers, _chattingViewers,
                 growthSettings != null ? growthSettings.ChatDelayMultiplierForViewers(_currentViewers) : 1f,
                 (growthSettings != null ? growthSettings.EventReactionChanceForViewers(_currentViewers) : 0.55f)
-                    * Mathf.Lerp(0.72f, 1.18f, _hype / 100f),
+                    * Mathf.Lerp(growthSettings.eventReactionMultiplierAtZeroHeat,
+                        growthSettings.eventReactionMultiplierAtFullHeat, _hype / 100f),
                 growthSettings != null ? growthSettings.EventCooldownForViewers(_currentViewers) : 2f, _hype);
         }
 
@@ -334,7 +380,8 @@ namespace StreamOn.Minigames.TileArena
         {
             if (growthSettings == null || _currentViewers < growthSettings.minimumViewersForDonation
                 || Time.unscaledTime < _nextDonationAt) return;
-            chance *= Mathf.Lerp(0.25f, 1.85f, _hype / 100f);
+            chance *= Mathf.Lerp(growthSettings.donationEventChanceMultiplierAtZeroHeat,
+                growthSettings.donationEventChanceMultiplierAtFullHeat, _hype / 100f);
             if (Random.value > chance) return;
             GrantLiveDonation(message);
         }
@@ -365,26 +412,45 @@ namespace StreamOn.Minigames.TileArena
             if (growthSettings == null) { _nextAmbientDonationAt = float.PositiveInfinity; return; }
             float minimum = Mathf.Max(growthSettings.liveDonationCooldown, growthSettings.ambientDonationMinimumInterval);
             float maximum = Mathf.Max(minimum, growthSettings.ambientDonationMaximumInterval);
-            float intervalMultiplier = Mathf.Lerp(1.8f, 0.62f, _hype / 100f);
+            float intervalMultiplier = Mathf.Lerp(growthSettings.donationIntervalMultiplierAtZeroHeat,
+                growthSettings.donationIntervalMultiplierAtFullHeat, _hype / 100f);
             minimum *= intervalMultiplier;
             maximum *= intervalMultiplier;
             _nextAmbientDonationAt = Time.unscaledTime + Random.Range(minimum, maximum);
         }
 
-        private void AddHype(float amount)
+        private void AddHype(float amount, float mentalReductionScale = 1f)
         {
             if (growthSettings == null) return;
-            if (amount > 0f)
-                amount *= (1f + Mathf.Max(0, _mentalLevel - 1)
-                    * (campaignSettings != null ? campaignSettings.hypeGainBonusPerMentalLevel : 0f))
-                    * (1f + Mathf.Max(0, _talkingSkill - 1) * growthSettings.heatGainBonusPerTalkingLevel);
-            else if (amount < 0f)
-                amount *= Mathf.Max(0.1f, 1f - Mathf.Max(0, _mentalLevel - 1)
-                    * (campaignSettings != null ? campaignSettings.hypePenaltyReductionPerMentalLevel : 0f))
-                    * Mathf.Max(0.1f, 1f - Mathf.Max(0, _talkingSkill - 1)
-                        * growthSettings.heatPenaltyReductionPerTalkingLevel);
+            if (amount < 0f && campaignSettings != null
+                && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
+            {
+                MentalRankRule mental = campaignSettings.MentalRule(save.mentalRank);
+                float reduction = (mental?.ordinaryPenaltyReduction ?? 0f) * Mathf.Clamp01(mentalReductionScale);
+                if (!_largePenaltyProtectionUsed && Mathf.Abs(amount) >= campaignSettings.largeHeatPenaltyThreshold
+                    && mental != null && mental.oncePerBroadcastLargePenaltyReduction > 0f && mentalReductionScale > 0f)
+                {
+                    reduction = Mathf.Max(reduction, mental.oncePerBroadcastLargePenaltyReduction);
+                    _largePenaltyProtectionUsed = true;
+                }
+                amount *= 1f - reduction;
+            }
             _bufferedHypeChange = Mathf.Clamp(_bufferedHypeChange + amount,
                 -growthSettings.maximumBufferedHeatChange, growthSettings.maximumBufferedHeatChange);
+        }
+
+        private MentalRankRule CurrentMentalRule()
+        {
+            if (campaignSettings == null || !RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save)) return null;
+            return campaignSettings.MentalRule(save.mentalRank);
+        }
+
+        private void GrantGameplayExperience(int amount)
+        {
+            if (amount <= 0 || campaignSettings == null
+                || !RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save)) return;
+            BroadcasterProgression.AddBroadcastExperience(campaignSettings, save, amount);
+            RunnerCampaignSaveStore.Save(campaignSettings, save, true);
         }
 
         private void ApplyBufferedHype(float deltaTime)

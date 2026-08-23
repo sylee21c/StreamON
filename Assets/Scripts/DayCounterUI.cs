@@ -2,7 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-// 좌측 상단에 "Day N 낮" / "Day N 밤" 표시.
+// 좌측 상단에 최초 정비 / 끝없는 밤 상태를 표시.
 // 씬에 UI 계층이 있으면 그것을 사용, 없으면 코드로 자동 생성.
 public sealed class DayCounterUI : MonoBehaviour
 {
@@ -35,7 +35,6 @@ public sealed class DayCounterUI : MonoBehaviour
 
     [Header("Fallback UI (씬 참조가 없을 때만 자동 생성)")]
     [Tooltip("체크하면 씬 UI가 없을 때 자동으로 캔버스를 생성. 기본은 OFF - 씬에 직접 UI 만들고 참조 연결 권장")]
-    [SerializeField] private bool autoCreateUIIfMissing = false;
     [SerializeField] private Vector2 anchoredPosition = new Vector2(40f, -40f);
     [SerializeField] private Vector2 panelSize = new Vector2(240f, 68f);
     [SerializeField] private int fontSize = 32;
@@ -50,10 +49,7 @@ public sealed class DayCounterUI : MonoBehaviour
     {
         if (tmpText == null && legacyText == null)
         {
-            if (autoCreateUIIfMissing)
-                BuildUI();
-            else
-                Debug.LogWarning("[DayCounterUI] Text 참조가 비어있음. 씬에 UI 만들고 Legacy Text 또는 TMP Text 필드에 드래그하거나, Auto Create UI If Missing 를 체크하세요.");
+            Debug.LogError("[DayCounterUI] 씬 기반 Text 참조가 비어 있습니다. 런타임 UI는 자동 생성하지 않습니다.", this);
         }
         else if (legacyText != null && legacyText.font == null)
         {
@@ -172,7 +168,7 @@ public sealed class DayCounterUI : MonoBehaviour
     private void Refresh(bool force)
     {
         DayNightManager mgr = DayNightManager.Instance;
-        int day = mgr != null ? mgr.DayCount : 1;
+        int day = 1;
         DayNightManager.Phase phase = mgr != null ? mgr.CurrentPhase : DayNightManager.Phase.Day;
 
         if (!force && phaseInitialized && day == lastDay && phase == lastPhase) return;
@@ -180,7 +176,10 @@ public sealed class DayCounterUI : MonoBehaviour
         lastPhase = phase;
         phaseInitialized = true;
 
-        string phaseText = phase == DayNightManager.Phase.Night ? nightLabel : dayLabel;
+        string configuredLabel = phase == DayNightManager.Phase.Night ? nightLabel : dayLabel;
+        string phaseText = string.IsNullOrWhiteSpace(configuredLabel)
+            ? (phase == DayNightManager.Phase.Night ? "끝없는 밤" : "최초 정비")
+            : configuredLabel;
         string s = string.Format(format, day, phaseText);
         Color c = phase == DayNightManager.Phase.Night ? nightTextColor : dayTextColor;
 

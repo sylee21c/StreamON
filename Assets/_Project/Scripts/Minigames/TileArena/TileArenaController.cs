@@ -19,6 +19,7 @@ namespace StreamOn.Minigames.TileArena
         [SerializeField, Min(1)] private int maximumLives = 5;
         [SerializeField, Min(0.1f)] private float playerSpeedCellsPerSecond = 1000f / 140f;
         [SerializeField, Range(0.01f, 1f)] private float pickupRadius = 0.41f;
+        [SerializeField, Min(1)] private int pointsPerBlueTile = 1;
         [SerializeField, Min(0.1f)] private float jumpSeconds = 0.76f;
         [SerializeField, Min(0f)] private float invincibleSeconds = 1f;
         [SerializeField, Min(0.001f)] private float stageUpdateInterval = 1f / 30f;
@@ -314,7 +315,9 @@ namespace StreamOn.Minigames.TileArena
             }
             if (touched.Count == 0) return;
             foreach (Vector2Int cell in touched) _blue.Remove(cell);
-            _score += Mathf.Max(1, Mathf.RoundToInt(touched.Count * (broadcastSession != null ? broadcastSession.ScoreMultiplier : 1f)));
+            int earned = Mathf.Max(1, touched.Count * pointsPerBlueTile);
+            _score += earned;
+            broadcastSession?.OnRawPointsEarned(earned);
             audioController?.PlayPickup();
             chatAdapter?.OnBluePickedUp(touched.Count);
             if (_score > _best)

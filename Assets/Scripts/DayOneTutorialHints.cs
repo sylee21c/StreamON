@@ -13,7 +13,7 @@ public sealed class DayOneTutorialHints : MonoBehaviour
     [TextArea(2, 5)]
     [SerializeField] private string readyMessage = "전투 준비가 완료되었다면\n모니터에서 [준비 완료!] 버튼을 클릭하세요";
     [TextArea(2, 5)]
-    [SerializeField] private string firstNightMessage = "첫날 밤이 시작되었습니다.\n유령이 침대에 도달하지 못하게 막아보세요.";
+    [SerializeField] private string firstNightMessage = "끝없는 밤이 시작되었습니다.\n유령이 침대에 도달하지 못하게 막아보세요.";
 
     [Header("Timing")]
     [SerializeField, Min(0f)] private float introDuration = 3f;
@@ -36,11 +36,13 @@ public sealed class DayOneTutorialHints : MonoBehaviour
     [SerializeField] private Color textColor = Color.white;
     [SerializeField] private TMP_FontAsset fontAsset;
 
-    private CanvasGroup canvasGroup;
-    private RectTransform panelRect;
-    private Image panelImage;
-    private Outline panelOutline;
-    private TMP_Text hintText;
+    [Header("Scene UI References")]
+    [SerializeField] private CanvasGroup canvasGroup;
+    [SerializeField] private RectTransform panelRect;
+    [SerializeField] private Image panelImage;
+    [SerializeField] private Outline panelOutline;
+    [SerializeField] private TMP_Text hintText;
+
     private Coroutine activeHint;
     private bool firstPurchaseShown;
     private bool firstNightShown;
@@ -48,7 +50,8 @@ public sealed class DayOneTutorialHints : MonoBehaviour
 
     private void Awake()
     {
-        BuildUi();
+        if (canvasGroup == null || panelRect == null || panelImage == null || panelOutline == null || hintText == null)
+            Debug.LogError("DayOneTutorialHints의 씬 UI 참조가 비어 있습니다.", this);
         ApplyStyle();
         HideInstant();
     }
@@ -189,34 +192,6 @@ public sealed class DayOneTutorialHints : MonoBehaviour
 
         yield return Fade(1f, 0f);
         activeHint = null;
-    }
-
-    private void BuildUi()
-    {
-        GameObject canvasObject = new GameObject("Tutorial Hint Canvas");
-        canvasObject.transform.SetParent(transform, false);
-
-        Canvas canvas = canvasObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = short.MaxValue - 2;
-
-        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920f, 1080f);
-        scaler.matchWidthOrHeight = 0.5f;
-
-        canvasObject.AddComponent<GraphicRaycaster>();
-
-        GameObject panelObject = new GameObject("Tutorial Hint Panel");
-        panelObject.transform.SetParent(canvasObject.transform, false);
-        panelRect = panelObject.AddComponent<RectTransform>();
-        panelImage = panelObject.AddComponent<Image>();
-        panelOutline = panelObject.AddComponent<Outline>();
-        canvasGroup = panelObject.AddComponent<CanvasGroup>();
-
-        GameObject textObject = new GameObject("Tutorial Hint Text");
-        textObject.transform.SetParent(panelObject.transform, false);
-        hintText = textObject.AddComponent<TextMeshProUGUI>();
     }
 
     private void ApplyStyle()

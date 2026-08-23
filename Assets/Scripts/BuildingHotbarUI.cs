@@ -47,17 +47,8 @@ public sealed class BuildingHotbarUI : MonoBehaviour
         BuildingHotbarUI existingHotbar = FindAnyObjectByType<BuildingHotbarUI>();
         if (existingHotbar == null)
         {
-            GameObject canvasObject = new GameObject("Building Hotbar Canvas");
-            Canvas canvas = canvasObject.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 50;
-
-            CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-
-            canvasObject.AddComponent<GraphicRaycaster>();
-            canvasObject.AddComponent<BuildingHotbarUI>();
+            Debug.LogError("MainScene에 씬 기반 BuildingHotbarUI가 없습니다. 런타임 UI는 자동 생성하지 않습니다.");
+            return;
         }
 
         if (FindAnyObjectByType<EventSystem>() == null)

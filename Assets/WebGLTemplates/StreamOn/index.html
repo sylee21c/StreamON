@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#080a10">
+  <title>{{{ PRODUCT_NAME }}}</title>
+  <link rel="stylesheet" href="TemplateData/style.css">
+</head>
+<body>
+  <main id="unity-shell">
+    <div id="unity-container">
+      <canvas id="unity-canvas" width={{{ WIDTH }}} height={{{ HEIGHT }}} tabindex="-1"></canvas>
+      <div id="unity-loading">
+        <div class="title">STREAM ON</div>
+        <div id="unity-progress-track"><div id="unity-progress-bar"></div></div>
+        <div id="unity-loading-text">방송 준비 중 · 0%</div>
+      </div>
+      <div id="unity-warning"></div>
+    </div>
+    <footer>
+      <span>{{{ PRODUCT_NAME }}} · v{{{ PRODUCT_VERSION }}}</span>
+      <button id="unity-fullscreen" type="button">전체 화면</button>
+    </footer>
+  </main>
+  <script>
+    const canvas = document.querySelector("#unity-canvas");
+    const loading = document.querySelector("#unity-loading");
+    const progressBar = document.querySelector("#unity-progress-bar");
+    const loadingText = document.querySelector("#unity-loading-text");
+    const warning = document.querySelector("#unity-warning");
+    const buildUrl = "Build";
+    const loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
+
+    function showBanner(message, type) {
+      const item = document.createElement("div");
+      item.className = type === "error" ? "error" : "warning";
+      item.textContent = message;
+      warning.appendChild(item);
+      if (type !== "error") setTimeout(() => item.remove(), 6000);
+    }
+
+    const config = {
+      arguments: [],
+      dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+      frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_THREADS
+      workerUrl: buildUrl + "/{{{ WORKER_FILENAME }}}",
+#endif
+#if USE_WASM
+      codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+      symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
+#endif
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+      productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+      productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+      showBanner,
+      autoSyncPersistentDataPath: true,
+      devicePixelRatio: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+        ? 1 : Math.min(window.devicePixelRatio || 1, 2)
+    };
+
+    const script = document.createElement("script");
+    script.src = loaderUrl;
+    script.onload = () => createUnityInstance(canvas, config, progress => {
+      const percent = Math.round(progress * 100);
+      progressBar.style.width = percent + "%";
+      loadingText.textContent = "방송 준비 중 · " + percent + "%";
+    }).then(unityInstance => {
+      loading.remove();
+      document.querySelector("#unity-fullscreen").onclick = () => unityInstance.SetFullscreen(1);
+      canvas.addEventListener("pointerdown", () => canvas.focus(), { once: true });
+    }).catch(error => {
+      loadingText.textContent = "게임을 불러오지 못했습니다.";
+      showBanner(String(error), "error");
+    });
+    script.onerror = () => {
+      loadingText.textContent = "로더 파일을 불러오지 못했습니다.";
+      showBanner("배포 파일 또는 캐시 설정을 확인해 주세요.", "error");
+    };
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>

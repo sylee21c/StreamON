@@ -8,11 +8,13 @@ using StreamOn.Minigames.Runner;
 public sealed class MainMenuController : MonoBehaviour
 {
     [SerializeField] private string gameSceneName = "MainScene";
+    [SerializeField] private string roomSceneName = "StreamerRoom";
     [SerializeField] private SFXManager.Sfx buttonSfx = SFXManager.Sfx.Interact;
     [SerializeField, Min(0f)] private float actionDelay = 0.12f;
     [SerializeField, Min(0f)] private float fadeDuration = 1.4f;
     [SerializeField] private RectTransform startButtonRect;
     [SerializeField] private RectTransform exitButtonRect;
+    [SerializeField] private Image fadeImage;
 
     private bool isTransitioning;
 
@@ -47,7 +49,7 @@ public sealed class MainMenuController : MonoBehaviour
         {
             RunnerBroadcastSessionStore.OpenGameSelectionOnRoomLoad = true;
             RunnerSaveSession.RequireSlotSelection = false;
-            SceneManager.LoadScene("StreamerRoom");
+            SceneManager.LoadScene(roomSceneName);
             return;
         }
         StartCoroutine(ExitGameRoutine());
@@ -57,7 +59,7 @@ public sealed class MainMenuController : MonoBehaviour
     {
         isTransitioning = true;
         DontDestroyOnLoad(gameObject);
-        Image fadeImage = CreateFadeImage();
+        PrepareFade();
 
         SFXManager.PlayGlobal(buttonSfx);
         if (actionDelay > 0f)
@@ -70,10 +72,7 @@ public sealed class MainMenuController : MonoBehaviour
         yield return null;
         yield return Fade(fadeImage, 1f, 0f);
 
-        if (fadeImage != null)
-        {
-            Destroy(fadeImage.transform.root.gameObject);
-        }
+        if (fadeImage != null) Destroy(fadeImage.transform.root.gameObject);
 
         Destroy(gameObject);
     }
@@ -81,7 +80,7 @@ public sealed class MainMenuController : MonoBehaviour
     private IEnumerator ExitGameRoutine()
     {
         isTransitioning = true;
-        Image fadeImage = CreateFadeImage();
+        PrepareFade();
 
         SFXManager.PlayGlobal(buttonSfx);
         if (actionDelay > 0f)
@@ -93,31 +92,14 @@ public sealed class MainMenuController : MonoBehaviour
         QuitApplication();
     }
 
-    private Image CreateFadeImage()
+    private void PrepareFade()
     {
-        GameObject canvasObject = new GameObject("Scene Fade Canvas");
-        DontDestroyOnLoad(canvasObject);
-
-        Canvas canvas = canvasObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = short.MaxValue;
-
-        canvasObject.AddComponent<CanvasScaler>();
-        canvasObject.AddComponent<GraphicRaycaster>();
-
-        GameObject imageObject = new GameObject("Fade Overlay");
-        imageObject.transform.SetParent(canvasObject.transform, false);
-
-        RectTransform rectTransform = imageObject.AddComponent<RectTransform>();
-        rectTransform.anchorMin = Vector2.zero;
-        rectTransform.anchorMax = Vector2.one;
-        rectTransform.offsetMin = Vector2.zero;
-        rectTransform.offsetMax = Vector2.zero;
-
-        Image image = imageObject.AddComponent<Image>();
-        image.color = Color.clear;
-        image.raycastTarget = false;
-        return image;
+        if (fadeImage == null) Debug.LogError("MainMenu의 씬 기반 Fade Image가 연결되지 않았습니다.", this);
+        else
+        {
+            fadeImage.color = Color.clear;
+            DontDestroyOnLoad(fadeImage.transform.root.gameObject);
+        }
     }
 
     private IEnumerator Fade(Image fadeImage, float fromAlpha, float toAlpha)
@@ -153,10 +135,6 @@ public sealed class MainMenuController : MonoBehaviour
 
     private static void QuitApplication()
     {
-#if UNITY_EDITOR
-        UnityEditor.EditorApplication.isPlaying = false;
-#else
-        Application.Quit();
-#endif
+        StreamOn.Platform.WebGLPlatformBridge.QuitOrShowBrowserMessage();
     }
 }

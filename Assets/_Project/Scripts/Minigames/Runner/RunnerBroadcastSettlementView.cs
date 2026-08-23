@@ -11,6 +11,13 @@ namespace StreamOn.Minigames.Runner
     {
         public string gameTitle;
         public int score;
+        public int rawGameScore;
+        public int broadcastScore;
+        public int previousBestScore;
+        public bool isNewRecord;
+        public int experienceGained;
+        public int levelAfter;
+        public bool broadcastCompleted = true;
         public int targetScore;
         public int enemiesDefeated;
         public int hitsTaken;
@@ -57,20 +64,22 @@ namespace StreamOn.Minigames.Runner
 
         private IEnumerator Reveal(RunnerSettlementDisplayData data, string buttonLabel)
         {
-            bool succeeded = data.score >= data.targetScore;
+            int finalScore = data.broadcastScore > 0 ? data.broadcastScore : data.score;
+            bool succeeded = data.broadcastCompleted;
             titleText.text = succeeded ? $"{data.gameTitle} 방송 완료!" : $"{data.gameTitle} 방송 종료";
             titleText.color = succeeded ? new Color(0.40f, 0.90f, 0.82f) : new Color(1f, 0.58f, 0.42f);
             SetRow(gameResultText, false); SetRow(audienceText, false); SetRow(ratingText, false); SetRow(growthText, false);
             continueButton.gameObject.SetActive(false);
 
-            gameResultText.text = $"최고 점수  {data.score:N0} / 목표 {data.targetScore:N0}\n적 처치 {data.enemiesDefeated:N0}    피격 {data.hitsTaken:N0}";
+            string record = data.isNewRecord ? "  ·  신기록!" : string.Empty;
+            gameResultText.text = $"게임 점수  {data.rawGameScore:N0}\n방송 보정  →  최종 {finalScore:N0}{record}\n이전 최고 {data.previousBestScore:N0}    적 처치 {data.enemiesDefeated:N0}    피격 {data.hitsTaken:N0}";
             SetRow(gameResultText, true); yield return new WaitForSecondsRealtime(rowRevealDelay);
             RunnerBroadcastResult result = data.broadcastResult;
             if (result != null)
             {
                 audienceText.text = $"총 방문 {result.totalVisitors:N0}    평균 {result.averageViewers:0.0}    최고 {result.peakViewers:N0}\n종료 시청자 {result.endingViewers:N0}";
                 ratingText.text = $"플레이 {result.gameplayRating:0.0}    생존 {result.survivalRating:0.0}    진행 {result.hostingRating:0.0}\n최종 방송 평점  {result.finalRating:0.0} / 5.0";
-                growthText.text = $"팔로워 {(data.subscriberDelta >= 0 ? "+" : string.Empty)}{data.subscriberDelta:N0}    후원 +{result.donationWon:N0}원\n현재 팔로워 {data.subscribersAfter:N0}    보유금 {data.cashAfter:N0}원    멘탈 Lv.{data.mentalLevel}";
+                growthText.text = $"팔로워 {(data.subscriberDelta >= 0 ? "+" : string.Empty)}{data.subscriberDelta:N0}    후원 +{result.donationWon:N0}원\n현재 팔로워 {data.subscribersAfter:N0}    보유금 {data.cashAfter:N0}원\n방송인 EXP +{data.experienceGained:N0}    Lv.{data.levelAfter}";
             }
             else
             {
@@ -108,13 +117,16 @@ namespace StreamOn.Minigames.Runner
     public static class RunnerBroadcastSettlementService
     {
         public static RunnerSettlementDisplayData ApplyTileResult(RunnerCampaignSettings settings,
-            RunnerCampaignSaveData save, RunnerBroadcastResult result, int score, int hitsTaken)
+            RunnerCampaignSaveData save, RunnerBroadcastResult result, int rawScore, int score, int hitsTaken)
         {
             int target = settings.TargetScoreForDay(save.day);
             bool succeeded = score >= target;
             int subscriberDelta = result != null ? result.netFollowerChange : 0;
             save.subscribers = Mathf.Max(0, save.subscribers + subscriberDelta);
+            int previousBest = save.bestTileArenaGameScore;
             save.bestBroadcastScore = Mathf.Max(save.bestBroadcastScore, score);
+            save.bestTileArenaBroadcastScore = Mathf.Max(save.bestTileArenaBroadcastScore, score);
+            save.bestTileArenaGameScore = Mathf.Max(save.bestTileArenaGameScore, rawScore);
             if (result != null)
             {
                 save.lifetimeDonations += result.donationWon;
@@ -123,6 +135,13 @@ namespace StreamOn.Minigames.Runner
             save.broadcastPending = false;
             save.awaitingAdvance = true;
             save.campaignFailed = false;
+            int experience = settings.broadcastCompletionExperience
+                + Mathf.RoundToInt((result != null ? result.finalRating : 0f) * settings.broadcastRatingExperiencePerPoint)
+                + (rawScore > previousBest ? settings.newRecordExperience : 0);
+            experience = BroadcasterProgression.AddBroadcastExperience(settings, save, experience);
+            save.hiredManagerTier = 0;
+            save.managerUsesRemaining = 0;
+            save.broadcastSessionExperienceEarned = 0;
             if (save.records == null) save.records = new System.Collections.Generic.List<RunnerCampaignDayRecord>();
             save.records.Add(new RunnerCampaignDayRecord
             {
@@ -140,7 +159,10 @@ namespace StreamOn.Minigames.Runner
             RunnerCampaignSaveStore.Save(settings, save, true);
             return new RunnerSettlementDisplayData
             {
-                gameTitle = "타일 아레나", score = score, targetScore = target, hitsTaken = hitsTaken,
+                gameTitle = "타일 아레나", score = score, rawGameScore = rawScore, broadcastScore = score,
+                broadcastCompleted = true,
+                previousBestScore = previousBest, isNewRecord = rawScore > previousBest,
+                experienceGained = experience, levelAfter = save.broadcasterLevel, targetScore = target, hitsTaken = hitsTaken,
                 subscriberDelta = subscriberDelta, subscribersAfter = save.subscribers,
                 mentalLevel = save.mentalLevel, cashAfter = save.cash, broadcastResult = result
             };

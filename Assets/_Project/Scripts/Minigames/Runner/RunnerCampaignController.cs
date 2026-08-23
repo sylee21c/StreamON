@@ -97,11 +97,8 @@ namespace StreamOn.Minigames.Runner
 
             _gameManager = gameManager;
             _settlementView = FindFirstObjectByType<RunnerBroadcastSettlementView>();
-            // The current room -> broadcast flow uses scene-authored room and settlement UI.
-            // Keep the legacy single-scene campaign UI only for projects that explicitly
-            // disable the 3D room flow or do not provide the authored settlement view.
-            if (!settings.useThreeDimensionalRoomFlow || _settlementView == null)
-                BuildInterface();
+            if (_settlementView == null)
+                Debug.LogError("방송 정산 UI가 씬에 연결되지 않았습니다. 런타임 UI는 자동 생성하지 않습니다.", this);
             _initialized = true;
             if (!TryLoadCampaign()) StartNewCampaign(true);
         }
@@ -112,8 +109,9 @@ namespace StreamOn.Minigames.Runner
             _resultPending = true;
 
             int target = CurrentTargetScore;
-            bool succeeded = _gameManager.Score >= target;
-            int scoreContribution = _gameManager.Score / Mathf.Max(1, settings.scorePerSubscriber);
+            int finalBroadcastScore = _gameManager.FinalBroadcastScore;
+            bool succeeded = finalBroadcastScore >= target;
+            int scoreContribution = finalBroadcastScore / Mathf.Max(1, settings.scorePerSubscriber);
             int effectiveTalkingLevel = Mathf.Min(_talkingSkill, settings.maximumEffectiveTalkingLevel);
             RunnerBroadcastResult broadcastResult = _gameManager.BroadcastResult;
             int subscriberDelta;
@@ -143,14 +141,16 @@ namespace StreamOn.Minigames.Runner
                 _lifetimeDonations += broadcastResult.donationWon;
                 _cash += broadcastResult.donationWon;
             }
-            _bestBroadcastScore = Mathf.Max(_bestBroadcastScore, _gameManager.Score);
+            int previousBest = RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData recordSave)
+                ? recordSave.bestRunnerGameScore : 0;
+            _bestBroadcastScore = Mathf.Max(_bestBroadcastScore, finalBroadcastScore);
             _broadcastPending = false;
 
             _records.Add(new RunnerCampaignDayRecord
             {
                 day = _day,
                 selectedAction = _selectedActionName,
-                score = _gameManager.Score,
+                score = finalBroadcastScore,
                 targetScore = target,
                 succeeded = succeeded,
                 enemiesDefeated = _gameManager.EnemiesDefeated,
@@ -167,20 +167,47 @@ namespace StreamOn.Minigames.Runner
             });
             TrimRecords();
             SaveCampaign(true);
+            int experienceGained = 0;
+            int broadcasterLevelAfter = 1;
+            if (RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData progressionSave))
+            {
+                progressionSave.bestRunnerBroadcastScore = Mathf.Max(progressionSave.bestRunnerBroadcastScore, finalBroadcastScore);
+                progressionSave.bestRunnerGameScore = Mathf.Max(progressionSave.bestRunnerGameScore, _gameManager.FinalRawGameScore);
+                int experience = settings.broadcastCompletionExperience
+                    + Mathf.RoundToInt((broadcastResult != null ? broadcastResult.finalRating : 0f) * settings.broadcastRatingExperiencePerPoint)
+                    + (_gameManager.FinalRawGameScore > previousBest ? settings.newRecordExperience : 0);
+                experienceGained = BroadcasterProgression.AddBroadcastExperience(settings, progressionSave, experience);
+                progressionSave.hiredManagerTier = 0;
+                progressionSave.managerUsesRemaining = 0;
+                progressionSave.broadcastSessionExperienceEarned = 0;
+                broadcasterLevelAfter = progressionSave.broadcasterLevel;
+                RunnerCampaignSaveStore.Save(settings, progressionSave, true);
+            }
+            RunnerBroadcastSessionStore.Complete(settings);
             RefreshStatus();
             _gameManager.NotifyChat(RunnerChatEvent.CampaignSettlement);
-            StartCoroutine(ShowResultAfterDelay(succeeded, target, subscriberDelta, mentalDelta, broadcastResult));
+            StartCoroutine(ShowResultAfterDelay(succeeded, target, subscriberDelta, mentalDelta, broadcastResult,
+                previousBest, experienceGained, broadcasterLevelAfter));
         }
 
-        private IEnumerator ShowResultAfterDelay(bool succeeded, int target, int subscriberDelta, float mentalDelta, RunnerBroadcastResult result)
+        private IEnumerator ShowResultAfterDelay(bool succeeded, int target, int subscriberDelta, float mentalDelta,
+            RunnerBroadcastResult result, int previousBest, int experienceGained, int broadcasterLevelAfter)
         {
+            int finalBroadcastScore = _gameManager.FinalBroadcastScore;
             yield return new WaitForSecondsRealtime(settings.resultDelay);
             if (_settlementView != null)
             {
                 _settlementView.Show(new RunnerSettlementDisplayData
                 {
                     gameTitle = "러너",
-                    score = _gameManager.Score,
+                    score = _gameManager.FinalRawGameScore,
+                    rawGameScore = _gameManager.FinalRawGameScore,
+                    broadcastScore = finalBroadcastScore,
+                    previousBestScore = previousBest,
+                    isNewRecord = _gameManager.FinalRawGameScore > previousBest,
+                    broadcastCompleted = true,
+                    experienceGained = experienceGained,
+                    levelAfter = broadcasterLevelAfter,
                     targetScore = target,
                     enemiesDefeated = _gameManager.EnemiesDefeated,
                     hitsTaken = _gameManager.HitsTaken,
@@ -448,32 +475,31 @@ namespace StreamOn.Minigames.Runner
 
         private RunnerCampaignSaveData BuildSaveData(bool awaitingAdvance)
         {
-            RunnerCampaignSaveData data = new RunnerCampaignSaveData
-            {
-                day = _day,
-                subscribers = _subscribers,
-                mentalLevel = _mentalLevel,
-                mentalExperience = _mentalExperience,
-                gameSkill = _gameSkill,
-                gameSkillExperience = _gameSkillExperience,
-                talkingSkill = _talkingSkill,
-                talkingSkillExperience = _talkingSkillExperience,
-                healthStat = _healthStat,
-                healthStatExperience = _healthStatExperience,
-                bestBroadcastScore = _bestBroadcastScore,
-                lifetimeDonations = _lifetimeDonations,
-                cash = _cash,
-                pcLevel = _pcLevel,
-                microphoneLevel = _microphoneLevel,
-                fitnessLevel = _fitnessLevel,
-                interiorLevel = _interiorLevel,
-                campaignFailed = false,
-                awaitingAdvance = awaitingAdvance,
-                broadcastPending = _broadcastPending,
-                selectedAction = _selectedActionName,
-                selectedBroadcastGame = _selectedBroadcastGame,
-                records = new List<RunnerCampaignDayRecord>(_records)
-            };
+            if (!RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData data))
+                data = RunnerCampaignSaveStore.CreateNew(settings);
+            data.day = _day;
+            data.subscribers = _subscribers;
+            data.mentalLevel = _mentalLevel;
+            data.mentalExperience = _mentalExperience;
+            data.gameSkill = _gameSkill;
+            data.gameSkillExperience = _gameSkillExperience;
+            data.talkingSkill = _talkingSkill;
+            data.talkingSkillExperience = _talkingSkillExperience;
+            data.healthStat = _healthStat;
+            data.healthStatExperience = _healthStatExperience;
+            data.bestBroadcastScore = _bestBroadcastScore;
+            data.lifetimeDonations = _lifetimeDonations;
+            data.cash = _cash;
+            data.pcLevel = _pcLevel;
+            data.microphoneLevel = _microphoneLevel;
+            data.fitnessLevel = _fitnessLevel;
+            data.interiorLevel = _interiorLevel;
+            data.campaignFailed = false;
+            data.awaitingAdvance = awaitingAdvance;
+            data.broadcastPending = _broadcastPending;
+            data.selectedAction = _selectedActionName;
+            data.selectedBroadcastGame = _selectedBroadcastGame;
+            data.records = new List<RunnerCampaignDayRecord>(_records);
             RunnerBroadcastSessionStore.ApplyToSave(data);
             return data;
         }

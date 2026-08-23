@@ -13,6 +13,7 @@ namespace StreamOn.Minigames.Runner
     {
         public string gameTitle;
         public string gameState;
+        public string plasticPhase;
         public int campaignDay;
         public int campaignMaximumDays;
         public bool campaignEndless;
@@ -351,6 +352,7 @@ BengolCAT | ?
             builder.AppendLine("현재 상황 JSON의 conflictActive가 false면 시청자끼리 싸운다거나 채팅창이 싸운다는 말을 절대 만들지 않는다.");
             builder.AppendLine("fraternizationActive가 false면 서로 오늘도 왔냐고 알아보거나 방송 밖 친분을 과시하는 친목 대화를 만들지 않는다.");
             builder.AppendLine("타일 아레나의 패턴은 매번 무작위로 교체된다. 패턴 번호는 진행도·난이도·도달 단계가 아니며 채팅에서 숫자, '벌써', '몇 스테이지', 기록 진척으로 절대 언급하지 않는다.");
+            builder.AppendLine("Plastic Knightmare는 최초 정비 뒤 낮으로 돌아오지 않는 끝없는 밤이다. campaignDay 숫자는 내부 공세 값일 뿐 Day로 부르지 말고, 'Day가 올랐다', '벌써 Day N' 같은 말은 금지한다. plasticPhase가 전투면 '슬슬 빡세지는데', '이제 많이 나오네', 정비면 '벽부터 고쳐', '정비 시간 짧다'처럼 짧게 반응한다.");
             builder.AppendLine("시청자별 수치는 발화자 선택의 약한 확률일 뿐이며 고정 역할을 연기하지 않는다.");
             builder.AppendLine("message에는 닉네임 없이 한 줄 35자 이내 한국어 채팅만 쓴다. 설명, 따옴표, 괄호 연기, 마크업은 금지한다.");
             builder.AppendLine("혐오, 차별, 협박, 심한 욕설, 성적 표현, 현실 인신공격은 금지한다. 가벼운 놀림과 의견 충돌까지만 허용한다.");

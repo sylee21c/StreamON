@@ -27,6 +27,13 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private Button runnerGameButton;
         [SerializeField] private Button tileArenaGameButton;
         [SerializeField] private Button plasticKnightmareGameButton;
+        [Header("Scene-authored Save Slots")]
+        [SerializeField] private GameObject slotPanel;
+        [SerializeField] private TMP_Text slotNotice;
+        [SerializeField] private GameObject[] slotRows;
+        [SerializeField] private TMP_Text[] slotLabels;
+        [SerializeField] private Button[] slotSelectButtons;
+        [SerializeField] private Button[] slotDeleteButtons;
         [SerializeField, Min(0.2f)] private float activityGaugeAnimationSeconds = 1.2f;
         [SerializeField, Min(0f)] private float activityResultHoldSeconds = 0.55f;
         [SerializeField, Min(0.1f)] private float fadeDuration = 0.65f;
@@ -39,6 +46,7 @@ namespace StreamOn.Minigames.Runner
         private TMP_Text _slotNotice;
         private int _deleteArmedSlot = -1;
         private bool _transitioning;
+        private int _gameSelectionInputEnabledFrame = int.MaxValue;
 
         private void Start()
         {
@@ -49,6 +57,7 @@ namespace StreamOn.Minigames.Runner
                 return;
             }
             AudioListener.volume = RunnerUserSettingsStore.Load().masterVolume;
+            ResolveGameSelectionUi();
             if (runnerGameButton != null) runnerGameButton.onClick.AddListener(SelectRunnerGame);
             if (tileArenaGameButton != null) tileArenaGameButton.onClick.AddListener(SelectTileArenaGame);
             if (plasticKnightmareGameButton != null) plasticKnightmareGameButton.onClick.AddListener(SelectPlasticKnightmareGame);
@@ -60,7 +69,7 @@ namespace StreamOn.Minigames.Runner
             }
             if (gameSelectionPanel != null) gameSelectionPanel.SetActive(false);
             _activities = FindObjectsByType<RunnerRoomActivity>(FindObjectsSortMode.None);
-            BuildSlotMenu();
+            BindSlotMenu();
             if (RunnerSaveSession.RequireSlotSelection) ShowSlotMenu();
             else InitializeSelectedSlot();
         }
@@ -91,11 +100,19 @@ namespace StreamOn.Minigames.Runner
             SetPlayerLocked(false);
             if (_slotPanel != null) _slotPanel.SetActive(false);
             RefreshStatus();
-            if (_save.broadcastSessionActive || RunnerBroadcastSessionStore.OpenGameSelectionOnRoomLoad)
+            if (RunnerBroadcastSessionStore.OpenGameSelectionOnRoomLoad)
             {
-                RunnerBroadcastSessionStore.BeginOrResume(settings, _save);
                 RunnerBroadcastSessionStore.OpenGameSelectionOnRoomLoad = false;
+                RunnerBroadcastSessionStore.End(settings, _save);
                 ShowGameSelection(false);
+            }
+            else if (_save.broadcastSessionActive)
+            {
+                // Loading a save slot must always enter the room first. A broadcast
+                // can remain resumable in the save, but it should only continue after
+                // the player interacts with the computer and chooses the game again.
+                _notice = "중단된 방송이 있습니다. 컴퓨터에서 게임을 선택하면 이어서 진행합니다.";
+                if (promptText != null) promptText.text = _notice;
             }
         }
 
@@ -120,7 +137,7 @@ namespace StreamOn.Minigames.Runner
 
             if (promptText != null)
             {
-                string prefix = closest.IsBroadcastComputer && !_save.broadcastPending ? "먼저 오늘의 활동을 선택하세요" : $"E  {closest.InteractionName}";
+                string prefix = $"E  {closest.InteractionName}";
                 promptText.text = string.IsNullOrEmpty(_notice) ? prefix : _notice + "\n" + prefix;
             }
             if (Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame) Interact(closest);
@@ -133,8 +150,9 @@ namespace StreamOn.Minigames.Runner
             {
                 if (!_save.broadcastPending)
                 {
-                    _notice = "낮 활동을 하나 선택한 뒤 방송을 시작할 수 있습니다.";
-                    return;
+                    _save.broadcastPending = true;
+                    _save.selectedAction = string.Empty;
+                    RunnerCampaignSaveStore.Save(settings, _save, true);
                 }
                 ShowGameSelection(false);
                 return;
@@ -145,6 +163,10 @@ namespace StreamOn.Minigames.Runner
                 return;
             }
 
+            _notice = "능력치는 방송 경험치로 레벨업한 뒤 성장 패널에서 올릴 수 있습니다.";
+            return;
+
+#pragma warning disable CS0162
             RunnerCampaignActionDefinition action = settings.dayActions.FirstOrDefault(candidate => candidate != null && candidate.id == activity.ActionId);
             if (action == null)
             {
@@ -169,6 +191,7 @@ namespace StreamOn.Minigames.Runner
             RunnerCampaignSaveStore.Save(settings, _save);
             StartCoroutine(ShowActivityResultThenGameSelection(action, previousMental,
                 previousGame, previousTalking, previousHealth));
+#pragma warning restore CS0162
         }
 
         public void SelectRunnerGame() => LoadSelectedGame("runner",
@@ -177,15 +200,91 @@ namespace StreamOn.Minigames.Runner
         public void SelectTileArenaGame() => LoadSelectedGame("tile_arena", settings.tileArenaSceneName);
 
         public void SelectPlasticKnightmareGame() => LoadSelectedGame("plastic_knightmare",
-            settings.plasticKnightmareMenuSceneName);
+            string.IsNullOrWhiteSpace(settings.plasticKnightmareMenuSceneName)
+                ? settings.plasticKnightmareSceneName
+                : settings.plasticKnightmareMenuSceneName);
 
         private void LoadSelectedGame(string gameId, string sceneName)
         {
-            if (_save == null || string.IsNullOrWhiteSpace(sceneName)) return;
+            // A panel can become visible from another button's onClick (for example,
+            // after choosing a save slot). Do not let that same UI event also choose
+            // whichever executable happens to be underneath the pointer.
+            if (gameSelectionPanel != null && (!gameSelectionPanel.activeInHierarchy
+                || Time.frameCount < _gameSelectionInputEnabledFrame))
+                return;
+
+            if (_save == null)
+            {
+                ShowSelectionError("저장 데이터를 불러오지 못했습니다.");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(sceneName) || !Application.CanStreamedLevelBeLoaded(sceneName))
+            {
+                ShowSelectionError($"게임 씬을 찾을 수 없습니다: {sceneName}");
+                return;
+            }
             _save.selectedBroadcastGame = gameId;
+            _save.broadcastSessionExperienceEarned = 0;
+            BroadcastGameId id = gameId == "tile_arena" ? BroadcastGameId.TileArena
+                : gameId == "plastic_knightmare" ? BroadcastGameId.PlasticKnightmare : BroadcastGameId.Runner;
+
+            // A selection panel is only shown before a new broadcast. If an obsolete
+            // session from an older build survived in the save, clear it instead of
+            // silently making every other game button appear broken.
+            if (_save.broadcastSessionActive
+                && (!System.Enum.TryParse(_save.broadcastSessionGameId, out BroadcastGameId savedId) || savedId != id))
+            {
+                RunnerBroadcastSessionStore.End(settings, _save);
+            }
+
+            if (!RunnerBroadcastSessionStore.BeginOrResume(settings, _save, id))
+            {
+                ShowSelectionError("방송 세션을 시작하지 못했습니다. 저장 상태를 확인해 주세요.");
+                return;
+            }
             RunnerBroadcastSessionStore.ApplyToSave(_save);
             RunnerCampaignSaveStore.Save(settings, _save, true);
             SceneManager.LoadScene(sceneName);
+        }
+
+        private void ResumeLockedBroadcast()
+        {
+            if (_save == null) return;
+            if (!System.Enum.TryParse(_save.broadcastSessionGameId, out BroadcastGameId gameId))
+            {
+                _save.broadcastSessionActive = false;
+                RunnerCampaignSaveStore.Save(settings, _save, true);
+                ShowGameSelection(false);
+                return;
+            }
+            if (!RunnerBroadcastSessionStore.BeginOrResume(settings, _save, gameId))
+            {
+                RunnerBroadcastSessionStore.End(settings, _save);
+                ShowSelectionError("이전 방송을 복원하지 못했습니다. 게임을 다시 선택해 주세요.");
+                ShowGameSelection(false);
+                return;
+            }
+            string sceneName = gameId == BroadcastGameId.TileArena ? settings.tileArenaSceneName
+                : gameId == BroadcastGameId.PlasticKnightmare
+                    ? (string.IsNullOrWhiteSpace(settings.plasticKnightmareMenuSceneName)
+                        ? settings.plasticKnightmareSceneName
+                        : settings.plasticKnightmareMenuSceneName)
+                : string.IsNullOrWhiteSpace(settings.runnerSceneName) ? settings.broadcastSceneName : settings.runnerSceneName;
+            if (string.IsNullOrWhiteSpace(sceneName) || !Application.CanStreamedLevelBeLoaded(sceneName))
+            {
+                RunnerBroadcastSessionStore.End(settings, _save);
+                ShowSelectionError($"게임 씬을 찾을 수 없습니다: {sceneName}");
+                ShowGameSelection(false);
+                return;
+            }
+            SceneManager.LoadScene(sceneName);
+        }
+
+        private void ShowSelectionError(string message)
+        {
+            _notice = message;
+            if (promptText != null) promptText.text = message;
+            Debug.LogError($"STREAM ON: {message}", this);
         }
 
         private void ShowGameSelection(bool fadeFirst)
@@ -200,6 +299,7 @@ namespace StreamOn.Minigames.Runner
             {
                 SetPlayerLocked(true);
                 gameSelectionPanel.SetActive(true);
+                ArmGameSelectionInput();
             }
         }
 
@@ -221,8 +321,8 @@ namespace StreamOn.Minigames.Runner
             _notice = BuildActivityResultNotice(action);
             if (promptText != null) promptText.text = _notice;
             if (statusText != null)
-                statusText.text = $"DAY {_save.day}    팔로워 {_save.subscribers:N0}    보유금 {_save.cash:N0}원";
-            if (statGaugePanel != null) statGaugePanel.SetActive(true);
+                statusText.text = $"DAY {_save.day}    팔로워 {_save.subscribers:N0}    보유금 {_save.cash:N0}원    방송인 Lv.{_save.broadcasterLevel}    포인트 {_save.unspentStatPoints}";
+            if (statGaugePanel != null) statGaugePanel.SetActive(false);
 
             float fromGame = TotalExperience(previousGame);
             float fromTalking = TotalExperience(previousTalking);
@@ -269,6 +369,7 @@ namespace StreamOn.Minigames.Runner
                 }
             }
             gameSelectionPanel.SetActive(true);
+            ArmGameSelectionInput();
             if (transitionFade != null)
             {
                 float startedAt = Time.unscaledTime;
@@ -329,7 +430,8 @@ namespace StreamOn.Minigames.Runner
         private void ShowSlotMenu()
         {
             SetPlayerLocked(true);
-            _slotPanel.SetActive(true);
+            if (slotPanel == null) return;
+            slotPanel.SetActive(true);
             RefreshSlotMenu();
         }
 
@@ -351,67 +453,89 @@ namespace StreamOn.Minigames.Runner
             if (_deleteArmedSlot != slot)
             {
                 _deleteArmedSlot = slot;
-                _slotNotice.text = $"슬롯 {slot}을 삭제하려면 같은 삭제 버튼을 한 번 더 누르세요.";
+                if (slotNotice != null) slotNotice.text = $"슬롯 {slot}을 삭제하려면 같은 삭제 버튼을 한 번 더 누르세요.";
                 RefreshSlotMenu();
                 return;
             }
             RunnerCampaignSaveStore.Delete(settings, slot);
             _deleteArmedSlot = -1;
-            _slotNotice.text = $"슬롯 {slot}을 삭제했습니다.";
+            if (slotNotice != null) slotNotice.text = $"슬롯 {slot}을 삭제했습니다.";
             RefreshSlotMenu();
         }
 
-        private void BuildSlotMenu()
+        private void BindSlotMenu()
         {
-            Canvas canvas = FindFirstObjectByType<Canvas>();
-            if (canvas == null) return;
-            _slotPanel = new GameObject("Save Slot Menu", typeof(RectTransform), typeof(Image));
-            _slotPanel.transform.SetParent(canvas.transform, false);
-            RectTransform panelRect = _slotPanel.GetComponent<RectTransform>();
-            panelRect.anchorMin = Vector2.zero; panelRect.anchorMax = Vector2.one; panelRect.offsetMin = Vector2.zero; panelRect.offsetMax = Vector2.zero;
-            _slotPanel.GetComponent<Image>().color = new Color(.025f, .035f, .06f, .97f);
-            CreateSlotText(_slotPanel.transform, "게임 시작", 43, new Vector2(0, 225), new Vector2(650, 70));
-            _slotNotice = CreateSlotText(_slotPanel.transform, "이어할 저장을 선택하거나 빈 슬롯에서 새 게임을 시작하세요.", 19, new Vector2(0, 175), new Vector2(850, 50));
-            _slotPanel.SetActive(false);
+            _slotPanel = slotPanel;
+            _slotNotice = slotNotice;
+            for (int index = 0; slotSelectButtons != null && index < slotSelectButtons.Length; index++)
+            {
+                int captured = index;
+                slotSelectButtons[index]?.onClick.AddListener(() => SelectSlotByIndex(captured));
+            }
+            for (int index = 0; slotDeleteButtons != null && index < slotDeleteButtons.Length; index++)
+            {
+                int captured = index;
+                slotDeleteButtons[index]?.onClick.AddListener(() => DeleteSlotByIndex(captured));
+            }
+            if (slotPanel != null) slotPanel.SetActive(false);
+        }
+
+        private void ResolveGameSelectionUi()
+        {
+            Transform explorer = FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .FirstOrDefault(candidate => candidate != null
+                    && candidate.name.Replace(" ", string.Empty) == "BroadcastGameExplorer");
+            if (explorer == null) return;
+
+            GameObject legacyPanel = gameSelectionPanel;
+            gameSelectionPanel = explorer.gameObject;
+            Button[] explorerButtons = explorer.GetComponentsInChildren<Button>(true);
+            runnerGameButton = explorerButtons.FirstOrDefault(button => button.name == "Runner Game Button");
+            tileArenaGameButton = explorerButtons.FirstOrDefault(button => button.name == "Tile Arena Game Button");
+            plasticKnightmareGameButton = explorerButtons.FirstOrDefault(button => button.name == "Plastic Knightmare Game Button");
+
+            if (legacyPanel != null && legacyPanel != gameSelectionPanel) legacyPanel.SetActive(false);
+        }
+
+        private void ArmGameSelectionInput()
+        {
+            _gameSelectionInputEnabledFrame = Time.frameCount + 1;
         }
 
         private void RefreshSlotMenu()
         {
-            foreach (Transform child in _slotPanel.transform.Cast<Transform>().Where(child => child.name.StartsWith("Slot Row")).ToArray())
-                Destroy(child.gameObject);
             IReadOnlyList<RunnerSaveSlotInfo> slots = RunnerCampaignSaveStore.GetSlotInfos(settings);
-            for (int index = 0; index < slots.Count; index++)
+            for (int index = 0; slotRows != null && index < slotRows.Length; index++)
             {
+                bool visible = index < slots.Count;
+                if (slotRows[index] != null) slotRows[index].SetActive(visible);
+                if (!visible) continue;
                 RunnerSaveSlotInfo info = slots[index];
-                float y = 90f - index * 92f;
-                GameObject row = new GameObject($"Slot Row {info.slot}", typeof(RectTransform));
-                row.transform.SetParent(_slotPanel.transform, false);
-                RectTransform rowRect = row.GetComponent<RectTransform>(); rowRect.sizeDelta = new Vector2(760, 76); rowRect.anchoredPosition = new Vector2(0, y);
                 string label = info.exists
-                    ? $"슬롯 {info.slot}  이어하기    DAY {info.day}  팔로워 {info.subscribers:N0}  체력 Lv.{info.healthStat}" + (info.recoveredFromBackup ? "  [백업 복구]" : string.Empty)
+                    ? $"슬롯 {info.slot}  이어하기    DAY {info.day}  팔로워 {info.subscribers:N0}  방송인 Lv.{info.broadcasterLevel}" + (info.recoveredFromBackup ? "  [백업 복구]" : string.Empty)
                     : info.corrupted ? $"슬롯 {info.slot}  손상됨 - 새 게임으로 교체" : $"슬롯 {info.slot}  새 게임";
-                int capturedSlot = info.slot;
-                bool capturedExists = info.exists;
-                CreateSlotButton(row.transform, label, new Vector2(-65, 0), new Vector2(610, 66), () => SelectSlot(capturedSlot, capturedExists));
-                if (info.exists || info.corrupted)
-                    CreateSlotButton(row.transform, _deleteArmedSlot == info.slot ? "정말 삭제" : "삭제", new Vector2(325, 0), new Vector2(130, 66), () => RequestDeleteSlot(capturedSlot), new Color(.62f, .22f, .28f));
+                if (slotLabels != null && index < slotLabels.Length && slotLabels[index] != null) slotLabels[index].text = label;
+                if (slotDeleteButtons != null && index < slotDeleteButtons.Length && slotDeleteButtons[index] != null)
+                {
+                    slotDeleteButtons[index].gameObject.SetActive(info.exists || info.corrupted);
+                    TMP_Text deleteLabel = slotDeleteButtons[index].GetComponentInChildren<TMP_Text>(true);
+                    if (deleteLabel != null) deleteLabel.text = _deleteArmedSlot == info.slot ? "정말 삭제" : "삭제";
+                }
             }
         }
 
-        private TMP_Text CreateSlotText(Transform parent, string value, float size, Vector2 position, Vector2 dimensions)
+        private void SelectSlotByIndex(int index)
         {
-            GameObject obj = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI)); obj.transform.SetParent(parent, false);
-            TMP_Text text = obj.GetComponent<TMP_Text>(); text.text = value; text.font = statusText != null ? statusText.font : null; text.fontSize = size; text.color = Color.white; text.alignment = TextAlignmentOptions.Center;
-            RectTransform rect = obj.GetComponent<RectTransform>(); rect.sizeDelta = dimensions; rect.anchoredPosition = position; return text;
+            IReadOnlyList<RunnerSaveSlotInfo> slots = RunnerCampaignSaveStore.GetSlotInfos(settings);
+            if (index >= 0 && index < slots.Count) SelectSlot(slots[index].slot, slots[index].exists);
         }
 
-        private void CreateSlotButton(Transform parent, string label, Vector2 position, Vector2 dimensions, UnityEngine.Events.UnityAction action, Color? color = null)
+        private void DeleteSlotByIndex(int index)
         {
-            GameObject obj = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button)); obj.transform.SetParent(parent, false);
-            RectTransform rect = obj.GetComponent<RectTransform>(); rect.sizeDelta = dimensions; rect.anchoredPosition = position;
-            obj.GetComponent<Image>().color = color ?? new Color(.13f, .52f, .58f, 1f); obj.GetComponent<Button>().onClick.AddListener(action);
-            CreateSlotText(obj.transform, label, 19, Vector2.zero, dimensions - new Vector2(16, 8));
+            IReadOnlyList<RunnerSaveSlotInfo> slots = RunnerCampaignSaveStore.GetSlotInfos(settings);
+            if (index >= 0 && index < slots.Count) RequestDeleteSlot(slots[index].slot);
         }
+
 
         private void SetPlayerLocked(bool locked)
         {

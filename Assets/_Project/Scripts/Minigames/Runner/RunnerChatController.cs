@@ -29,14 +29,30 @@ namespace StreamOn.Minigames.Runner
         [Header("Scene References")]
         [SerializeField] private RunnerGameManager gameManager;
         [SerializeField] private TMP_Text[] messageSlots;
+        [Header("Manager (scene-authored UI)")]
+        [SerializeField] private RunnerCampaignSettings campaignSettings;
+        [SerializeField] private TMP_Text managerStatusText;
+
+        [Header("Chat Typography")]
+        [Tooltip("All text inside the shared game-chat panel is rebound to this font at runtime.")]
+        [SerializeField] private TMP_FontAsset chatFont;
 
         [Header("Display Timing")]
         [SerializeField] private float minimumDelay = 0.2f;
         [SerializeField] private float maximumDelay = 0.6f;
+        [SerializeField, Min(0f)] private float farewellInitialDelay = .8f;
+        [SerializeField, Min(0f)] private float farewellRepeatDelay = .95f;
+        [SerializeField] private float[] postGameReactionDelays = { .9f, 1.7f, 2.8f };
+        [SerializeField, Range(0f, 1f)] private float minimumHitReactionChance = .45f;
+        [SerializeField, Range(0f, 1f)] private float minimumEnemyDefeatReactionChance = .30f;
+        [SerializeField, Range(.05f, 1f)] private float minimumAudienceDelayMultiplier = .2f;
 
-        [Header("AI Chat (development connection)")]
+        [Header("AI Chat Connection")]
         [SerializeField] private bool useAiChat = true;
+        [Tooltip("Editor/desktop development only. Never put an API key in a WebGL build.")]
         [SerializeField] private string endpoint = "https://api.openai.com/v1/responses";
+        [Tooltip("WebGL uses this server-side relay instead of calling OpenAI directly. Relative URLs such as /api/stream-on-chat are allowed.")]
+        [SerializeField] private string webProxyEndpoint = "";
         [SerializeField] private string model = "gpt-5.6-luna";
         [SerializeField] private string apiKeyEnvironmentVariable = "OPENAI_API_KEY";
         [Tooltip("Turn this off only when endpoint points to your own authenticated proxy.")]
@@ -63,6 +79,26 @@ namespace StreamOn.Minigames.Runner
         [SerializeField, Range(4, 80)] private int maximumActiveViewers = 40;
         [Tooltip("매 플레이에 분탕 또는 논쟁형 페르소나를 최소 한 유형 포함")]
         [SerializeField] private bool ensureConflictPersona = true;
+
+        [Header("Social Event Balance")]
+        [SerializeField, Min(1)] private int socialEventMinimumViewers = 3;
+        [SerializeField, Min(1)] private int socialEventMinimumChatters = 3;
+        [SerializeField, Range(0f, 1f)] private float conflictChanceAtZeroHeat = 0.48f;
+        [SerializeField, Range(0f, 1f)] private float conflictChanceAtFullHeat = 0.01f;
+        [SerializeField, Min(0.01f)] private float conflictHeatCurvePower = 0.65f;
+        [SerializeField, Range(0f, 1f)] private float conflictTargetsStreamerChance = 0.32f;
+        [SerializeField, Range(0f, 1f)] private float fraternizationChanceAtZeroHeat = 0.34f;
+        [SerializeField, Range(0f, 1f)] private float fraternizationChanceAtFullHeat = 0.005f;
+        [SerializeField, Min(0.01f)] private float fraternizationHeatCurvePower = 0.72f;
+        [SerializeField, Range(0f, 1f)] private float thirdFraternizerChance = 0.48f;
+        [SerializeField, Min(0f)] private float socialReplyMinimumSeconds = 3f;
+        [SerializeField, Min(0f)] private float socialReplyMaximumSeconds = 5f;
+        [SerializeField, Min(0f)] private float socialOpeningDelayMinimumSeconds = 13f;
+        [SerializeField, Min(0f)] private float socialOpeningDelayMaximumSeconds = 16f;
+        [SerializeField, Min(0)] private int wrongBanReactionMinimumCount = 3;
+        [SerializeField, Min(0)] private int wrongBanReactionMaximumCount = 5;
+        [SerializeField, Min(0f)] private float wrongBanReactionMinimumDelay = .35f;
+        [SerializeField, Min(0f)] private float wrongBanReactionMaximumDelay = .9f;
 
         private sealed class RenderedChatLine
         {
@@ -119,22 +155,26 @@ namespace StreamOn.Minigames.Runner
         private RunnerViewerData _pendingFraternizer;
         private Coroutine _fraternizationPump;
         private float _socialEventStartedAt;
+        private Coroutine _managerRoutine;
 
         private void Awake()
         {
             useAiChat = RunnerUserSettingsStore.Load(useAiChat).aiChatEnabled;
             if (gameManager == null) gameManager = FindFirstObjectByType<RunnerGameManager>();
+            if (campaignSettings != null && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData managerSave))
+                RefreshManagerStatus(managerSave, BroadcasterProgression.HiredManager(campaignSettings, managerSave));
             EnsureSlots();
+            ApplyChatFont();
             _titleText = GetComponentsInChildren<TMP_Text>(true).FirstOrDefault(text => text.name == "Title");
-            if (_titleText != null)
-            {
-                _titleText.fontSize = 18f;
-                _titleText.textWrappingMode = TextWrappingModes.NoWrap;
-                _titleText.alignment = TextAlignmentOptions.MidlineLeft;
-                _titleText.rectTransform.sizeDelta = new Vector2(270f, 68f);
-            }
             SetConnectionLabel("LOCAL");
             SelectActiveViewers();
+        }
+
+        private void ApplyChatFont()
+        {
+            if (chatFont == null) return;
+            foreach (TMP_Text text in GetComponentsInChildren<TMP_Text>(true))
+                text.font = chatFont;
         }
 
         private void Update()
@@ -264,7 +304,7 @@ namespace StreamOn.Minigames.Runner
             snapshot.events = situation;
             snapshot.recentMessages = string.Join(" | ", _recentChatContext);
             RunnerGeneratedWitPrompt generated = null;
-            OpenAiRunnerChatClient client = new OpenAiRunnerChatClient(endpoint, model, apiKey);
+            OpenAiRunnerChatClient client = new OpenAiRunnerChatClient(ActiveAiEndpoint(), model, apiKey);
             yield return client.GenerateWit(snapshot, recentPrompts, value => generated = value, _ => { });
             onComplete?.Invoke(generated);
         }
@@ -292,7 +332,7 @@ namespace StreamOn.Minigames.Runner
         {
             _audienceViewerCount = Mathf.Max(0, currentViewers);
             _chattingViewerCount = Mathf.Clamp(chattingViewers, 0, Mathf.Min(_audienceViewerCount, _activeViewers.Count));
-            _audienceDelayMultiplier = Mathf.Clamp(delayMultiplier, 0.2f, 1f);
+            _audienceDelayMultiplier = Mathf.Clamp(delayMultiplier, minimumAudienceDelayMultiplier, 1f);
             _eventReactionChance = Mathf.Clamp01(eventReactionChance);
             _eventReactionCooldown = Mathf.Max(0f, eventReactionCooldown);
             _broadcastHeat = Mathf.Clamp(broadcastHeat, 0f, 100f);
@@ -408,13 +448,13 @@ namespace StreamOn.Minigames.Runner
 
         private IEnumerator PumpBroadcastFarewells(int generation)
         {
-            yield return new WaitForSecondsRealtime(0.8f);
+            yield return new WaitForSecondsRealtime(farewellInitialDelay);
             if (generation != _runGeneration) yield break;
             React(RunnerChatEvent.BroadcastCompleted);
-            yield return new WaitForSecondsRealtime(0.95f);
+            yield return new WaitForSecondsRealtime(farewellRepeatDelay);
             if (generation != _runGeneration) yield break;
             React(RunnerChatEvent.BroadcastCompleted);
-            yield return new WaitForSecondsRealtime(0.95f);
+            yield return new WaitForSecondsRealtime(farewellRepeatDelay);
             if (generation != _runGeneration) yield break;
             React(RunnerChatEvent.BroadcastCompleted);
             _postGamePump = null;
@@ -422,15 +462,14 @@ namespace StreamOn.Minigames.Runner
 
         private IEnumerator PumpPostGameReactions(int generation)
         {
-            yield return new WaitForSecondsRealtime(0.9f);
-            if (!IsCurrentGameOver(generation)) yield break;
-            React(RunnerChatEvent.PostGameDiscussion);
-            yield return new WaitForSecondsRealtime(1.7f);
-            if (!IsCurrentGameOver(generation)) yield break;
-            React(RunnerChatEvent.PostGameDiscussion);
-            yield return new WaitForSecondsRealtime(2.8f);
-            if (!IsCurrentGameOver(generation)) yield break;
-            React(RunnerChatEvent.PostGameDiscussion);
+            float[] delays = postGameReactionDelays != null && postGameReactionDelays.Length > 0
+                ? postGameReactionDelays : new[] { 1f };
+            foreach (float delay in delays)
+            {
+                yield return new WaitForSecondsRealtime(Mathf.Max(0f, delay));
+                if (!IsCurrentGameOver(generation)) yield break;
+                React(RunnerChatEvent.PostGameDiscussion);
+            }
             _postGamePump = null;
         }
 
@@ -482,7 +521,7 @@ namespace StreamOn.Minigames.Runner
 
                 RunnerGeneratedChatBatch generated = null;
                 string failure = null;
-                OpenAiRunnerChatClient client = new OpenAiRunnerChatClient(endpoint, model, apiKey);
+                OpenAiRunnerChatClient client = new OpenAiRunnerChatClient(ActiveAiEndpoint(), model, apiKey);
                 _nextAiRequestAt = Time.unscaledTime + minimumApiInterval;
                 IReadOnlyList<RunnerViewerData> speakingViewers = IsSocialEventActive() ? SocialEventViewers() : SpeakingViewers();
                 if (speakingViewers.Count == 0) continue;
@@ -531,13 +570,15 @@ namespace StreamOn.Minigames.Runner
         private bool CanUseAi(out string apiKey)
         {
             apiKey = ReadApiKey();
-            bool available = useAiChat && !string.IsNullOrWhiteSpace(endpoint) && !string.IsNullOrWhiteSpace(model)
-                && (!requireApiKey || !string.IsNullOrWhiteSpace(apiKey))
+            bool available = useAiChat && !string.IsNullOrWhiteSpace(ActiveAiEndpoint()) && !string.IsNullOrWhiteSpace(model)
+                && (!RequiresClientApiKey() || !string.IsNullOrWhiteSpace(apiKey))
                 && Time.unscaledTime >= _aiRetryAfter;
             if (!available && useAiChat && !_loggedAiUnavailable)
             {
-                Debug.Log("STREAM ON AI chat is using local fallback. Set " + apiKeyEnvironmentVariable
-                    + " and restart Unity to enable the API connection.");
+                Debug.Log(IsWebPlayer()
+                    ? "STREAM ON AI chat is using local fallback. Set the Web Proxy Endpoint before building for WebGL."
+                    : "STREAM ON AI chat is using local fallback. Set " + apiKeyEnvironmentVariable
+                        + " and restart Unity to enable the API connection.");
                 _loggedAiUnavailable = true;
             }
             return available;
@@ -545,6 +586,7 @@ namespace StreamOn.Minigames.Runner
 
         private string ReadApiKey()
         {
+            if (!RequiresClientApiKey()) return string.Empty;
             if (string.IsNullOrWhiteSpace(apiKeyEnvironmentVariable)) return string.Empty;
             string value = Environment.GetEnvironmentVariable(apiKeyEnvironmentVariable);
             if (!string.IsNullOrWhiteSpace(value)) return value;
@@ -562,6 +604,19 @@ namespace StreamOn.Minigames.Runner
             return value ?? string.Empty;
         }
 
+        private string ActiveAiEndpoint() => IsWebPlayer() ? webProxyEndpoint : endpoint;
+
+        private bool RequiresClientApiKey() => !IsWebPlayer() && requireApiKey;
+
+        private static bool IsWebPlayer()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return true;
+#else
+            return false;
+#endif
+        }
+
         private void SetConnectionLabel(string mode)
         {
             _connectionMode = mode;
@@ -572,8 +627,8 @@ namespace StreamOn.Minigames.Runner
         {
             if (_titleText == null) return;
             if (_conflictActive)
-                _titleText.text = $"LIVE CHAT [{_connectionMode}]\n현재 시청자 {_audienceViewerCount:N0}명  ·  <color=#FF665F>분탕 유저를 클릭해 밴</color>";
-            else _titleText.text = $"LIVE CHAT [{_connectionMode}]\n현재 시청자 {_audienceViewerCount:N0}명";
+                _titleText.text = $"채팅  ·  {_connectionMode}\n현재 시청자 {_audienceViewerCount:N0}명  ·  <color=#FF665F>분탕 유저를 클릭해 밴</color>";
+            else _titleText.text = $"채팅  ·  {_connectionMode}\n현재 시청자 {_audienceViewerCount:N0}명";
         }
 
         private bool IsSocialEventActive() => _conflictActive || _fraternizationActive;
@@ -584,8 +639,9 @@ namespace StreamOn.Minigames.Runner
 
         private bool TryStartConflict()
         {
-            if (_audienceViewerCount < 3 || _chattingViewerCount < 3) return false;
-            float chance = Mathf.Lerp(0.48f, 0.01f, Mathf.Pow(Mathf.Clamp01(_broadcastHeat / 100f), 0.65f));
+            if (_audienceViewerCount < socialEventMinimumViewers || _chattingViewerCount < socialEventMinimumChatters) return false;
+            float chance = Mathf.Lerp(conflictChanceAtZeroHeat, conflictChanceAtFullHeat,
+                Mathf.Pow(Mathf.Clamp01(_broadcastHeat / 100f), conflictHeatCurvePower));
             if (UnityEngine.Random.value > chance) return false;
 
             RunnerViewerData[] troublemakers = _activeViewers.Where(viewer => !_bannedViewers.Contains(viewer.viewerId)
@@ -593,7 +649,7 @@ namespace StreamOn.Minigames.Runner
             if (troublemakers.Length == 0) return false;
             _troublemaker = troublemakers[UnityEngine.Random.Range(0, troublemakers.Length)];
 
-            _conflictTargetsStreamer = UnityEngine.Random.value < 0.32f;
+            _conflictTargetsStreamer = UnityEngine.Random.value < conflictTargetsStreamerChance;
             if (!_conflictTargetsStreamer)
             {
                 RunnerViewerData[] targets = SpeakingViewers().Where(viewer => viewer.viewerId != _troublemaker.viewerId
@@ -618,13 +674,15 @@ namespace StreamOn.Minigames.Runner
             React(RunnerChatEvent.ChatConflict);
             if (_conflictPump != null) StopCoroutine(_conflictPump);
             _conflictPump = StartCoroutine(PumpConflictFollowups(_runGeneration));
+            TryScheduleManager(false);
             return true;
         }
 
         private bool TryStartFraternization()
         {
-            if (_audienceViewerCount < 3 || _chattingViewerCount < 3) return false;
-            float chance = Mathf.Lerp(0.34f, 0.005f, Mathf.Pow(Mathf.Clamp01(_broadcastHeat / 100f), 0.72f));
+            if (_audienceViewerCount < socialEventMinimumViewers || _chattingViewerCount < socialEventMinimumChatters) return false;
+            float chance = Mathf.Lerp(fraternizationChanceAtZeroHeat, fraternizationChanceAtFullHeat,
+                Mathf.Pow(Mathf.Clamp01(_broadcastHeat / 100f), fraternizationHeatCurvePower));
             if (UnityEngine.Random.value > chance) return false;
             RunnerViewerData[] candidates = SpeakingViewers().Where(viewer => !IsConflictViewer(viewer)).ToArray();
             if (candidates.Length < 2) return false;
@@ -633,7 +691,7 @@ namespace StreamOn.Minigames.Runner
             _fraternizationOffenders.Clear();
             _fraternizers.Add(candidates[0]);
             _fraternizers.Add(candidates[1]);
-            _pendingFraternizer = candidates.Length >= 3 && UnityEngine.Random.value < 0.48f ? candidates[2] : null;
+            _pendingFraternizer = candidates.Length >= 3 && UnityEngine.Random.value < thirdFraternizerChance ? candidates[2] : null;
             _fraternizationActive = true;
             _socialEventStartedAt = Time.unscaledTime;
             MarkFraternizationOffender(_fraternizers[0]);
@@ -642,7 +700,64 @@ namespace StreamOn.Minigames.Runner
             React(RunnerChatEvent.ChatFraternization);
             if (_fraternizationPump != null) StopCoroutine(_fraternizationPump);
             _fraternizationPump = StartCoroutine(PumpFraternizationFollowups(_runGeneration));
+            TryScheduleManager(true);
             return true;
+        }
+
+        private void TryScheduleManager(bool fraternization)
+        {
+            if (campaignSettings == null || !RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save)) return;
+            ManagerTierRule manager = BroadcasterProgression.HiredManager(campaignSettings, save);
+            if (manager == null || save.managerUsesRemaining <= 0 || (fraternization && !manager.handlesFraternization)) return;
+            if (_managerRoutine != null) StopCoroutine(_managerRoutine);
+            float delayMultiplier = 1f - Mathf.Max(0, save.pcLevel - 1) * campaignSettings.managerDelayReductionPerPcUpgrade;
+            _managerRoutine = StartCoroutine(ManagerHandleRoutine(manager, fraternization, Mathf.Max(0f, delayMultiplier)));
+            RefreshManagerStatus(save, manager);
+        }
+
+        private IEnumerator ManagerHandleRoutine(ManagerTierRule manager, bool fraternization, float delayMultiplier)
+        {
+            yield return new WaitForSecondsRealtime(Mathf.Max(0f, manager.handlingDelaySeconds * delayMultiplier));
+            _managerRoutine = null;
+            if (fraternization ? !_fraternizationActive : !_conflictActive) yield break;
+            if (!RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save) || save.managerUsesRemaining <= 0) yield break;
+            save.managerUsesRemaining--;
+            RunnerCampaignSaveStore.Save(campaignSettings, save, true);
+            if (fraternization)
+            {
+                string[] offenders = _fraternizationOffenders.Take(Mathf.Max(0, _fraternizationOffenders.Count - 1)).ToArray();
+                foreach (string viewerId in offenders) ManagerBan(viewerId);
+                _fraternizationActive = false;
+                _fraternizationOffenders.Clear();
+                _fraternizers.Clear();
+                if (_fraternizationPump != null) StopCoroutine(_fraternizationPump);
+                _fraternizationPump = null;
+            }
+            else
+            {
+                ManagerBan(_troublemaker?.viewerId);
+                _conflictActive = false;
+                if (_conflictPump != null) StopCoroutine(_conflictPump);
+                _conflictPump = null;
+            }
+            EnqueueSystemMessage($"{manager.displayName}가 채팅을 정리했습니다.");
+            RefreshTitle();
+            RefreshManagerStatus(save, manager);
+        }
+
+        private void ManagerBan(string viewerId)
+        {
+            if (string.IsNullOrWhiteSpace(viewerId) || _bannedViewers.Contains(viewerId)) return;
+            RunnerViewerData viewer = _activeViewers.FirstOrDefault(item => item.viewerId == viewerId);
+            _bannedViewers.Add(viewerId);
+            RemoveViewerChatHistory(viewerId);
+            if (viewer != null) EnqueueSystemMessage($"{viewer.nickname} 님이 강제 퇴장되었습니다.");
+        }
+
+        private void RefreshManagerStatus(RunnerCampaignSaveData save, ManagerTierRule manager)
+        {
+            if (managerStatusText == null) return;
+            managerStatusText.text = manager == null ? "매니저 없음" : $"{manager.displayName} · 남은 처리 {save.managerUsesRemaining}회";
         }
 
         private static bool IsConflictViewer(RunnerViewerData viewer) => viewer != null
@@ -721,7 +836,8 @@ namespace StreamOn.Minigames.Runner
         private IEnumerator PumpFraternizationFollowups(int generation)
         {
             int turn = 0;
-            yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(13f, 16f));
+            yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(socialOpeningDelayMinimumSeconds,
+                Mathf.Max(socialOpeningDelayMinimumSeconds, socialOpeningDelayMaximumSeconds)));
             while (_fraternizationActive && generation == _runGeneration)
             {
                 yield return SocialReplyDelay();
@@ -766,13 +882,15 @@ namespace StreamOn.Minigames.Runner
             if (viewer != null && _fraternizationOffenders.Add(viewer.viewerId)) RefreshTitle();
         }
 
-        private static WaitForSecondsRealtime SocialReplyDelay() =>
-            new WaitForSecondsRealtime(UnityEngine.Random.Range(3f, 5.01f));
+        private WaitForSecondsRealtime SocialReplyDelay() =>
+            new WaitForSecondsRealtime(UnityEngine.Random.Range(socialReplyMinimumSeconds,
+                Mathf.Max(socialReplyMinimumSeconds, socialReplyMaximumSeconds)));
 
         private IEnumerator PumpConflictFollowups(int generation)
         {
             int turn = 0;
-            yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(13f, 16f));
+            yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(socialOpeningDelayMinimumSeconds,
+                Mathf.Max(socialOpeningDelayMinimumSeconds, socialOpeningDelayMaximumSeconds)));
             while (_conflictActive && generation == _runGeneration)
             {
                 yield return SocialReplyDelay();
@@ -839,6 +957,12 @@ namespace StreamOn.Minigames.Runner
                 return;
             }
 
+            if (campaignSettings != null && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData experienceSave))
+            {
+                BroadcasterProgression.AddBroadcastExperience(campaignSettings, experienceSave, campaignSettings.correctModerationExperience);
+                RunnerCampaignSaveStore.Save(campaignSettings, experienceSave, true);
+            }
+
             if (fraternizationCorrect)
             {
                 _fraternizers.RemoveAll(viewer => viewer.viewerId == viewerId);
@@ -875,10 +999,13 @@ namespace StreamOn.Minigames.Runner
                 "왜 밴함?", "예?", "아니 쟤가 뭘했다고", "잘못 누른거임?", "뭔데 갑자기", "멀쩡한 사람 왜 자름",
                 "에반데", "???", "아니 이유라도 말해", "방금 뭐임?", "왜저래", "이건 좀..."
             };
-            int count = UnityEngine.Random.Range(3, 6);
+            int minimum = Mathf.Max(0, wrongBanReactionMinimumCount);
+            int maximum = Mathf.Max(minimum, wrongBanReactionMaximumCount);
+            int count = UnityEngine.Random.Range(minimum, maximum + 1);
             for (int i = 0; i < count; i++)
             {
-                yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(0.35f, 0.9f));
+                yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(wrongBanReactionMinimumDelay,
+                    Mathf.Max(wrongBanReactionMinimumDelay, wrongBanReactionMaximumDelay)));
                 if (generation != _runGeneration) yield break;
                 EnqueueConflictBystander(reactions[UnityEngine.Random.Range(0, reactions.Length)], false);
             }
@@ -921,7 +1048,8 @@ namespace StreamOn.Minigames.Runner
             {
                 StreamOn.Minigames.TileArena.TileArenaChatAdapter tileAudience =
                     FindFirstObjectByType<StreamOn.Minigames.TileArena.TileArenaChatAdapter>();
-                tileAudience?.OnModerationResult(correct);
+                if (tileAudience != null) tileAudience.OnModerationResult(correct);
+                else FindFirstObjectByType<PlasticKnightmareBroadcastController>()?.OnModerationResult(correct);
             }
         }
 
@@ -929,15 +1057,24 @@ namespace StreamOn.Minigames.Runner
         {
             RunnerBroadcastAudienceController runnerAudience = FindFirstObjectByType<RunnerBroadcastAudienceController>();
             if (runnerAudience != null) runnerAudience.OnFraternizationTick();
-            else FindFirstObjectByType<StreamOn.Minigames.TileArena.TileArenaChatAdapter>()?.OnFraternizationTick();
+            else
+            {
+                StreamOn.Minigames.TileArena.TileArenaChatAdapter tile = FindFirstObjectByType<StreamOn.Minigames.TileArena.TileArenaChatAdapter>();
+                if (tile != null) tile.OnFraternizationTick();
+                else FindFirstObjectByType<PlasticKnightmareBroadcastController>()?.OnFraternizationTick();
+            }
         }
 
         private void ApplyFraternizationResolved(float responseSeconds)
         {
             RunnerBroadcastAudienceController runnerAudience = FindFirstObjectByType<RunnerBroadcastAudienceController>();
             if (runnerAudience != null) runnerAudience.OnFraternizationResolved(responseSeconds);
-            else FindFirstObjectByType<StreamOn.Minigames.TileArena.TileArenaChatAdapter>()
-                ?.OnFraternizationResolved(responseSeconds);
+            else
+            {
+                StreamOn.Minigames.TileArena.TileArenaChatAdapter tile = FindFirstObjectByType<StreamOn.Minigames.TileArena.TileArenaChatAdapter>();
+                if (tile != null) tile.OnFraternizationResolved(responseSeconds);
+                else FindFirstObjectByType<PlasticKnightmareBroadcastController>()?.OnFraternizationResolved(responseSeconds);
+            }
         }
 
         private bool ShouldReactToLiveEvent(RunnerChatEvent chatEvent)
@@ -1000,8 +1137,9 @@ namespace StreamOn.Minigames.Runner
             if (!bypassCooldown && Time.unscaledTime < _nextEventReactionAt) return false;
 
             float chance = Mathf.Clamp01(_eventReactionChance * eventWeight);
-            if (chatEvent == RunnerChatEvent.PlayerHit || chatEvent == RunnerChatEvent.TileArenaPlayerHit) chance = Mathf.Max(chance, 0.45f);
-            if (chatEvent == RunnerChatEvent.EnemyDefeated) chance = Mathf.Max(chance, 0.30f);
+            if (chatEvent == RunnerChatEvent.PlayerHit || chatEvent == RunnerChatEvent.TileArenaPlayerHit)
+                chance = Mathf.Max(chance, minimumHitReactionChance);
+            if (chatEvent == RunnerChatEvent.EnemyDefeated) chance = Mathf.Max(chance, minimumEnemyDefeatReactionChance);
             if (UnityEngine.Random.value > chance) return false;
 
             _nextEventReactionAt = Time.unscaledTime + _eventReactionCooldown;
@@ -1199,7 +1337,7 @@ namespace StreamOn.Minigames.Runner
             _pending.Enqueue(new RenderedChatLine
             {
                 viewerId = viewer.viewerId,
-                rendered = $"<link=ban><color=#{color}>{viewer.nickname}</color></link>  {message}"
+                rendered = $"<link=ban><color=#{color}>{viewer.nickname}</color></link>  <color=#DFE2EA>{message}</color>"
             });
             _recentChatContext.Enqueue(viewer.nickname + ": " + message);
             while (_recentChatContext.Count > 6) _recentChatContext.Dequeue();
@@ -1384,52 +1522,26 @@ namespace StreamOn.Minigames.Runner
     public sealed class RunnerChatBanTooltip : MonoBehaviour
     {
         private static RunnerChatBanTooltip _instance;
-        private RectTransform _rect;
+        public GameObject tooltipObject;
+        public RectTransform tooltipRect;
+        public Vector2 pointerOffset = new Vector2(14f, 18f);
+
+        private void Awake()
+        {
+            _instance = this;
+            if (tooltipObject != null) tooltipObject.SetActive(false);
+        }
 
         public static void Show(Vector2 screenPosition)
         {
-            EnsureExists();
-            _instance.gameObject.SetActive(true);
-            _instance._rect.position = screenPosition + new Vector2(14f, 18f);
+            if (_instance == null || _instance.tooltipObject == null || _instance.tooltipRect == null) return;
+            _instance.tooltipObject.SetActive(true);
+            _instance.tooltipRect.position = screenPosition + _instance.pointerOffset;
         }
 
         public static void Hide()
         {
-            if (_instance != null) _instance.gameObject.SetActive(false);
-        }
-
-        private static void EnsureExists()
-        {
-            if (_instance != null) return;
-            GameObject canvasObject = new GameObject("Chat Ban Tooltip Canvas", typeof(RectTransform), typeof(Canvas));
-            Canvas canvas = canvasObject.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 500;
-
-            GameObject panel = new GameObject("Chat Ban Tooltip", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            panel.transform.SetParent(canvasObject.transform, false);
-            _instance = panel.AddComponent<RunnerChatBanTooltip>();
-            _instance._rect = panel.GetComponent<RectTransform>();
-            _instance._rect.pivot = new Vector2(0f, 0f);
-            _instance._rect.sizeDelta = new Vector2(72f, 24f);
-            Image background = panel.GetComponent<Image>();
-            background.color = new Color(0.05f, 0.06f, 0.08f, 0.94f);
-            background.raycastTarget = false;
-
-            GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
-            labelObject.transform.SetParent(panel.transform, false);
-            RectTransform labelRect = labelObject.GetComponent<RectTransform>();
-            labelRect.anchorMin = Vector2.zero;
-            labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = Vector2.zero;
-            labelRect.offsetMax = Vector2.zero;
-            TMP_Text label = labelObject.GetComponent<TMP_Text>();
-            label.text = "차단하기";
-            label.fontSize = 13f;
-            label.alignment = TextAlignmentOptions.Center;
-            label.color = new Color(1f, 0.72f, 0.68f);
-            label.raycastTarget = false;
-            panel.SetActive(false);
+            if (_instance != null && _instance.tooltipObject != null) _instance.tooltipObject.SetActive(false);
         }
     }
 }

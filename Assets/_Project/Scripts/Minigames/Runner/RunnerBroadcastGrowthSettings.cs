@@ -49,16 +49,28 @@ namespace StreamOn.Minigames.Runner
             _mistakes.Enqueue(now);
         }
 
-        public float Tick(float now, RunnerBroadcastGrowthSettings settings)
+        public void ClearRecentMistakes()
+        {
+            _mistakes.Clear();
+            _lastMistakeAt = float.NegativeInfinity;
+            _lastMistakeSampleAt = float.NegativeInfinity;
+            State = BroadcastPerformanceState.Neutral;
+        }
+
+        public float Tick(float now, RunnerBroadcastGrowthSettings settings, float poorTickIntervalOverride = -1f,
+            int extraMistakesForPoorState = 0, float neutralRecoveryTimeReduction = 0f)
         {
             if (settings == null) return 0f;
+            float recoveryScale = 1f - Mathf.Clamp(neutralRecoveryTimeReduction, 0f, .9f);
             Prune(_successes, now - settings.performanceWindowSeconds);
-            Prune(_mistakes, now - settings.performanceWindowSeconds);
+            // Mental shortens how long old failures keep the state in Poor. Success
+            // samples retain the full window, so the perk never removes good play.
+            Prune(_mistakes, now - settings.performanceWindowSeconds * recoveryScale);
 
             if (now >= _nextEvaluationAt)
             {
-                _nextEvaluationAt = now + settings.performanceEvaluationInterval;
-                bool poor = _mistakes.Count >= settings.poorStateMinimumMistakes
+                _nextEvaluationAt = now + settings.performanceEvaluationInterval * recoveryScale;
+                bool poor = _mistakes.Count >= settings.poorStateMinimumMistakes + Mathf.Max(0, extraMistakesForPoorState)
                     && _successes.Count <= _mistakes.Count * settings.poorStateMaximumSuccessesPerMistake;
                 bool good = !poor && now - _lastMistakeAt >= settings.goodStateMistakeFreeSeconds
                     && _successes.Count >= settings.goodStateMinimumSuccesses;
@@ -70,14 +82,15 @@ namespace StreamOn.Minigames.Runner
                     _nextHeatStepAt = State == BroadcastPerformanceState.Good
                         ? now + settings.goodStateHeatStepInterval
                         : State == BroadcastPerformanceState.Poor
-                            ? now + settings.poorStateHeatStepInterval
+                            ? now + (poorTickIntervalOverride > 0f ? poorTickIntervalOverride : settings.poorStateHeatStepInterval)
                             : float.PositiveInfinity;
                 }
             }
 
             if (State == BroadcastPerformanceState.Neutral || now < _nextHeatStepAt) return 0f;
             _nextHeatStepAt = now + (State == BroadcastPerformanceState.Good
-                ? settings.goodStateHeatStepInterval : settings.poorStateHeatStepInterval);
+                ? settings.goodStateHeatStepInterval
+                : poorTickIntervalOverride > 0f ? poorTickIntervalOverride : settings.poorStateHeatStepInterval);
             return State == BroadcastPerformanceState.Good ? 1f : -1f;
         }
 
@@ -101,6 +114,12 @@ namespace StreamOn.Minigames.Runner
         [Range(0f, 0.5f)] public float viewerRandomVariation = 0.12f;
         [Range(0f, 1f)] public float idleViewerFluctuationChance = 0.55f;
         [Min(1)] public int idleFluctuationMaximumViewers = 50;
+        [Min(0f)] public float viewerTargetMultiplierAtZeroHeat = .55f;
+        [Min(0f)] public float viewerTargetMultiplierAtFullHeat = 1.25f;
+        [Min(0f)] public float viewerGrowthRateMultiplierAtZeroHeat = .65f;
+        [Min(0f)] public float viewerGrowthRateMultiplierAtFullHeat = 1.35f;
+        [Min(0f)] public float viewerDeclineRateMultiplierAtZeroHeat = 1.55f;
+        [Min(0f)] public float viewerDeclineRateMultiplierAtFullHeat = .70f;
         [Range(0f, 100f)] public float startingHype = 50f;
         [Range(0f, 100f)] public float restingHype = 50f;
         [Tooltip("보통 상태에서 기준 열기로 돌아가는 속도입니다. 0이면 보통 상태의 열기는 변하지 않습니다.")]
@@ -113,6 +132,15 @@ namespace StreamOn.Minigames.Runner
         [Range(0f, 0.45f)] public float heatPenaltyReductionPerTalkingLevel = 0.14f;
         [Min(0f)] public float newHighScoreHype = 8f;
         [Min(0.5f)] public float viewerExitDuration = 3.2f;
+
+        [Header("Social Event Audience Impact")]
+        [Range(0f, 1f)] public float socialViewerLeaveFraction = .018f;
+        [Min(0)] public int socialMinimumViewerLeave = 1;
+        [Min(0f)] public float socialFollowerPenaltyMinimum = .18f;
+        [Min(0f)] public float socialFollowerPenaltyPerFollower = .0008f;
+        [Range(0f, 1f)] public float socialResolutionViewerReturnMinimum = .02f;
+        [Range(0f, 1f)] public float socialResolutionViewerReturnMaximum = .07f;
+        [Min(0)] public int socialResolutionFollowerBonusMaximum = 3;
 
         [Header("Performance State Heat")]
         [Tooltip("최근 성공과 실수를 평가할 시간 범위입니다.")]
@@ -162,6 +190,8 @@ namespace StreamOn.Minigames.Runner
         [Min(10)] public int viewersForMaximumChatActivity = 500;
         [Min(0.1f)] public float smallAudienceEventCooldown = 4.5f;
         [Min(0.1f)] public float largeAudienceEventCooldown = 0.75f;
+        [Min(0f)] public float eventReactionMultiplierAtZeroHeat = .72f;
+        [Min(0f)] public float eventReactionMultiplierAtFullHeat = 1.18f;
 
         [Header("Follower Conversion")]
         [Range(0f, 1f)] public float baseFollowConversion = 0.08f;
@@ -173,6 +203,21 @@ namespace StreamOn.Minigames.Runner
         [Range(0f, 0.2f)] public float unfollowRatePerMissingRatingPoint = 0.03f;
         [Range(0f, 100f)] public float lowHeatUnfollowThreshold = 28f;
         [Range(0f, 0.2f)] public float lowHeatUnfollowRate = 0.025f;
+        [Range(0f, 100f)] public float followHeatMinimum = 20f;
+        [Range(0f, 100f)] public float followHeatMaximum = 100f;
+        [Min(0f)] public float followHeatMaximumMultiplier = 1.4f;
+
+        [Header("Per-game Rating Curves")]
+        [Min(0f)] public float runnerSafetyPenaltyPerHit = 1.15f;
+        public float runnerCombatRatingBase = 2.5f;
+        [Min(0f)] public float runnerCombatRatingPerEnemy = .35f;
+        [Min(0f)] public float runnerCombatRatingPenaltyPerHit = .35f;
+        public float runnerHostingRatingBase = 2.2f;
+        [Min(0f)] public float runnerHostingRatingPerTalkingLevel = .28f;
+        [Min(0f)] public float runnerHostingRatingHeatRange = 1.6f;
+        [Min(0f)] public float tileSafetyPenaltyPerHit = .45f;
+        public float tileHostingRatingBase = 2.2f;
+        [Min(0f)] public float tileHostingRatingHeatRange = 1.6f;
 
         [Header("Broadcast Rating Weights")]
         [Min(0f)] public float gameplayRatingWeight = 0.40f;
@@ -185,6 +230,8 @@ namespace StreamOn.Minigames.Runner
         [Min(0f)] public float wonPerViewerRatingPoint = 50f;
         [Range(0f, 1f)] public float donationBonusPerTalkingLevel = 0.08f;
         [Range(0f, 0.8f)] public float donationRandomVariation = 0.15f;
+        [Min(0f)] public float donationValueMultiplierAtZeroHeat = .45f;
+        [Min(0f)] public float donationValueMultiplierAtFullHeat = 1.65f;
 
         [Header("Live Donation Events")]
         [Min(0)] public int minimumViewersForDonation = 1;
@@ -211,6 +258,14 @@ namespace StreamOn.Minigames.Runner
         [Min(100)] public int largeDonationWon = 10000;
         [Range(0f, 1f)] public float mediumDonationChance = 0.22f;
         [Range(0f, 1f)] public float largeDonationChance = 0.05f;
+        [Min(0f)] public float donationEventChanceMultiplierAtZeroHeat = .25f;
+        [Min(0f)] public float donationEventChanceMultiplierAtFullHeat = 1.85f;
+        [Min(0f)] public float donationIntervalMultiplierAtZeroHeat = 1.8f;
+        [Min(0f)] public float donationIntervalMultiplierAtFullHeat = .62f;
+        [Min(0f)] public float largeDonationChanceMultiplierAtZeroHeat = .2f;
+        [Min(0f)] public float largeDonationChanceMultiplierAtFullHeat = 2.6f;
+        [Min(0f)] public float mediumDonationChanceMultiplierAtZeroHeat = .45f;
+        [Min(0f)] public float mediumDonationChanceMultiplierAtFullHeat = 1.75f;
 
         [Header("Wit Interaction Rewards")]
         public float witSuccessHype = 7f;

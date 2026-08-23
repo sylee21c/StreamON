@@ -1,107 +1,118 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 public sealed class GhostSpawner : MonoBehaviour
 {
-    [System.Serializable]
+    public enum AssaultState { Inactive, Combat, ClearingRemaining, Maintenance, GameOver }
+
+    public readonly struct GhostDefeatInfo
+    {
+        public readonly int TierIndex;
+        public readonly int BaseScore;
+        public readonly float LifetimeSeconds;
+        public readonly int Assault;
+        public GhostDefeatInfo(int tierIndex, int baseScore, float lifetimeSeconds, int assault)
+        { TierIndex = tierIndex; BaseScore = baseScore; LifetimeSeconds = lifetimeSeconds; Assault = assault; }
+    }
+
+    public static event Action<int> GhostDefeated;
+    public static event Action<GhostDefeatInfo> GhostDefeatedDetailed;
+    public event Action<AssaultState, int> StateChanged;
+
+    [Serializable]
     public class GhostTier
     {
         public string tierName = "Tier 1";
         public GameObject[] prefabs;
-        public float health = 100f;
-        [Tooltip("이 티어 유령이 한 번 공격 시 입히는 데미지")]
-        public float attackDamage = 10f;
-        [Tooltip("Night Profile 이 없거나 가중치 합이 0일 때만 사용되는 폴백 가중치")]
-        public float spawnWeight = 3f;
+        [Min(1f)] public float health = 100f;
+        [Min(0f)] public float attackDamage = 10f;
+        [Min(0f)] public float spawnWeight = 3f;
         public GameObject baseCoinPrefab;
-        public int baseCoinValue = 100;
+        [Min(0)] public int baseCoinValue = 100;
         public GameObject bonusCoinPrefab;
-        public int bonusCoinValue = 500;
-        [Range(0f, 1f)]
-        public float bonusCoinChance = 0.2f;
+        [Min(0)] public int bonusCoinValue = 500;
+        [Range(0f, 1f)] public float bonusCoinChance = 0.2f;
+        [Tooltip("리더보드용 기본 점수")]
+        [Min(0)] public int baseScore = 25;
+        [Tooltip("일반 가중치 풀에 들어오기 시작하는 공세")]
+        [Min(1)] public int unlockAssault = 1;
     }
 
-    [System.Serializable]
+    [Serializable]
     public class NightProfile
     {
-        public string label = "Night";
-        [Tooltip("이 밤에 스폰할 총 유령 수 (다 죽이면 새벽)")]
-        public int totalGhosts = 10;
-        [Tooltip("스폰 간격 (초)")]
-        public float spawnInterval = 5f;
-        [Tooltip("Tier 1 선택 가중치")]
-        public float tier1Weight = 6f;
-        [Tooltip("Tier 2 선택 가중치")]
-        public float tier2Weight = 3f;
-        [Tooltip("Tier 3 선택 가중치")]
-        public float tier3Weight = 1f;
+        public string label = "Assault";
+        [Tooltip("기존 데이터 호환용. 공세 난이도 저작 힌트로만 유지됩니다.")]
+        [Min(1)] public int totalGhosts = 10;
+        [Min(0.05f)] public float spawnInterval = 5f;
+        [Min(0f)] public float tier1Weight = 6f;
+        [Min(0f)] public float tier2Weight = 3f;
+        [Min(0f)] public float tier3Weight = 1f;
     }
 
-    [Header("Spawn Points (SpawnPoint 1~3 드래그)")]
+    [Header("Spawn Points")]
     [SerializeField] private Transform[] spawnPoints;
 
-    [Header("Global Settings")]
-    [SerializeField] private int maxGhostsAlive = 12;
-    [Tooltip("이 밤의 마지막 유령이 사망하면 자동으로 낮으로 전환")]
-    [SerializeField] private bool autoEndNight = true;
-    [SerializeField, Min(0)] private int endlessExtraGhostsPerNight = 3;
+    [Header("Endless Night Timing")]
+    [SerializeField, Min(1f)] private float baseCombatDuration = 45f;
+    [SerializeField, Min(0f)] private float combatDurationPerAssault = 2f;
+    [SerializeField, Min(1f)] private float maintenanceDuration = 12f;
+    [SerializeField, Min(0)] private int earlyMaintenanceCoinReward;
 
-    [Header("Night Profiles (Element 0 = Night 1)")]
-    [SerializeField] private NightProfile[] nightProfiles = new NightProfile[]
-    {
-        new NightProfile { label = "Night 1", totalGhosts = 8,  spawnInterval = 6f,
-                           tier1Weight = 10, tier2Weight = 0, tier3Weight = 0 },
-        new NightProfile { label = "Night 2", totalGhosts = 12, spawnInterval = 5f,
-                           tier1Weight = 8,  tier2Weight = 2, tier3Weight = 0 },
-        new NightProfile { label = "Night 3", totalGhosts = 15, spawnInterval = 4.5f,
-                           tier1Weight = 6,  tier2Weight = 3, tier3Weight = 0 },
-        new NightProfile { label = "Night 4", totalGhosts = 18, spawnInterval = 4f,
-                           tier1Weight = 5,  tier2Weight = 4, tier3Weight = 1 },
-        new NightProfile { label = "Night 5", totalGhosts = 22, spawnInterval = 3.5f,
-                           tier1Weight = 4,  tier2Weight = 5, tier3Weight = 2 },
-        new NightProfile { label = "Night 6", totalGhosts = 26, spawnInterval = 3f,
-                           tier1Weight = 3,  tier2Weight = 5, tier3Weight = 3 },
-        new NightProfile { label = "Night 7 (Final)", totalGhosts = 35, spawnInterval = 2.5f,
-                           tier1Weight = 2,  tier2Weight = 5, tier3Weight = 5 },
-    };
+    [Header("Spawn Scaling")]
+    [SerializeField, Min(0.05f)] private float baseSpawnInterval = 4f;
+    [SerializeField, Min(0.05f)] private float minimumSpawnInterval = 0.45f;
+    [SerializeField, Min(0f)] private float spawnIntervalReductionPerAssault = 0.12f;
+    [SerializeField, Min(1)] private int baseSpawnBurst = 1;
+    [SerializeField, Min(0f)] private float spawnBurstIncreasePerAssault = 0.2f;
+    [SerializeField, Min(1)] private int baseMaxGhostsAlive = 30;
+    [SerializeField, Min(0)] private int maxGhostsAliveIncreasePerAssault = 2;
 
-    [Header("Tiers")]
-    [SerializeField] private GhostTier[] tiers = new GhostTier[]
-    {
-        new GhostTier { tierName = "Tier 1 (HP 100)",  health = 100f,  attackDamage = 8f,  spawnWeight = 6f,
-                        baseCoinValue = 100,  bonusCoinValue = 500,  bonusCoinChance = 0.20f },
-        new GhostTier { tierName = "Tier 2 (HP 500)",  health = 500f,  attackDamage = 15f, spawnWeight = 3f,
-                        baseCoinValue = 500,  bonusCoinValue = 1000, bonusCoinChance = 0.15f },
-        new GhostTier { tierName = "Tier 3 (HP 1000)", health = 1000f, attackDamage = 25f, spawnWeight = 1f,
-                        baseCoinValue = 1000, bonusCoinValue = 1000, bonusCoinChance = 0.10f }
-    };
+    [Header("Stat Difficulty Scaling")]
+    [SerializeField, Min(0f)] private float healthMultiplierPerAssault = 0.08f;
+    [SerializeField, Min(0f)] private float attackMultiplierPerAssault = 0.05f;
+    [SerializeField, Min(0f)] private float moveSpeedMultiplierPerAssault = 0.015f;
 
-    [Header("Ghost AI Stats (모든 티어 공용)")]
-    [SerializeField] private float ghostMoveSpeed = 2.5f;
-    [SerializeField] private float ghostAttackRange = 1.2f;
-    [Tooltip("티어별 attackDamage 가 0 이하일 때만 폴백으로 사용")]
-    [SerializeField] private float ghostAttackDamage = 10f;
-    [SerializeField] private float ghostAttackCooldown = 1.5f;
-    [SerializeField] private float ghostAggroRange = 5f;
-    [SerializeField] private float ghostDeaggroRange = 8f;
+    [Header("Elite / Boss Assaults")]
+    [SerializeField, Min(0)] private int eliteTierIndex = 1;
+    [SerializeField, Min(1)] private int eliteUnlockAssault = 3;
+    [SerializeField, Range(0f, 1f)] private float eliteChanceAtUnlock = 0.08f;
+    [SerializeField, Range(0f, 1f)] private float eliteChanceIncreasePerAssault = 0.025f;
+    [SerializeField, Min(0)] private int bossTierIndex = 2;
+    [SerializeField, Min(0)] private int bossFirstAssault = 5;
+    [SerializeField, Min(0)] private int bossAssaultInterval = 5;
+    [SerializeField, Min(1)] private int bossCountPerAssault = 1;
+
+    [Header("Wave Profiles (legacy Night Profiles, reused)")]
+    [SerializeField] private NightProfile[] nightProfiles = Array.Empty<NightProfile>();
+    [Header("Ghost Tiers")]
+    [SerializeField] private GhostTier[] tiers = Array.Empty<GhostTier>();
+
+    [Header("Ghost AI Stats")]
+    [SerializeField, Min(0f)] private float ghostMoveSpeed = 2.5f;
+    [SerializeField, Min(0f)] private float ghostAttackRange = 1.2f;
+    [SerializeField, Min(0f)] private float ghostAttackDamage = 10f;
+    [SerializeField, Min(0f)] private float ghostAttackCooldown = 1.5f;
+    [SerializeField, Min(0f)] private float ghostAggroRange = 5f;
+    [SerializeField, Min(0f)] private float ghostDeaggroRange = 8f;
     [SerializeField] private float ghostFlightHeight = 0.25f;
 
     [Header("Ghost Health Bar")]
     [SerializeField] private Vector3 ghostHealthBarOffset = new Vector3(0f, 1.4f, 0f);
     [SerializeField] private Vector2 ghostHealthBarPixelSize = new Vector2(60f, 7f);
-    [SerializeField] private float ghostHealthBarWorldScale = 0.007f;
+    [SerializeField, Min(0.0001f)] private float ghostHealthBarWorldScale = 0.007f;
 
-    private float timer;
-    private bool wasNight;
-    private int ghostsSpawnedThisNight;
-    private int currentNightIndex;
-    private bool nightEnded;
-    private readonly NightProfile endlessProfile = new NightProfile();
     private readonly List<GameObject> activeGhosts = new List<GameObject>();
+    private float stateTimer;
+    private float spawnTimer;
+    private int bossesSpawnedThisAssault;
 
-    public int TotalThisNight => GetCurrentProfile()?.totalGhosts ?? 0;
-    public int SpawnedThisNight => ghostsSpawnedThisNight;
-    public int RemainingThisNight => Mathf.Max(0, TotalThisNight - ghostsSpawnedThisNight);
+    public AssaultState CurrentState { get; private set; } = AssaultState.Inactive;
+    public int CurrentAssault { get; private set; }
+    public float StateSecondsRemaining => Mathf.Max(0f, stateTimer);
+    public int ActiveGhostCount { get { PruneGhosts(); return activeGhosts.Count; } }
+    public bool CanEndMaintenanceEarly => CurrentState == AssaultState.Maintenance;
 
     private void Start()
     {
@@ -111,188 +122,153 @@ public sealed class GhostSpawner : MonoBehaviour
             if (parent != null)
             {
                 spawnPoints = new Transform[parent.transform.childCount];
-                for (int i = 0; i < parent.transform.childCount; i++)
-                    spawnPoints[i] = parent.transform.GetChild(i);
+                for (int i = 0; i < parent.transform.childCount; i++) spawnPoints[i] = parent.transform.GetChild(i);
             }
         }
     }
 
     private void Update()
     {
-        bool isNight = DayNightManager.Instance != null
-                       && DayNightManager.Instance.CurrentPhase == DayNightManager.Phase.Night;
+        bool isNight = DayNightManager.Instance != null && DayNightManager.Instance.CurrentPhase == DayNightManager.Phase.Night;
+        if (!isNight || CurrentState == AssaultState.Inactive || CurrentState == AssaultState.GameOver) return;
 
-        // 낮 → 밤 전환 감지 → 이번 밤 카운터 리셋
-        if (!wasNight && isNight)
-            ResetForNewNight();
-
-        // 밤 → 낮 전환 감지 → 정리
-        if (wasNight && !isNight)
-            ClearGhosts();
-
-        wasNight = isNight;
-
-        if (!isNight || nightEnded) return;
-
-        activeGhosts.RemoveAll(g => g == null);
-
-        NightProfile profile = GetCurrentProfile();
-        int total = profile?.totalGhosts ?? 10;
-
-        // 이 밤 유령 다 스폰 + 다 죽음 → 새벽
-        if (ghostsSpawnedThisNight >= total && activeGhosts.Count == 0)
+        PruneGhosts();
+        if (CurrentState == AssaultState.Combat)
         {
-            nightEnded = true;
-            if (autoEndNight)
+            stateTimer -= Time.deltaTime;
+            spawnTimer -= Time.deltaTime;
+            if (stateTimer <= 0f) { SetState(AssaultState.ClearingRemaining); return; }
+            int maxAlive = baseMaxGhostsAlive + Mathf.Max(0, CurrentAssault - 1) * maxGhostsAliveIncreasePerAssault;
+            if (spawnTimer <= 0f && activeGhosts.Count < maxAlive)
             {
-                Debug.Log($"[GhostSpawner] {profile?.label ?? "Night"} 클리어 → 낮으로");
-                DayNightManager.Instance?.BeginDay();
+                int burst = Mathf.Max(1, baseSpawnBurst + Mathf.FloorToInt((CurrentAssault - 1) * spawnBurstIncreasePerAssault));
+                for (int i = 0; i < burst && activeGhosts.Count < maxAlive; i++) SpawnGhost();
+                spawnTimer = CurrentSpawnInterval();
             }
-            return;
         }
-
-        // 이미 다 스폰했으면 남은 유령 죽을 때까지 대기
-        if (ghostsSpawnedThisNight >= total) return;
-
-        timer -= Time.deltaTime;
-        if (timer > 0f || activeGhosts.Count >= maxGhostsAlive) return;
-
-        if (SpawnGhostForNight(profile))
+        else if (CurrentState == AssaultState.ClearingRemaining)
         {
-            ghostsSpawnedThisNight++;
-            timer = profile?.spawnInterval ?? 5f;
+            if (activeGhosts.Count == 0) BeginMaintenance();
+        }
+        else if (CurrentState == AssaultState.Maintenance)
+        {
+            stateTimer -= Time.deltaTime;
+            if (stateTimer <= 0f) BeginNextAssault();
         }
     }
 
-    private void ResetForNewNight()
+    public void StartSpawning() { ClearGhosts(); CurrentAssault = 0; BeginNextAssault(); }
+    public void EndMaintenanceEarly()
     {
-        ghostsSpawnedThisNight = 0;
-        nightEnded = false;
-        int dayCount = DayNightManager.Instance?.DayCount ?? 1;
-        currentNightIndex = Mathf.Max(0, dayCount - 1);
-        NightProfile p = GetCurrentProfile();
-        timer = p?.spawnInterval ?? 5f;
-
-        if (p != null)
-            Debug.Log($"[GhostSpawner] {p.label} 시작 — 총 {p.totalGhosts}마리, 간격 {p.spawnInterval}s");
+        if (CurrentState != AssaultState.Maintenance) return;
+        if (earlyMaintenanceCoinReward > 0) CoinWallet.Instance?.Add(earlyMaintenanceCoinReward);
+        BeginNextAssault();
+    }
+    public void StopSpawning() { ClearGhosts(); CurrentState = AssaultState.Inactive; stateTimer = 0f; }
+    public void NotifyGameOver()
+    {
+        CurrentState = AssaultState.GameOver;
+        stateTimer = 0f;
+        DayNightManager.Instance?.SetNightMaintenance(false);
+        StateChanged?.Invoke(CurrentState, CurrentAssault);
     }
 
+    private void BeginNextAssault()
+    {
+        CurrentAssault++;
+        bossesSpawnedThisAssault = 0;
+        stateTimer = Mathf.Max(1f, baseCombatDuration + (CurrentAssault - 1) * combatDurationPerAssault);
+        spawnTimer = 0f;
+        DayNightManager.Instance?.SetNightMaintenance(false);
+        SetState(AssaultState.Combat);
+    }
+    private void BeginMaintenance()
+    {
+        stateTimer = Mathf.Max(1f, maintenanceDuration);
+        DayNightManager.Instance?.SetNightMaintenance(true);
+        SetState(AssaultState.Maintenance);
+    }
+    private void SetState(AssaultState state) { CurrentState = state; StateChanged?.Invoke(state, CurrentAssault); }
+
+    private float CurrentSpawnInterval()
+    {
+        NightProfile profile = GetCurrentProfile();
+        float authoredBase = profile != null && profile.spawnInterval > 0f ? profile.spawnInterval : baseSpawnInterval;
+        return Mathf.Max(minimumSpawnInterval, authoredBase - (CurrentAssault - 1) * spawnIntervalReductionPerAssault);
+    }
     private NightProfile GetCurrentProfile()
     {
         if (nightProfiles == null || nightProfiles.Length == 0) return null;
-
-        int finalIndex = nightProfiles.Length - 1;
-        if (currentNightIndex <= finalIndex)
-        {
-            return nightProfiles[Mathf.Clamp(currentNightIndex, 0, finalIndex)];
-        }
-
-        NightProfile finalProfile = nightProfiles[finalIndex];
-        if (finalProfile == null) return null;
-
-        int nightsAfterFinal = currentNightIndex - finalIndex;
-        endlessProfile.label = $"Night {currentNightIndex + 1}";
-        endlessProfile.totalGhosts = finalProfile.totalGhosts + endlessExtraGhostsPerNight * nightsAfterFinal;
-        endlessProfile.spawnInterval = finalProfile.spawnInterval;
-        endlessProfile.tier1Weight = finalProfile.tier1Weight;
-        endlessProfile.tier2Weight = finalProfile.tier2Weight;
-        endlessProfile.tier3Weight = finalProfile.tier3Weight;
-        return endlessProfile;
+        return nightProfiles[Mathf.Clamp(CurrentAssault - 1, 0, nightProfiles.Length - 1)];
     }
 
-    private bool SpawnGhostForNight(NightProfile profile)
+    private void SpawnGhost()
     {
-        if (spawnPoints == null || spawnPoints.Length == 0) return false;
+        if (spawnPoints == null || spawnPoints.Length == 0) return;
+        int tierIndex = PickTierIndex();
+        if (tierIndex < 0 || tierIndex >= tiers.Length) return;
+        GhostTier tier = tiers[tierIndex];
+        if (tier == null || tier.prefabs == null || tier.prefabs.Length == 0) return;
+        GameObject prefab = tier.prefabs[UnityEngine.Random.Range(0, tier.prefabs.Length)];
+        if (prefab == null) return;
+        Transform point = spawnPoints[UnityEngine.Random.Range(0, spawnPoints.Length)];
+        GameObject ghost = Instantiate(prefab, point.position, point.rotation);
+        float difficultyIndex = Mathf.Max(0, CurrentAssault - 1);
+        Damageable health = ghost.GetComponent<Damageable>() ?? ghost.AddComponent<Damageable>();
+        health.SetMaxHealth(tier.health * (1f + difficultyIndex * healthMultiplierPerAssault));
+        float spawnedAt = Time.time;
+        int assaultAtSpawn = CurrentAssault;
+        health.OnDeath += () =>
+        {
+            float lifetime = Mathf.Max(0f, Time.time - spawnedAt);
+            GhostDefeated?.Invoke(tierIndex);
+            GhostDefeatedDetailed?.Invoke(new GhostDefeatInfo(tierIndex, tier.baseScore, lifetime, assaultAtSpawn));
+        };
 
-        GhostTier tier = PickTierForProfile(profile);
-        if (tier == null || tier.prefabs == null || tier.prefabs.Length == 0) return false;
-
-        GameObject prefab = tier.prefabs[Random.Range(0, tier.prefabs.Length)];
-        if (prefab == null) return false;
-
-        Transform sp = spawnPoints[Random.Range(0, spawnPoints.Length)];
-        GameObject ghost = Instantiate(prefab, sp.position, sp.rotation);
-
-        Damageable dmg = ghost.GetComponent<Damageable>();
-        if (dmg == null) dmg = ghost.AddComponent<Damageable>();
-        dmg.SetMaxHealth(tier.health);
-
-        GhostAI ai = ghost.GetComponent<GhostAI>();
-        if (ai == null) ai = ghost.AddComponent<GhostAI>();
-        // 티어별 공격력 사용 (0 이하면 폴백으로 전역 값)
-        float dmgForTier = tier.attackDamage > 0f ? tier.attackDamage : ghostAttackDamage;
-        ai.ConfigureStats(
-            moveSpeed: ghostMoveSpeed,
-            attackRange: ghostAttackRange,
-            attackDamage: dmgForTier,
-            attackCooldown: ghostAttackCooldown,
-            aggroRange: ghostAggroRange,
-            deaggroRange: ghostDeaggroRange,
-            flightHeight: ghostFlightHeight);
-        ai.SetCoinDrops(tier.baseCoinPrefab, tier.baseCoinValue,
-                        tier.bonusCoinPrefab, tier.bonusCoinValue, tier.bonusCoinChance);
-
+        GhostAI ai = ghost.GetComponent<GhostAI>() ?? ghost.AddComponent<GhostAI>();
+        float baseDamage = tier.attackDamage > 0f ? tier.attackDamage : ghostAttackDamage;
+        ai.ConfigureStats(ghostMoveSpeed * (1f + difficultyIndex * moveSpeedMultiplierPerAssault), ghostAttackRange,
+            baseDamage * (1f + difficultyIndex * attackMultiplierPerAssault), ghostAttackCooldown,
+            ghostAggroRange, ghostDeaggroRange, ghostFlightHeight);
+        ai.SetCoinDrops(tier.baseCoinPrefab, tier.baseCoinValue, tier.bonusCoinPrefab, tier.bonusCoinValue, tier.bonusCoinChance);
         if (ghost.GetComponent<HealthBar>() == null)
-        {
-            HealthBar hb = ghost.AddComponent<HealthBar>();
-            hb.Configure(ghostHealthBarOffset, ghostHealthBarPixelSize, ghostHealthBarWorldScale);
-        }
-
+            ghost.AddComponent<HealthBar>().Configure(ghostHealthBarOffset, ghostHealthBarPixelSize, ghostHealthBarWorldScale);
         activeGhosts.Add(ghost);
-        return true;
     }
 
-    private GhostTier PickTierForProfile(NightProfile profile)
+    private int PickTierIndex()
     {
-        if (tiers == null || tiers.Length == 0) return null;
+        bool bossAssault = bossFirstAssault > 0 && CurrentAssault >= bossFirstAssault && bossAssaultInterval > 0
+            && (CurrentAssault - bossFirstAssault) % bossAssaultInterval == 0;
+        if (bossAssault && bossesSpawnedThisAssault < bossCountPerAssault && IsTierUsable(bossTierIndex))
+        { bossesSpawnedThisAssault++; return bossTierIndex; }
+        if (CurrentAssault >= eliteUnlockAssault && IsTierUsable(eliteTierIndex))
+        {
+            float chance = eliteChanceAtUnlock + (CurrentAssault - eliteUnlockAssault) * eliteChanceIncreasePerAssault;
+            if (UnityEngine.Random.value < Mathf.Clamp01(chance)) return eliteTierIndex;
+        }
 
-        // Night Profile 가중치 우선
+        NightProfile profile = GetCurrentProfile();
+        float total = 0f;
+        for (int i = 0; i < tiers.Length; i++) total += TierWeight(i, profile);
+        if (total <= 0f) return IsTierUsable(0) ? 0 : -1;
+        float roll = UnityEngine.Random.value * total;
+        for (int i = 0; i < tiers.Length; i++) { roll -= TierWeight(i, profile); if (roll <= 0f) return i; }
+        return tiers.Length - 1;
+    }
+    private float TierWeight(int index, NightProfile profile)
+    {
+        if (!IsTierUsable(index)) return 0f;
         if (profile != null)
         {
-            float t1 = Mathf.Max(0f, profile.tier1Weight);
-            float t2 = Mathf.Max(0f, profile.tier2Weight);
-            float t3 = Mathf.Max(0f, profile.tier3Weight);
-            float total = t1 + t2 + t3;
-            if (total > 0f)
-            {
-                float roll = Random.value * total;
-                if (roll < t1 && tiers.Length > 0) return tiers[0];
-                if (roll < t1 + t2 && tiers.Length > 1) return tiers[1];
-                if (tiers.Length > 2) return tiers[2];
-                return tiers[tiers.Length - 1];
-            }
+            if (index == 0) return Mathf.Max(0f, profile.tier1Weight);
+            if (index == 1) return Mathf.Max(0f, profile.tier2Weight);
+            if (index == 2) return Mathf.Max(0f, profile.tier3Weight);
         }
-
-        // 폴백: 티어의 spawnWeight 사용
-        float sum = 0f;
-        foreach (GhostTier t in tiers) if (t != null) sum += Mathf.Max(0f, t.spawnWeight);
-        if (sum <= 0f) return tiers[0];
-        float r = Random.value * sum;
-        float acc = 0f;
-        foreach (GhostTier t in tiers)
-        {
-            if (t == null) continue;
-            acc += Mathf.Max(0f, t.spawnWeight);
-            if (r <= acc) return t;
-        }
-        return tiers[tiers.Length - 1];
+        return Mathf.Max(0f, tiers[index].spawnWeight);
     }
-
-    private void ClearGhosts()
-    {
-        foreach (GameObject g in activeGhosts)
-            if (g != null) Destroy(g);
-        activeGhosts.Clear();
-    }
-
-    public void StartSpawning()
-    {
-        ResetForNewNight();
-    }
-
-    public void StopSpawning()
-    {
-        ClearGhosts();
-        nightEnded = true;
-    }
+    private bool IsTierUsable(int index) => tiers != null && index >= 0 && index < tiers.Length && tiers[index] != null
+        && CurrentAssault >= Mathf.Max(1, tiers[index].unlockAssault) && tiers[index].prefabs != null && tiers[index].prefabs.Length > 0;
+    private void PruneGhosts() => activeGhosts.RemoveAll(ghost => ghost == null);
+    private void ClearGhosts() { foreach (GameObject ghost in activeGhosts) if (ghost != null) Destroy(ghost); activeGhosts.Clear(); }
 }

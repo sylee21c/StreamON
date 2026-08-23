@@ -250,26 +250,32 @@ namespace StreamOn.Editor
             if (existing != null) return existing;
             if (!AssetDatabase.IsValidFolder(PrefabFolder)) AssetDatabase.CreateFolder("Assets/_Project", "Prefabs");
 
-            TMP_FontAsset font = FindGalmuriFont();
-            Sprite panelSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+            TMP_FontAsset font = FindChatFont();
             GameObject root = new GameObject("Live Chat Panel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             RectTransform rootRect = root.GetComponent<RectTransform>();
-            rootRect.sizeDelta = new Vector2(300f, 720f);
+            rootRect.sizeDelta = new Vector2(340f, 720f);
             Image panel = root.GetComponent<Image>();
-            panel.sprite = panelSprite;
-            panel.type = Image.Type.Sliced;
-            panel.color = new Color(0.04f, 0.05f, 0.08f, 0.93f);
+            panel.sprite = null;
+            panel.type = Image.Type.Simple;
+            panel.color = new Color32(20, 21, 23, 255);
 
-            TMP_Text title = Label("Title", root.transform, "LIVE CHAT [LOCAL]\n현재 시청자 0명", font, 18f,
-                TextAlignmentOptions.MidlineLeft, new Vector2(250f, 68f), new Vector2(0f, 314f));
-            title.color = new Color(0.4f, 0.9f, 0.82f);
-            TMP_Text[] slots = new TMP_Text[8];
+            TMP_Text title = Label("Title", root.transform, "채팅  ·  LOCAL\n현재 시청자 0명", font, 16f,
+                TextAlignmentOptions.MidlineLeft, new Vector2(306f, 64f), new Vector2(0f, 326f));
+            title.color = new Color32(223, 226, 234, 255);
+            title.fontWeight = FontWeight.Regular;
+            TMP_Text[] slots = new TMP_Text[12];
             for (int i = 0; i < slots.Length; i++)
-                slots[i] = Label($"Message {i + 1}", root.transform, string.Empty, font, 18f,
-                    TextAlignmentOptions.MidlineLeft, new Vector2(250f, 56f), new Vector2(0f, 235f - i * 70f));
+            {
+                slots[i] = Label($"Message {i + 1}", root.transform, string.Empty, font, 16f,
+                    TextAlignmentOptions.MidlineLeft, new Vector2(306f, 44f), new Vector2(0f, 274f - i * 49f));
+                slots[i].color = new Color32(223, 226, 234, 255);
+                slots[i].fontWeight = FontWeight.Regular;
+                slots[i].overflowMode = TextOverflowModes.Ellipsis;
+            }
 
             RunnerChatController chat = root.AddComponent<RunnerChatController>();
             SerializedObject chatSerialized = new SerializedObject(chat);
+            chatSerialized.FindProperty("chatFont").objectReferenceValue = font;
             SerializedProperty messages = chatSerialized.FindProperty("messageSlots");
             messages.arraySize = slots.Length;
             for (int i = 0; i < slots.Length; i++) messages.GetArrayElementAtIndex(i).objectReferenceValue = slots[i];
@@ -416,6 +422,12 @@ namespace StreamOn.Editor
         {
             string guid = AssetDatabase.FindAssets("Galmuri14 SDF t:TMP_FontAsset").FirstOrDefault();
             return string.IsNullOrEmpty(guid) ? null : AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetDatabase.GUIDToAssetPath(guid));
+        }
+
+        private static TMP_FontAsset FindChatFont()
+        {
+            TMP_FontAsset malgun = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/_Project/Fonts/Malgun Gothic SDF.asset");
+            return malgun != null ? malgun : FindGalmuriFont();
         }
     }
 }

@@ -1,0 +1,11 @@
+name = "stream-on-web"
+compatibility_date = "2026-08-23"
+pages_build_output_dir = "./public"
+
+[vars]
+OPENAI_MODEL = "gpt-5.6-luna"
+REQUESTS_PER_MINUTE = "30"
+MAXIMUM_REQUEST_BYTES = "100000"
+# Add the final site origin after deployment if the function and game are hosted
+# on different origins. Same-origin WebGL requests work without this value.
+ALLOWED_ORIGINS = ""

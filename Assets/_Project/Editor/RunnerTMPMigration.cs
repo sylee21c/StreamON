@@ -15,6 +15,7 @@ namespace StreamOn.EditorTools
     {
         private const string ScenePath = "Assets/Scenes/BroadcastRunner.unity";
         private const string FontPath = "Assets/TextMesh Pro/Examples & Extras/Fonts/Galmuri14 SDF.asset";
+        private const string ChatFontPath = "Assets/_Project/Fonts/Malgun Gothic SDF.asset";
         private static bool _isMigrating;
 
         // Delay until the asset database and TMP settings are ready after a domain reload.
@@ -49,6 +50,7 @@ namespace StreamOn.EditorTools
 
             TMP_FontAsset font = LoadGalmuriFont();
             if (font == null) return;
+            TMP_FontAsset chatFont = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(ChatFontPath);
 
             _isMigrating = true;
             Scene scene = SceneManager.GetSceneByPath(ScenePath);
@@ -65,7 +67,8 @@ namespace StreamOn.EditorTools
                 .SelectMany(root => root.GetComponentsInChildren<TMP_Text>(true))
                 .ToArray();
             foreach (TMP_Text text in tmpTexts)
-                text.font = font;
+                text.font = chatFont != null && text.GetComponentInParent<RunnerChatController>() != null
+                    ? chatFont : font;
 
             RebindRunnerUI(scene);
             EditorSceneManager.MarkSceneDirty(scene);
@@ -136,7 +139,7 @@ namespace StreamOn.EditorTools
             if (chat != null)
             {
                 TMP_Text[] messages = allText.Where(text => text.name.StartsWith("Message "))
-                    .OrderBy(text => text.name).ToArray();
+                    .OrderBy(text => MessageSlotIndex(text.name)).ToArray();
                 SerializedObject serialized = new SerializedObject(chat);
                 SerializedProperty slots = serialized.FindProperty("messageSlots");
                 slots.arraySize = messages.Length;
@@ -149,6 +152,12 @@ namespace StreamOn.EditorTools
         private static void SetText(SerializedObject target, string field, TMP_Text[] texts, string objectName)
         {
             target.FindProperty(field).objectReferenceValue = texts.FirstOrDefault(text => text.name == objectName);
+        }
+
+        private static int MessageSlotIndex(string objectName)
+        {
+            string suffix = objectName.Substring("Message ".Length);
+            return int.TryParse(suffix, out int index) ? index : int.MaxValue;
         }
 
         private static FontStyles ToTMPStyle(FontStyle style) => style switch

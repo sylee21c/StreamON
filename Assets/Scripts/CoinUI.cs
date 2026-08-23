@@ -7,9 +7,8 @@ public sealed class CoinUI : MonoBehaviour
 {
     public static void EnsureExists()
     {
-        if (FindAnyObjectByType<CoinUI>() != null) return;
-        GameObject go = new GameObject("CoinUI");
-        go.AddComponent<CoinUI>();
+        if (FindAnyObjectByType<CoinUI>(FindObjectsInactive.Include) == null)
+            Debug.LogError("MainScene에 씬 기반 CoinUI가 없습니다. 런타임 UI는 자동 생성하지 않습니다.");
     }
 
     [Header("Scene References (씬에서 드래그해서 연결)")]
@@ -33,7 +32,7 @@ public sealed class CoinUI : MonoBehaviour
         // 씬에 텍스트 참조가 없으면 UI 계층 전체 자동 생성
         if (valueText == null)
         {
-            BuildUI();
+            Debug.LogError("CoinUI의 씬 텍스트 참조가 비어 있습니다.", this);
         }
         else
         {
@@ -66,7 +65,6 @@ public sealed class CoinUI : MonoBehaviour
     {
         if (CoinWallet.Instance != null)
             CoinWallet.Instance.OnCoinsChanged -= UpdateText;
-        if (createdCanvas != null) Destroy(createdCanvas.gameObject);
     }
 
     private void UpdateText(int amount)
