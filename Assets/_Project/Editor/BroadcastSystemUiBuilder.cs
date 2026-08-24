@@ -20,6 +20,7 @@ namespace StreamOn.Editor
         private const string SettingsPath = "Assets/_Project/Settings/RunnerCampaignSettings.asset";
         private const string RunnerScene = "Assets/Scenes/BroadcastRunner.unity";
         private const string TileScene = "Assets/Scenes/TileArena.unity";
+        private const string PlasticScene = "Assets/Scenes/MainScene.unity";
         private const string RoomScene = "Assets/Scenes/StreamerRoom.unity";
 
         static BroadcastSystemUiBuilder() => EditorApplication.delayCall += Refresh;
@@ -30,20 +31,25 @@ namespace StreamOn.Editor
             if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling || EditorApplication.isUpdating) return;
             RunnerCampaignSettings settings = AssetDatabase.LoadAssetAtPath<RunnerCampaignSettings>(SettingsPath);
             if (settings == null) return;
-            GameObject settlement = EnsureSettlementPrefab();
+            GameObject settlement = EnsureSettlementPrefab(settings);
             GameObject tileHud = EnsureTileHudPrefab();
             GameObject shop = EnsureShopPrefab(settings);
             PlaceSettlement(RunnerScene, settlement);
             PlaceSettlement(TileScene, settlement);
+            PlaceSettlement(PlasticScene, settlement);
             UpgradeTile(tileHud, settings);
             UpgradeRoom(shop);
             AssetDatabase.SaveAssets();
         }
 
-        private static GameObject EnsureSettlementPrefab()
+        private static GameObject EnsureSettlementPrefab(RunnerCampaignSettings settings)
         {
             GameObject existing = AssetDatabase.LoadAssetAtPath<GameObject>(SettlementPath);
-            if (existing != null) return existing;
+            if (existing != null)
+            {
+                UpgradeSettlementPrefab(settings);
+                return AssetDatabase.LoadAssetAtPath<GameObject>(SettlementPath);
+            }
             TMP_FontAsset font = Font(); Sprite sprite = PanelSprite();
             GameObject root = Panel("Broadcast Settlement Dashboard", new Vector2(680, 530), new Color(.025f, .035f, .06f, .985f), sprite);
             root.AddComponent<CanvasGroup>();
@@ -64,7 +70,118 @@ namespace StreamOn.Editor
             serialized.FindProperty("continueButton").objectReferenceValue = next;
             serialized.FindProperty("continueLabel").objectReferenceValue = nextLabel;
             serialized.ApplyModifiedPropertiesWithoutUndo();
-            return Save(root, SettlementPath);
+            Save(root, SettlementPath);
+            UpgradeSettlementPrefab(settings);
+            return AssetDatabase.LoadAssetAtPath<GameObject>(SettlementPath);
+        }
+
+        private static void UpgradeSettlementPrefab(RunnerCampaignSettings settings)
+        {
+            GameObject root = PrefabUtility.LoadPrefabContents(SettlementPath);
+            try
+            {
+                RectTransform rootRect = root.GetComponent<RectTransform>();
+                // Scene instances historically use 680x530. Keep the authored prefab at that
+                // exact size and fit every child inside it so no scene override can crop a card.
+                rootRect.sizeDelta = new Vector2(680f, 530f);
+
+                TMP_Text title = root.transform.Find("Title")?.GetComponent<TMP_Text>();
+                SetRect(title?.rectTransform, new Vector2(600f, 40f), new Vector2(0f, 235f));
+
+                TMP_Text game = ConfigureSettlementCard(root.transform, "Game Result", new Vector2(620f, 100f),
+                    new Vector2(0f, 160f), new Vector2(574f, 88f), Vector2.zero);
+                TMP_Text audience = ConfigureSettlementCard(root.transform, "Audience Result", new Vector2(620f, 68f),
+                    new Vector2(0f, 75f), new Vector2(574f, 62f), Vector2.zero);
+                TMP_Text growth = ConfigureSettlementCard(root.transform, "Growth Result", new Vector2(620f, 135f),
+                    new Vector2(0f, -30f), new Vector2(574f, 118f), new Vector2(0f, 5f));
+                TMP_Text rating = ConfigureSettlementCard(root.transform, "Rating Result", new Vector2(620f, 75f),
+                    new Vector2(0f, -137f), new Vector2(574f, 62f), new Vector2(0f, 7f));
+
+                RectTransform continueRect = root.transform.Find("Continue Button")?.GetComponent<RectTransform>();
+                SetRect(continueRect, new Vector2(260f, 44f), new Vector2(0f, -225f));
+
+                Image experienceFill = EnsureGauge(growth.transform.parent, "Experience Gauge",
+                    new Vector2(118f, -48f), new Vector2(310f, 16f));
+                Image ratingFill = EnsureGauge(rating.transform.parent, "Rating Gauge",
+                    new Vector2(0f, -23f), new Vector2(340f, 16f));
+
+                RunnerBroadcastSettlementView view = root.GetComponent<RunnerBroadcastSettlementView>();
+                SerializedObject serialized = new SerializedObject(view);
+                serialized.FindProperty("canvasGroup").objectReferenceValue = root.GetComponent<CanvasGroup>();
+                serialized.FindProperty("titleText").objectReferenceValue = title;
+                serialized.FindProperty("gameResultText").objectReferenceValue = game;
+                serialized.FindProperty("audienceText").objectReferenceValue = audience;
+                serialized.FindProperty("growthText").objectReferenceValue = growth;
+                serialized.FindProperty("ratingText").objectReferenceValue = rating;
+                serialized.FindProperty("experienceFill").objectReferenceValue = experienceFill;
+                serialized.FindProperty("ratingFill").objectReferenceValue = ratingFill;
+                serialized.FindProperty("campaignSettings").objectReferenceValue = settings;
+                serialized.FindProperty("continueButton").objectReferenceValue = root.transform.Find("Continue Button")?.GetComponent<Button>();
+                serialized.FindProperty("continueLabel").objectReferenceValue = root.transform.Find("Continue Button/Label")?.GetComponent<TMP_Text>();
+                serialized.FindProperty("sectionRevealDelay").floatValue = 0.24f;
+                serialized.FindProperty("labelRevealDelay").floatValue = 0.10f;
+                serialized.FindProperty("numberCountDuration").floatValue = 0.48f;
+                serialized.FindProperty("gaugeFillDuration").floatValue = 0.90f;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, SettlementPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        private static TMP_Text ConfigureSettlementCard(Transform root, string name, Vector2 cardSize,
+            Vector2 cardPosition, Vector2 textSize, Vector2 textPosition)
+        {
+            RectTransform card = root.Find(name)?.GetComponent<RectTransform>();
+            SetRect(card, cardSize, cardPosition);
+            TMP_Text text = card != null ? card.Find("Text")?.GetComponent<TMP_Text>() : null;
+            if (text != null)
+            {
+                SetRect(text.rectTransform, textSize, textPosition);
+                text.fontSize = 18f;
+                text.alignment = TextAlignmentOptions.MidlineLeft;
+                text.richText = true;
+                text.textWrappingMode = TextWrappingModes.NoWrap;
+            }
+            return text;
+        }
+
+        private static Image EnsureGauge(Transform parent, string name, Vector2 position, Vector2 size)
+        {
+            Transform existing = parent.Find(name);
+            GameObject background = existing != null ? existing.gameObject
+                : new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            if (existing == null) background.transform.SetParent(parent, false);
+            RectTransform backgroundRect = background.GetComponent<RectTransform>();
+            SetRect(backgroundRect, size, position);
+            Image backgroundImage = background.GetComponent<Image>();
+            backgroundImage.color = new Color(0.025f, 0.035f, 0.055f, 1f);
+            backgroundImage.raycastTarget = false;
+
+            Transform fillTransform = background.transform.Find("Fill");
+            GameObject fillObject = fillTransform != null ? fillTransform.gameObject
+                : new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            if (fillTransform == null) fillObject.transform.SetParent(background.transform, false);
+            RectTransform fillRect = fillObject.GetComponent<RectTransform>();
+            fillRect.anchorMin = Vector2.zero;
+            fillRect.anchorMax = new Vector2(0.65f, 1f);
+            fillRect.offsetMin = new Vector2(2f, 2f);
+            fillRect.offsetMax = new Vector2(-2f, -2f);
+            Image fill = fillObject.GetComponent<Image>();
+            // Match StatusUI/Streamer Level Fill exactly.
+            fill.color = new Color(0.05f, 0.82f, 0.48f, 1f);
+            fill.raycastTarget = false;
+            return fill;
+        }
+
+        private static void SetRect(RectTransform rect, Vector2 size, Vector2 position)
+        {
+            if (rect == null) return;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = size;
+            rect.anchoredPosition = position;
         }
 
         private static GameObject EnsureTileHudPrefab()
@@ -129,6 +246,24 @@ namespace StreamOn.Editor
                 instance.transform.SetParent(canvas.transform, false);
                 RectTransform rect = instance.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f, .5f); rect.anchoredPosition = new Vector2(-150, 0); rect.SetAsLastSibling();
                 EditorSceneManager.MarkSceneDirty(scene);
+            }
+            else if (canvas != null && view != null)
+            {
+                GameObject instance = PrefabUtility.GetNearestPrefabInstanceRoot(view.gameObject);
+                if (instance != null && PrefabUtility.IsPartOfPrefabInstance(instance)
+                    && PrefabUtility.GetCorrespondingObjectFromSource(instance) == prefab)
+                {
+                    PrefabUtility.RevertPrefabInstance(instance, InteractionMode.AutomatedAction);
+                    instance.transform.SetParent(canvas.transform, false);
+                    RectTransform rect = instance.GetComponent<RectTransform>();
+                    rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f, .5f);
+                    rect.anchoredPosition = Vector2.zero;
+                    rect.sizeDelta = new Vector2(680f, 530f);
+                    rect.localScale = Vector3.one;
+                    rect.SetAsLastSibling();
+                    instance.SetActive(false);
+                    EditorSceneManager.MarkSceneDirty(scene);
+                }
             }
             SaveClose(scene, opened);
         }

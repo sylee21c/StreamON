@@ -56,11 +56,16 @@ namespace StreamOn.Minigames.Runner
                 ManagerTierRule rule = settings.managerTiers?.Find(candidate => candidate != null && candidate.tier == tier);
                 if (rule == null) continue;
                 if (tierDescriptions != null && index < tierDescriptions.Length && tierDescriptions[index] != null)
-                    tierDescriptions[index].text = $"{rule.displayName}\n방송당 {rule.usesPerBroadcast}회 · {rule.handlingDelaySeconds:0.#}초 후 처리\n해금 {rule.unlockCost:N0}원 · 고용 {rule.hireCostPerBroadcast:N0}원";
+                {
+                    bool selected = tier == _save.hiredManagerTier;
+                    string name = selected ? $"<color=#FFF23D>{rule.displayName}</color>" : rule.displayName;
+                    tierDescriptions[index].richText = true;
+                    tierDescriptions[index].text = $"{name}\n방송당 {rule.usesPerBroadcast}회 / {rule.handlingDelaySeconds:0.#}초 후 처리\n해금 {rule.unlockCost:N0}원 / 일급 {rule.hireCostPerBroadcast:N0}원";
+                }
                 if (unlockButtons != null && index < unlockButtons.Length && unlockButtons[index] != null)
                     SetButtonState(unlockButtons[index], tier == _save.unlockedManagerTier + 1 && _save.cash >= rule.unlockCost);
                 if (hireButtons != null && index < hireButtons.Length && hireButtons[index] != null)
-                    SetButtonState(hireButtons[index], tier <= _save.unlockedManagerTier && _save.cash >= rule.hireCostPerBroadcast);
+                    SetButtonState(hireButtons[index], tier <= _save.unlockedManagerTier && tier != _save.hiredManagerTier);
             }
         }
 

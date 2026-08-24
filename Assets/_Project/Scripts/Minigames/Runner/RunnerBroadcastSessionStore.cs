@@ -50,6 +50,7 @@ namespace StreamOn.Minigames.Runner
             _nextBonusIndex = 0;
             _nextAutosaveAt = Time.unscaledTime + Mathf.Max(0.25f, settings.sessionAutosaveIntervalSeconds);
             ClearSessionFields(save);
+            BroadcasterProgression.PrepareManagerForBroadcast(settings, save);
             _stagedSave = CloneSave(save);
             ApplyToSave(_stagedSave);
             return true;

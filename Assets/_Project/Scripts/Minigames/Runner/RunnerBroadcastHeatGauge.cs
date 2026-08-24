@@ -79,6 +79,7 @@ namespace StreamOn.Minigames.Runner
 
         private void Update()
         {
+            if (Time.timeScale <= 0f) return;
             if (Keyboard.current != null && Keyboard.current.tabKey.wasPressedThisFrame && Time.timeScale > 0f)
             {
                 if (_slowMotionActive) SetSlowMotion(false);
@@ -144,8 +145,8 @@ namespace StreamOn.Minigames.Runner
             if (focusFillImage != null) focusFillImage.color = focusColor;
             if (focusLabel == null) return;
             focusLabel.text = _slowMotionActive
-                ? $"집중력  {Mathf.CeilToInt(_focus)} / {Mathf.CeilToInt(_maximumFocus)}  ·  TAB 슬로우 ON"
-                : $"집중력  {Mathf.CeilToInt(_focus)} / {Mathf.CeilToInt(_maximumFocus)}  ·  TAB";
+                ? $"집중력  {Mathf.CeilToInt(_focus)} / {Mathf.CeilToInt(_maximumFocus)}  TAB 슬로우 ON"
+                : $"집중력  {Mathf.CeilToInt(_focus)} / {Mathf.CeilToInt(_maximumFocus)}  TAB";
             focusLabel.color = _slowMotionActive ? slowMotionLabelColor : focusColor;
         }
 

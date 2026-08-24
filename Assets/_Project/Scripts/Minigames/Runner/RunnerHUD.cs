@@ -34,7 +34,7 @@ namespace StreamOn.Minigames.Runner
         public void SetHealth(int current, int maximum)
         {
             EnsureReferences();
-            healthText.text = $"HP  {new string('♥', current)}{new string('-', maximum - current)}";
+            healthText.text = $"HP  {new string('♥', current)}{new string('♡', maximum - current)}";
         }
         public void ShowGameOver(bool visible)
         {

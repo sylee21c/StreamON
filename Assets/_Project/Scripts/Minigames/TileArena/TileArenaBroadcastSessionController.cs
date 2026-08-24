@@ -114,8 +114,8 @@ namespace StreamOn.Minigames.TileArena
             BroadcastActive = false;
             int rawScore = RunnerBroadcastSessionStore.RawScore;
             int score = RunnerBroadcastSessionStore.BroadcastScore;
-            int target = settings.TargetScoreForDay(_save.day);
-            RunnerBroadcastResult result = audience?.FinishBroadcast(score, target, TotalHitsTaken,
+            int ratingTarget = settings.RatingTargetScore(BroadcastGameId.TileArena);
+            RunnerBroadcastResult result = audience?.FinishBroadcast(score, ratingTarget, TotalHitsTaken,
                 Mathf.Max(1f, ElapsedSeconds), DurationSeconds);
             FindFirstObjectByType<RunnerChatController>()?.BeginBroadcastEndingChat();
             StartCoroutine(FinishBroadcastPresentation(result, rawScore, score));
@@ -169,7 +169,7 @@ namespace StreamOn.Minigames.TileArena
             if (remainingTimeText != null)
             {
                 int seconds = Mathf.CeilToInt(RemainingSeconds);
-                remainingTimeText.text = WaitingForFinalGameOver ? "방송 종료 대기 · 현재 판까지" : $"방송 {seconds / 60:00}:{seconds % 60:00}";
+                remainingTimeText.text = WaitingForFinalGameOver ? "방송 종료 대기 / 현재 판까지" : $"방송 {seconds / 60:00}:{seconds % 60:00}";
             }
             if (attemptText != null) attemptText.text = $"도전 {Mathf.Max(1, AttemptsPlayed)}회";
         }

@@ -115,7 +115,8 @@ namespace StreamOn.Minigames.Runner
 
         private void Update()
         {
-            if (!_running || _settings == null || _gameManager == null || !_gameManager.BroadcastActive) return;
+            if (Time.timeScale <= 0f || !_running || _settings == null || _gameManager == null
+                || !_gameManager.BroadcastActive) return;
             _viewerSeconds += CurrentViewers * Time.deltaTime;
             ComposureRankRule mental = CurrentComposureRule();
             float performanceStep = _performanceMeter.Tick(Time.time, _settings,
@@ -210,9 +211,8 @@ namespace StreamOn.Minigames.Runner
             _running = false;
             float elapsed = Mathf.Max(1f, elapsedSeconds);
             float average = _viewerSeconds / elapsed;
-            float scoreRatio = Mathf.Clamp01(score / (float)Mathf.Max(1, targetScore));
             float survivalRatio = completed ? 1f : Mathf.Clamp01(elapsedSeconds / Mathf.Max(1f, durationSeconds));
-            float gameplayRating = 1f + scoreRatio * 4f;
+            float gameplayRating = RatingFromBroadcastScore(score, targetScore);
             float survivalRating = 1f + survivalRatio * 4f;
             float safetyRating = Mathf.Clamp(5f - hitsTaken * _settings.runnerSafetyPenaltyPerHit, 1f, 5f);
             float combatRating = Mathf.Clamp(_settings.runnerCombatRatingBase
@@ -223,12 +223,7 @@ namespace StreamOn.Minigames.Runner
                 + (_talkingSkill - 1) * _settings.runnerHostingRatingPerTalkingLevel
                 + finalHeat / 100f * _settings.runnerHostingRatingHeatRange
                 + _witHostingBonus, 1f, 5f);
-            float weight = Mathf.Max(0.01f, _settings.gameplayRatingWeight + _settings.survivalRatingWeight
-                + _settings.safetyRatingWeight + _settings.combatRatingWeight + _settings.hostingRatingWeight);
-            float finalRating = (gameplayRating * _settings.gameplayRatingWeight + survivalRating * _settings.survivalRatingWeight
-                + safetyRating * _settings.safetyRatingWeight + combatRating * _settings.combatRatingWeight
-                + hostingRating * _settings.hostingRatingWeight) / weight;
-            finalRating = Mathf.Clamp(finalRating, 1f, 5f);
+            float finalRating = gameplayRating;
 
             float conversion = _settings.baseFollowConversion
                 + finalRating * _settings.followConversionPerRatingPoint
@@ -280,6 +275,16 @@ namespace StreamOn.Minigames.Runner
             };
             RefreshChatScale();
             return LastResult;
+        }
+
+        public static float RatingFromBroadcastScore(int score, int targetScore)
+        {
+            float ratio = Mathf.Max(0, score) / (float)Mathf.Max(1, targetScore);
+            if (ratio <= .5f) return Mathf.Lerp(1f, 2f, ratio / .5f);
+            if (ratio <= .8f) return Mathf.Lerp(2f, 3f, Mathf.InverseLerp(.5f, .8f, ratio));
+            if (ratio <= 1f) return Mathf.Lerp(3f, 4f, Mathf.InverseLerp(.8f, 1f, ratio));
+            if (ratio <= 1.3f) return Mathf.Lerp(4f, 5f, Mathf.InverseLerp(1f, 1.3f, ratio));
+            return 5f;
         }
 
         private void UpdateViewerCount()
@@ -377,10 +382,10 @@ namespace StreamOn.Minigames.Runner
                     : quality >= 3 ? (wit != null ? wit.advancedAnswerRewardMultiplier : 1f) : 1f;
                 float levelThreeMultiplier = (1f + (wit != null ? wit.correctHeatGainBonus : 0f)) * perkMultiplier;
                 AddHype(_settings.witSuccessHype * levelThreeMultiplier);
-                if (mental != null && mental.correctWitClearsRecentMistakes && Time.unscaledTime >= _nextMistakeClearAt)
+                if (mental != null && mental.correctWitClearsRecentMistakes && Time.time >= _nextMistakeClearAt)
                 {
                     _performanceMeter.ClearRecentMistakes();
-                    _nextMistakeClearAt = Time.unscaledTime + mental.mistakeClearCooldownSeconds;
+                    _nextMistakeClearAt = Time.time + mental.mistakeClearCooldownSeconds;
                 }
                 _witHostingBonus = Mathf.Min(_settings.maximumWitHostingBonus,
                     _witHostingBonus + _settings.witHostingRatingBonus * levelThreeMultiplier);
@@ -405,7 +410,7 @@ namespace StreamOn.Minigames.Runner
         private void TryLiveDonation(float baseChance, string message)
         {
             if (!_running || _settings == null || CurrentViewers < _settings.minimumViewersForDonation
-                || Time.unscaledTime < _nextDonationAt) return;
+                || Time.time < _nextDonationAt) return;
             float chance = baseChance * (1f + Mathf.Max(0, _talkingSkill - 1) * _settings.donationChancePerTalkingLevel);
             chance *= Mathf.Lerp(_settings.donationEventChanceMultiplierAtZeroHeat,
                 _settings.donationEventChanceMultiplierAtFullHeat, Hype / 100f);
@@ -416,8 +421,8 @@ namespace StreamOn.Minigames.Runner
         private void TryAmbientDonation()
         {
             if (!_running || _settings == null || !_settings.enableAmbientDonations
-                || Time.unscaledTime < _nextAmbientDonationAt) return;
-            if (CurrentViewers >= _settings.minimumViewersForDonation && Time.unscaledTime >= _nextDonationAt)
+                || Time.time < _nextAmbientDonationAt) return;
+            if (CurrentViewers >= _settings.minimumViewersForDonation && Time.time >= _nextDonationAt)
                 GrantLiveDonation(PickAmbientDonationMessage());
             else
                 ScheduleNextAmbientDonation();
@@ -425,7 +430,7 @@ namespace StreamOn.Minigames.Runner
 
         private void GrantLiveDonation(string message)
         {
-            _nextDonationAt = Time.unscaledTime + _settings.liveDonationCooldown;
+            _nextDonationAt = Time.time + _settings.liveDonationCooldown;
             ScheduleNextAmbientDonation();
             int amount = RollDonationAmount(_settings, Hype);
             string donor = _chat != null ? _chat.PickDonationViewerNickname() : "익명의 시청자";
@@ -443,7 +448,7 @@ namespace StreamOn.Minigames.Runner
                 _settings.donationIntervalMultiplierAtFullHeat, Hype / 100f);
             minimum *= intervalMultiplier;
             maximum *= intervalMultiplier;
-            _nextAmbientDonationAt = Time.unscaledTime + UnityEngine.Random.Range(minimum, maximum);
+            _nextAmbientDonationAt = Time.time + UnityEngine.Random.Range(minimum, maximum);
         }
 
         private string PickAmbientDonationMessage()

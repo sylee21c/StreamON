@@ -340,7 +340,9 @@ namespace StreamOn.Minigames.Runner
                 audience?.OnNewHighScore();
             }
             if (campaign != null && campaign.IsActive)
-                BroadcastResult = audience?.FinishBroadcast(FinalBroadcastScore, campaign.CurrentTargetScore, HitsTaken, EnemiesDefeated,
+                BroadcastResult = audience?.FinishBroadcast(FinalBroadcastScore,
+                    CampaignSettings != null ? CampaignSettings.RatingTargetScore(BroadcastGameId.Runner) : 10000,
+                    HitsTaken, EnemiesDefeated,
                     BroadcastElapsedSeconds, BroadcastDurationSeconds, true);
             chat.BeginRunEndedChat(isNewHighScore, true);
             hud.SetScore(Score, HighScore, WorldSpeed, 0f);

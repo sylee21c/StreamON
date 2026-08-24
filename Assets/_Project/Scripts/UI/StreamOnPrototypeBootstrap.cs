@@ -268,11 +268,11 @@ namespace StreamOn.UI
 
             if (_session.Phase == GamePhase.Day)
             {
-                _titleText.text = $"DAY {player.Day} · 방송 준비";
+                _titleText.text = $"DAY {player.Day} / 방송 준비";
             }
             else if (_session.Phase == GamePhase.Broadcast)
             {
-                _titleText.text = "LIVE · 타이밍 방송";
+                _titleText.text = "LIVE / 타이밍 방송";
             }
             else if (_session.Phase == GamePhase.Settlement)
             {

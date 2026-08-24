@@ -259,7 +259,7 @@ namespace StreamOn.Editor
             panel.type = Image.Type.Simple;
             panel.color = new Color32(20, 21, 23, 255);
 
-            TMP_Text title = Label("Title", root.transform, "채팅  ·  LOCAL\n현재 시청자 0명", font, 16f,
+            TMP_Text title = Label("Title", root.transform, "채팅  /  LOCAL\n현재 시청자 0명", font, 16f,
                 TextAlignmentOptions.MidlineLeft, new Vector2(306f, 64f), new Vector2(0f, 326f));
             title.color = new Color32(223, 226, 234, 255);
             title.fontWeight = FontWeight.Regular;

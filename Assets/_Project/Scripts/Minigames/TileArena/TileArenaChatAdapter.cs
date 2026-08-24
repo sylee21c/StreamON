@@ -71,7 +71,7 @@ namespace StreamOn.Minigames.TileArena
         private void Update()
         {
             InitializeIfNeeded();
-            if (!_initialized || gameController == null) return;
+            if (Time.timeScale <= 0f || !_initialized || gameController == null) return;
             if (_broadcastSessionActive) _viewerSeconds += _currentViewers * Time.unscaledDeltaTime;
             if (_broadcastSessionActive) TryAmbientDonation();
             if (_broadcastSessionActive && gameController.IsRunning)
@@ -189,6 +189,7 @@ namespace StreamOn.Minigames.TileArena
             if (gameController == null || chatController == null) return;
             if (donationPopup == null) donationPopup = FindFirstObjectByType<RunnerDonationPopupController>();
             if (_witInteraction == null) _witInteraction = FindFirstObjectByType<RunnerWitInteractionController>();
+            chatController.ConfigureCampaignSettings(campaignSettings);
             if (campaignSettings != null && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save))
             {
                 _talkingSkill = 1;
@@ -242,18 +243,13 @@ namespace StreamOn.Minigames.TileArena
             _broadcastSessionActive = false;
             float elapsed = Mathf.Max(1f, elapsedSeconds);
             float average = _viewerSeconds / elapsed;
-            float scoreRatio = Mathf.Clamp01(score / (float)Mathf.Max(1, targetScore));
-            float gameplayRating = 1f + scoreRatio * 4f;
+            float gameplayRating = RunnerBroadcastAudienceController.RatingFromBroadcastScore(score, targetScore);
             float survivalRating = 1f + Mathf.Clamp01(elapsedSeconds / Mathf.Max(1f, durationSeconds)) * 4f;
             float safetyRating = Mathf.Clamp(5f - hitsTaken * growthSettings.tileSafetyPenaltyPerHit, 1f, 5f);
             float finalHeat = Mathf.Clamp(_hype + _bufferedHypeChange, 0f, 100f);
             float hostingRating = Mathf.Clamp(growthSettings.tileHostingRatingBase
                 + finalHeat / 100f * growthSettings.tileHostingRatingHeatRange, 1f, 5f);
-            float weight = Mathf.Max(0.01f, growthSettings.gameplayRatingWeight + growthSettings.survivalRatingWeight
-                + growthSettings.safetyRatingWeight + growthSettings.hostingRatingWeight);
-            float finalRating = Mathf.Clamp((gameplayRating * growthSettings.gameplayRatingWeight
-                + survivalRating * growthSettings.survivalRatingWeight + safetyRating * growthSettings.safetyRatingWeight
-                + hostingRating * growthSettings.hostingRatingWeight) / weight, 1f, 5f);
+            float finalRating = gameplayRating;
             float conversion = growthSettings.baseFollowConversion + finalRating * growthSettings.followConversionPerRatingPoint
                 + Mathf.Max(0, _microphoneLevel - 1) * (campaignSettings != null ? campaignSettings.followerConversionBonusPerMicrophoneUpgrade : 0f)
                 + growthSettings.completionFollowBonus;
@@ -314,10 +310,10 @@ namespace StreamOn.Minigames.TileArena
                     : quality >= 3 ? (wit != null ? wit.advancedAnswerRewardMultiplier : 1f) : 1f;
                 float multiplier = (1f + (wit != null ? wit.correctHeatGainBonus : 0f)) * perkMultiplier;
                 AddHype(growthSettings.witSuccessHype * multiplier);
-                if (mental != null && mental.correctWitClearsRecentMistakes && Time.unscaledTime >= _nextMistakeClearAt)
+                if (mental != null && mental.correctWitClearsRecentMistakes && Time.time >= _nextMistakeClearAt)
                 {
                     _performanceMeter.ClearRecentMistakes();
-                    _nextMistakeClearAt = Time.unscaledTime + mental.mistakeClearCooldownSeconds;
+                    _nextMistakeClearAt = Time.time + mental.mistakeClearCooldownSeconds;
                 }
                 TryLiveDonation(growthSettings.witSuccessDonationChance,
                     "이런 받아치기 좋다 ㅋㅋ");
@@ -379,7 +375,7 @@ namespace StreamOn.Minigames.TileArena
         private void TryLiveDonation(float chance, string message)
         {
             if (growthSettings == null || _currentViewers < growthSettings.minimumViewersForDonation
-                || Time.unscaledTime < _nextDonationAt) return;
+                || Time.time < _nextDonationAt) return;
             chance *= Mathf.Lerp(growthSettings.donationEventChanceMultiplierAtZeroHeat,
                 growthSettings.donationEventChanceMultiplierAtFullHeat, _hype / 100f);
             if (Random.value > chance) return;
@@ -389,8 +385,8 @@ namespace StreamOn.Minigames.TileArena
         private void TryAmbientDonation()
         {
             if (growthSettings == null || !growthSettings.enableAmbientDonations
-                || Time.unscaledTime < _nextAmbientDonationAt) return;
-            if (_currentViewers >= growthSettings.minimumViewersForDonation && Time.unscaledTime >= _nextDonationAt)
+                || Time.time < _nextAmbientDonationAt) return;
+            if (_currentViewers >= growthSettings.minimumViewersForDonation && Time.time >= _nextDonationAt)
                 GrantLiveDonation(PickAmbientDonationMessage());
             else
                 ScheduleNextAmbientDonation();
@@ -398,7 +394,7 @@ namespace StreamOn.Minigames.TileArena
 
         private void GrantLiveDonation(string message)
         {
-            _nextDonationAt = Time.unscaledTime + growthSettings.liveDonationCooldown;
+            _nextDonationAt = Time.time + growthSettings.liveDonationCooldown;
             ScheduleNextAmbientDonation();
             int amount = RunnerBroadcastAudienceController.RollDonationAmount(growthSettings, _hype);
             string donor = chatController.PickDonationViewerNickname();
@@ -416,7 +412,7 @@ namespace StreamOn.Minigames.TileArena
                 growthSettings.donationIntervalMultiplierAtFullHeat, _hype / 100f);
             minimum *= intervalMultiplier;
             maximum *= intervalMultiplier;
-            _nextAmbientDonationAt = Time.unscaledTime + Random.Range(minimum, maximum);
+            _nextAmbientDonationAt = Time.time + Random.Range(minimum, maximum);
         }
 
         private void AddHype(float amount, float mentalReductionScale = 1f)

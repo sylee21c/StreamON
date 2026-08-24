@@ -133,6 +133,7 @@ namespace StreamOn.Minigames.Runner
             if (chat == null) chat = FindFirstObjectByType<RunnerChatController>();
             if (donationPopup == null) donationPopup = FindFirstObjectByType<RunnerDonationPopupController>();
             if (witInteraction == null) witInteraction = FindFirstObjectByType<RunnerWitInteractionController>();
+            chat?.ConfigureCampaignSettings(settings);
             chat?.BindExternalGame("Plastic Knightmare");
             PushChatSnapshot(SharedChatGameState.Ready);
             RunnerBroadcastHeatGauge.Show(_heat);
@@ -343,10 +344,10 @@ namespace StreamOn.Minigames.Runner
                     : quality >= 4 ? (wit != null ? wit.correctStreakRewardMultiplier : 1f)
                     : quality >= 3 ? (wit != null ? wit.advancedAnswerRewardMultiplier : 1f) : 1f;
                 AddHeat(growthSettings.witSuccessHype * (1f + (wit != null ? wit.correctHeatGainBonus : 0f)) * perk, false);
-                if (mental != null && mental.correctWitClearsRecentMistakes && Time.unscaledTime >= _nextMistakeClearAt)
+                if (mental != null && mental.correctWitClearsRecentMistakes && Time.time >= _nextMistakeClearAt)
                 {
                     _performanceMeter.ClearRecentMistakes();
-                    _nextMistakeClearAt = Time.unscaledTime + mental.mistakeClearCooldownSeconds;
+                    _nextMistakeClearAt = Time.time + mental.mistakeClearCooldownSeconds;
                 }
                 TryLiveDonation(growthSettings.witSuccessDonationChance, "이런 받아치기 좋다 ㅋㅋ");
                 chat?.React(RunnerChatEvent.WitReplySuccess);
@@ -450,7 +451,7 @@ namespace StreamOn.Minigames.Runner
         private void TryLiveDonation(float chance, string message)
         {
             if (!_nightStarted || growthSettings == null || _currentViewers < growthSettings.minimumViewersForDonation
-                || Time.unscaledTime < _nextDonationAt || _liveDonationWon >= settings.plasticDonationCapPerNight) return;
+                || Time.time < _nextDonationAt || _liveDonationWon >= settings.plasticDonationCapPerNight) return;
             chance *= Mathf.Lerp(growthSettings.donationEventChanceMultiplierAtZeroHeat,
                 growthSettings.donationEventChanceMultiplierAtFullHeat, _heat / 100f);
             if (UnityEngine.Random.value > chance) return;
@@ -460,8 +461,8 @@ namespace StreamOn.Minigames.Runner
         private void TryAmbientDonation()
         {
             if (!_nightStarted || growthSettings == null || !growthSettings.enableAmbientDonations
-                || Time.unscaledTime < _nextAmbientDonationAt) return;
-            if (_currentViewers >= growthSettings.minimumViewersForDonation && Time.unscaledTime >= _nextDonationAt)
+                || Time.time < _nextAmbientDonationAt) return;
+            if (_currentViewers >= growthSettings.minimumViewersForDonation && Time.time >= _nextDonationAt)
             {
                 string[] messages = growthSettings.ambientDonationMessages;
                 GrantLiveDonation(messages != null && messages.Length > 0
@@ -476,7 +477,7 @@ namespace StreamOn.Minigames.Runner
             int amount = Mathf.Min(room, RunnerBroadcastAudienceController.RollDonationAmount(growthSettings, _heat));
             if (amount <= 0) return;
             _liveDonationWon += amount;
-            _nextDonationAt = Time.unscaledTime + growthSettings.liveDonationCooldown;
+            _nextDonationAt = Time.time + growthSettings.liveDonationCooldown;
             ScheduleNextAmbientDonation();
             string donor = chat != null ? chat.PickDonationViewerNickname() : "익명의 시청자";
             donationPopup?.ShowDonation(donor, amount, message);
@@ -494,7 +495,7 @@ namespace StreamOn.Minigames.Runner
             float maximum = Mathf.Max(minimum, growthSettings.ambientDonationMaximumInterval);
             float heatInterval = Mathf.Lerp(growthSettings.donationIntervalMultiplierAtZeroHeat,
                 growthSettings.donationIntervalMultiplierAtFullHeat, _heat / 100f);
-            _nextAmbientDonationAt = Time.unscaledTime + UnityEngine.Random.Range(minimum, maximum) * heatInterval;
+            _nextAmbientDonationAt = Time.time + UnityEngine.Random.Range(minimum, maximum) * heatInterval;
         }
 
         private void FinishBroadcast(bool cleared, int clearedNight)
@@ -517,9 +518,12 @@ namespace StreamOn.Minigames.Runner
 
             float averageViewers = _heatSampleSeconds > 0f ? _viewerSeconds / _heatSampleSeconds : _currentViewers;
             float hostingRating = Mathf.Lerp(1f, 5f, averageHeat / 100f);
+            int ratingTargetScore = Mathf.Max(1,
+                Mathf.RoundToInt(rule.clearBonus * settings.plasticRatingScoreTargetMultiplier));
+            float finalRating = RunnerBroadcastAudienceController.RatingFromBroadcastScore(BroadcastScore, ratingTargetScore);
             float conversion = growthSettings != null
                 ? Mathf.Clamp(growthSettings.baseFollowConversion
-                    + (hostingRating - 1f) * growthSettings.followConversionPerRatingPoint
+                    + (finalRating - 1f) * growthSettings.followConversionPerRatingPoint
                     + growthSettings.completionFollowBonus, 0f, growthSettings.maximumFollowConversion)
                 : 0f;
             int gainedFollowers = Mathf.RoundToInt(_totalVisitors * conversion)
@@ -533,17 +537,20 @@ namespace StreamOn.Minigames.Runner
             int donation = Mathf.Min(settings.plasticDonationCapPerNight, _liveDonationWon + performanceDonation);
             _save.cash += donation;
             _save.lifetimeDonations += donation;
+            long managerSalary = BroadcasterProgression.ApplyManagerSalary(settings, _save);
             int experience = settings.broadcastCompletionExperience + settings.plasticNightClearExperience
-                + Mathf.RoundToInt(Mathf.Lerp(1f, 5f, averageHeat / 100f) * settings.broadcastRatingExperiencePerPoint)
+                + Mathf.RoundToInt(finalRating * settings.broadcastRatingExperiencePerPoint)
                 + ((RawGameScore > previousBestScore)
                     ? settings.newRecordExperience : 0);
-            experience = BroadcasterProgression.AddBroadcastExperience(settings, _save, experience);
+            BroadcasterProgression.AddBroadcastExperience(settings, _save, experience);
+            experience = _save.broadcastSessionExperienceEarned;
+            int experienceAfter = _save.broadcasterExperience;
+            BroadcasterProgression.ExperienceStateBeforeGain(settings, _save.broadcasterLevel, experienceAfter,
+                experience, out int levelBefore, out int experienceBefore);
             _save.broadcastSessionActive = false;
             _save.broadcastSessionGameId = string.Empty;
             _save.broadcastPending = false;
             _save.awaitingAdvance = true;
-            _save.hiredManagerTier = 0;
-            _save.managerUsesRemaining = 0;
             _save.broadcastSessionExperienceEarned = 0;
             RunnerCampaignSaveStore.Save(settings, _save, true);
             RunnerBroadcastSessionStore.Complete(settings, _save);
@@ -556,12 +563,11 @@ namespace StreamOn.Minigames.Runner
                 totalVisitors = _totalVisitors,
                 averageViewers = averageViewers,
                 chattingViewers = ChattingViewers,
-                gameplayRating = Mathf.Lerp(1f, 5f, Mathf.Clamp01(BroadcastScore
-                    / Mathf.Max(1f, rule.clearBonus * settings.plasticRatingScoreTargetMultiplier))),
+                gameplayRating = finalRating,
                 survivalRating = Mathf.Lerp(1f, 5f, Mathf.Clamp01(clearedNight / 10f)),
                 safetyRating = Mathf.Lerp(1f, 5f, bedRatio),
                 hostingRating = hostingRating,
-                finalRating = hostingRating,
+                finalRating = finalRating,
                 followConversionRate = conversion,
                 followersGained = gainedFollowers,
                 followersLost = lostFollowers,
@@ -575,6 +581,7 @@ namespace StreamOn.Minigames.Runner
                 score = BroadcastScore,
                 rawGameScore = RawGameScore,
                 broadcastScore = BroadcastScore,
+                finalScore = BroadcastScore,
                 previousBestScore = previousBestScore,
                 isNewRecord = RawGameScore > previousBestScore,
                 broadcastCompleted = true,
@@ -583,8 +590,12 @@ namespace StreamOn.Minigames.Runner
                 subscriberDelta = followerDelta,
                 subscribersAfter = _save.subscribers,
                 cashAfter = _save.cash,
+                managerSalary = managerSalary,
                 mentalLevel = _save.ComposureRank,
                 experienceGained = experience,
+                experienceBefore = experienceBefore,
+                experienceAfter = experienceAfter,
+                levelBefore = levelBefore,
                 levelAfter = _save.broadcasterLevel,
                 broadcastResult = result
             };

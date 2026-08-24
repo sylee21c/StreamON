@@ -94,6 +94,7 @@ MonoBehaviour:
   - gameId: 0
     displayName: "\uB7EC\uB108"
     baseDurationSeconds: 300
+    ratingTargetScore: 10000
     maximumBonusSeconds: 20
     baseGameOverTimeLoss: 8
     timeBonuses:
@@ -104,6 +105,7 @@ MonoBehaviour:
   - gameId: 1
     displayName: "\uD0C0\uC77C \uC544\uB808\uB098"
     baseDurationSeconds: 300
+    ratingTargetScore: 300
     maximumBonusSeconds: 20
     baseGameOverTimeLoss: 8
     timeBonuses:
@@ -114,6 +116,7 @@ MonoBehaviour:
   - gameId: 2
     displayName: Plastic Knightmare
     baseDurationSeconds: 60
+    ratingTargetScore: 1200
     maximumBonusSeconds: 20
     baseGameOverTimeLoss: 8
     timeBonuses: []

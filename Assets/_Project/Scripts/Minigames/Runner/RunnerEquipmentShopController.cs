@@ -65,7 +65,7 @@ namespace StreamOn.Minigames.Runner
             if (_save == null) return;
             if (cashText != null) cashText.text = $"보유금  {_save.cash:N0}원";
             SetEquipmentText(pcText, RunnerEquipmentType.Pc, _save.pcLevel, $"매니저 처리속도 +{settings.managerDelayReductionPerPcUpgrade * 100f:0}%/Lv");
-            SetEquipmentText(microphoneText, RunnerEquipmentType.Microphone, _save.microphoneLevel, "팔로워·후원 보너스");
+            SetEquipmentText(microphoneText, RunnerEquipmentType.Microphone, _save.microphoneLevel, "팔로워/후원 보너스");
             SetEquipmentText(fitnessText, RunnerEquipmentType.Fitness, _save.fitnessLevel, $"집중력 +{settings.focusCapacityPerFitnessUpgrade:0}/Lv");
             SetEquipmentText(interiorText, RunnerEquipmentType.Interior, _save.interiorLevel, $"초기 시청자 +{settings.startingViewersPerInteriorUpgrade:0}/Lv");
             if (pcButton != null) pcButton.interactable = _save.pcLevel < 3;

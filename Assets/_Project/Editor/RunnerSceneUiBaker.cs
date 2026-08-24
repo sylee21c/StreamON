@@ -147,9 +147,9 @@ namespace StreamOn.Editor
                     new Vector2(650f, 60f), new Vector2(0f, 142f));
                 CreateText(panel.transform, "Guide", "방송이 끝날 때까지 선택한 게임을 플레이합니다.", font, 19f,
                     new Vector2(650f, 40f), new Vector2(0f, 92f));
-                CreateGameButton(panel.transform, "Runner Button", "RUNNER\n점프 · 구르기 · 공격", font,
+                CreateGameButton(panel.transform, "Runner Button", "RUNNER\n점프 / 구르기 / 공격", font,
                     new Vector2(-170f, -25f), new Color(0.14f, 0.67f, 0.60f));
-                CreateGameButton(panel.transform, "Tile Arena Button", "TILE ARENA\n이동 · 점프 · 타일 수집", font,
+                CreateGameButton(panel.transform, "Tile Arena Button", "TILE ARENA\n이동 / 점프 / 타일 수집", font,
                     new Vector2(170f, -25f), new Color(0.25f, 0.48f, 0.88f));
                 CreateText(panel.transform, "Notice", "선택하면 즉시 방송을 시작합니다.", font, 17f,
                     new Vector2(650f, 35f), new Vector2(0f, -155f));

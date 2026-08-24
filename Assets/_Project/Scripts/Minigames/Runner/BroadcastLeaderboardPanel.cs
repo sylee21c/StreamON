@@ -67,12 +67,12 @@ namespace StreamOn.Minigames.Runner
                 if (index >= sorted.Count) { row.text = string.Empty; continue; }
                 BroadcastLeaderboardEntry entry = sorted[index];
                 string value = followerLeaderboard ? $"{entry.followers:N0}명"
-                    : gameId == BroadcastGameId.PlasticKnightmare ? $"Night {entry.clearedNight} · {entry.score:N0}" : entry.score.ToString("N0");
+                    : gameId == BroadcastGameId.PlasticKnightmare ? $"Night {entry.clearedNight} / {entry.score:N0}" : entry.score.ToString("N0");
                 int displayedRank = serverRanked && entry.rank >= 0 ? entry.rank + 1 : index + 1;
                 row.text = $"{displayedRank,2}.  {entry.displayName}    {value}";
             }
             if (statusText != null) statusText.text = localOnly && !settings.useOnlineLeaderboard
-                ? "로컬 기록 · UGS 연결 전"
+                ? "로컬 기록 / UGS 연결 전"
                 : localOnly ? "온라인 리더보드 연결 중..." : "온라인 리더보드 갱신 완료";
         }
     }

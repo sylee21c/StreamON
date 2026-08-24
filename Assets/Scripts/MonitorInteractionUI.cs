@@ -163,7 +163,7 @@ public sealed class MonitorInteractionUI : MonoBehaviour
     // ── [F] 프롬프트 (코드 생성, 편집 불필요) ────────────────────
 
     // Inspector 우클릭(⋮) → 이 항목 선택하면 편집 모드에서 씬에 실제 오브젝트 생성됨.
-    // 이후 씬에서 위치·색·폰트 자유 편집 후 저장.
+    // 이후 씬에서 위치/색/폰트 자유 편집 후 저장.
     [ContextMenu("Create Prompt UI In Scene (편집 모드)")]
     private void CreatePromptUIInScene()
     {

@@ -20,93 +20,51 @@ MonoBehaviour:
   levelThreeResponseSeconds: 9
   minimumViewers: 1
   prompts:
-  - viewerMessage: "\uC544\uAE4C \uADF8\uAC70 \uC77C\uBD80\uB7EC \uB9DE\uC740 \uAC70\uC8E0?"
+  - viewerMessage: "아까 그거 일부러 맞은 거죠?"
     choices:
-    - text: "\uBC29\uC1A1\uAC01\uC744 \uC704\uD55C \uD070 \uADF8\uB9BC\uC774\uC9C0"
-      quality: 2
-      minimumTalkingLevel: 1
-    - text: "\uC544\uB2C8 \uC9C4\uC9DC \uC2E4\uC218\uC600\uC5B4"
-      quality: 1
-      minimumTalkingLevel: 1
-    - text: "다음엔 일부러 피하는 것도 보여줄게"
-      quality: 0
-      minimumTalkingLevel: 2
-  - viewerMessage: "\uC624\uB298\uB3C4 \uC5D4\uB529 \uBABB \uBCF4\uB294 \uAC70 \uC544\uB2D8?"
+    - {text: "방송각을 위한 큰 그림이지", quality: 2, minimumTalkingLevel: 1}
+    - {text: "맞은 게 아니라 웃음 포인트를 잡은 거지", quality: 2, minimumTalkingLevel: 1}
+    - {text: "아니 진짜 실수였어", quality: 1, minimumTalkingLevel: 1}
+    - {text: "내가 알아서 할게, 질문 그만해", quality: 0, minimumTalkingLevel: 1}
+  - viewerMessage: "오늘도 엔딩 못 보는 거 아님?"
     choices:
-    - text: "\uC5D4\uB529\uC774 \uB098\uB97C \uC544\uC9C1 \uBABB \uBCF8 \uAC70\uC9C0"
-      quality: 2
-      minimumTalkingLevel: 1
-    - text: "\uC624\uB298\uC740 \uC9C4\uC9DC \uAC00\uB2A5\uD568"
-      quality: 1
-      minimumTalkingLevel: 1
-    - text: "못 보면 엔딩이 다음 방송까지 늘어남"
-      quality: 0
-      minimumTalkingLevel: 2
-  - viewerMessage: "\uC2E4\uB825 \uBC29\uC1A1 \uB9DE\uB098\uC694?"
+    - {text: "엔딩이 나를 아직 못 본 거지", quality: 2, minimumTalkingLevel: 1}
+    - {text: "엔딩이 자꾸 나를 피해 다니네", quality: 2, minimumTalkingLevel: 1}
+    - {text: "오늘은 진짜 가능함", quality: 1, minimumTalkingLevel: 1}
+    - {text: "그걸 왜 자꾸 물어봐?", quality: 0, minimumTalkingLevel: 1}
+  - viewerMessage: "실력 방송 맞나요?"
     choices:
-    - text: "\uC6C3\uAE30\uB294 \uAC83\uB3C4 \uC2E4\uB825\uC785\uB2C8\uB2E4"
-      quality: 2
-      minimumTalkingLevel: 1
-    - text: "\uC5F0\uC2B5 \uC911\uC778 \uC2E4\uB825 \uBC29\uC1A1"
-      quality: 1
-      minimumTalkingLevel: 1
-    - text: "실력은 채팅이 키우는 중입니다"
-      quality: 0
-      minimumTalkingLevel: 2
-  - viewerMessage: "\uBC29\uAE08 \uD50C\uB808\uC774 \uD574\uBA85 \uBD80\uD0C1\uB4DC\uB9BD\uB2C8\uB2E4"
+    - {text: "웃기는 것도 실력입니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "실력보다 입담 티어가 더 높습니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "아직 연습 중인 실력 방송", quality: 1, minimumTalkingLevel: 1}
+    - {text: "보기 싫으면 나가세요", quality: 0, minimumTalkingLevel: 1}
+  - viewerMessage: "방금 플레이 해명 부탁드립니다"
     choices:
-    - text: "\uD574\uBA85\uC740 \uB2E4\uC74C \uD310\uC758 \uB098\uC5D0\uAC8C \uB9E1\uAE34\uB2E4"
-      quality: 2
-      minimumTalkingLevel: 1
-    - text: "\uC190\uC774 \uC7A0\uAE50 \uBBF8\uB044\uB7EC\uC84C\uC5B4"
-      quality: 1
-      minimumTalkingLevel: 1
-    - text: "방금 장면은 편집본에서 사라집니다"
-      quality: 0
-      minimumTalkingLevel: 2
-  - viewerMessage: "\uC774\uAC70 \uD074\uB9BD \uB530\uB3C4 \uB428?"
+    - {text: "해명은 다음 판의 나에게 맡긴다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "해명 대신 다음 판으로 증명합니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "손이 잠깐 미끄러졌어", quality: 1, minimumTalkingLevel: 1}
+    - {text: "그 장면 본 사람이 잘못임", quality: 0, minimumTalkingLevel: 1}
+  - viewerMessage: "이거 클립 따도 됨?"
     choices:
-    - text: "\uC81C\uBAA9\uC740 \uC804\uC124\uC758 \uC2DC\uC791\uC73C\uB85C \uBD80\uD0C1"
-      quality: 2
-      minimumTalkingLevel: 1
-    - text: "\uC798 \uB098\uC628 \uBD80\uBD84\uB9CC \uB530\uC918"
-      quality: 1
-      minimumTalkingLevel: 1
-    - text: "제목은 잘한 척하는 법으로 부탁"
-      quality: 0
-      minimumTalkingLevel: 2
-  - viewerMessage: "\uC624\uB298 \uC65C \uC774\uB807\uAC8C \uC798\uD568?"
+    - {text: "제목은 전설의 시작으로 부탁", quality: 2, minimumTalkingLevel: 1}
+    - {text: "클립 따면 실패 부분은 잘라줘", quality: 2, minimumTalkingLevel: 1}
+    - {text: "잘 나온 부분만 따줘", quality: 1, minimumTalkingLevel: 1}
+    - {text: "그걸 왜 클립으로 따?", quality: 0, minimumTalkingLevel: 1}
+  - viewerMessage: "오늘 왜 이렇게 잘함?"
     choices:
-    - text: "\uC624\uB298\uB9CC \uC798\uD55C\uB2E4\uB294 \uC804\uC81C\uAC00 \uC774\uC0C1\uD55C\uB370?"
-      quality: 2
-      minimumTalkingLevel: 1
-    - text: "\uCEE8\uB514\uC158\uC774 \uC880 \uC88B\uB124"
-      quality: 1
-      minimumTalkingLevel: 1
-    - text: "이제야 손이 방송에 도착함"
-      quality: 0
-      minimumTalkingLevel: 2
+    - {text: "오늘만 잘한다는 전제가 이상한데?", quality: 2, minimumTalkingLevel: 1}
+    - {text: "잘하는 날도 있어야 방송이지", quality: 2, minimumTalkingLevel: 1}
+    - {text: "오늘 컨디션이 좀 좋네", quality: 1, minimumTalkingLevel: 1}
+    - {text: "원래 잘했는데 뭘 본 거야?", quality: 0, minimumTalkingLevel: 1}
   - viewerMessage: "그 실력으로 방송 왜 켰냐 걍 접어"
-    ignoreIsCorrect: 1
     choices:
-    - text: "그래도 너는 계속 보고 있네"
-      quality: 0
-      minimumTalkingLevel: 1
-    - text: "싫으면 나가도 돼"
-      quality: 0
-      minimumTalkingLevel: 1
-    - text: "네가 해봐"
-      quality: 0
-      minimumTalkingLevel: 1
+    - {text: "접으라면서 끝까지 보는 건 뭐임 ㅋㅋ", quality: 2, minimumTalkingLevel: 1}
+    - {text: "오늘 폐업 심사관 오셨네", quality: 2, minimumTalkingLevel: 1}
+    - {text: "조금만 더 해보고 판단해줘", quality: 1, minimumTalkingLevel: 1}
+    - {text: "너보단 잘하거든?", quality: 0, minimumTalkingLevel: 1}
   - viewerMessage: "시청자도 없는데 혼자 뭐함?"
-    ignoreIsCorrect: 1
     choices:
-    - text: "너 있잖아"
-      quality: 0
-      minimumTalkingLevel: 1
-    - text: "게임하고 있지"
-      quality: 0
-      minimumTalkingLevel: 1
-    - text: "조용히 해"
-      quality: 0
-      minimumTalkingLevel: 1
+    - {text: "한 명 생겼네, 어서 와", quality: 2, minimumTalkingLevel: 1}
+    - {text: "첫 시청자 발견, 이제 둘이 한다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "사람 올 때까지 게임하는 중", quality: 1, minimumTalkingLevel: 1}
+    - {text: "시청자 수까지 왜 신경 써?", quality: 0, minimumTalkingLevel: 1}

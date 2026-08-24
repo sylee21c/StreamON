@@ -46,7 +46,7 @@ namespace StreamOn.Minigames.Runner
                 if (amountText != null) amountText.text = $"{notice.amount:N0}원을 후원해 주셨어요!";
                 if (messageText != null) messageText.text = notice.message;
                 yield return Fade(0f, 1f);
-                yield return new WaitForSecondsRealtime(visibleSeconds);
+                yield return HoldVisible(visibleSeconds);
                 yield return Fade(1f, 0f);
             }
             _pump = null;
@@ -56,13 +56,33 @@ namespace StreamOn.Minigames.Runner
         {
             if (canvasGroup == null) yield break;
             float duration = Mathf.Max(0.01f, fadeSeconds);
-            float startedAt = Time.unscaledTime;
-            while (Time.unscaledTime - startedAt < duration)
+            float elapsed = 0f;
+            while (elapsed < duration)
             {
-                canvasGroup.alpha = Mathf.Lerp(from, to, (Time.unscaledTime - startedAt) / duration);
+                if (Time.timeScale <= 0f)
+                {
+                    canvasGroup.alpha = 0f;
+                    yield return null;
+                    continue;
+                }
+                elapsed += Time.unscaledDeltaTime;
+                canvasGroup.alpha = Mathf.Lerp(from, to, Mathf.Clamp01(elapsed / duration));
                 yield return null;
             }
             canvasGroup.alpha = to;
+        }
+
+        private IEnumerator HoldVisible(float seconds)
+        {
+            float elapsed = 0f;
+            while (elapsed < Mathf.Max(0f, seconds))
+            {
+                bool unpaused = Time.timeScale > 0f;
+                if (canvasGroup != null) canvasGroup.alpha = unpaused ? 1f : 0f;
+                if (unpaused) elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (canvasGroup != null) canvasGroup.alpha = 1f;
         }
 
         private struct DonationNotice

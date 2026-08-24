@@ -443,7 +443,6 @@ namespace StreamOn.Minigames.Runner
             data.gameSkill = Mathf.Clamp(data.gameSkill, 1, settings.maximumGameSkill);
             data.talkingSkill = Mathf.Clamp(data.talkingSkill, 1, settings.maximumTalkingSkill);
             data.healthStat = Mathf.Clamp(data.healthStat, 1, settings.maximumHealthStat);
-            data.cash = Math.Max(0L, data.cash);
             if (string.IsNullOrWhiteSpace(data.streamerName)) data.streamerName = settings.defaultStreamerName;
             if (string.IsNullOrWhiteSpace(data.playerId)) data.playerId = Guid.NewGuid().ToString("N");
             data.broadcasterLevel = Mathf.Clamp(data.broadcasterLevel, 1, Mathf.Max(1, settings.maximumBroadcasterLevel));

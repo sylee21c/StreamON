@@ -23,6 +23,8 @@ namespace StreamOn.Minigames.Runner
         public string displayName = "게임";
         [Tooltip("러너/타일 아레나 방송의 기본 실제 시간입니다. Plastic Knightmare에서는 사용하지 않습니다.")]
         [Min(1f)] public float baseDurationSeconds = 300f;
+        [Tooltip("최종 방송 점수 기반 평점에서 4.0점(A)의 기준이 되는 점수입니다.")]
+        [Min(1)] public int ratingTargetScore = 10000;
         [Min(0f)] public float maximumBonusSeconds = 20f;
         [Min(0f)] public float baseGameOverTimeLoss = 8f;
         public List<BroadcastTimeBonusRule> timeBonuses = new List<BroadcastTimeBonusRule>();
@@ -177,12 +179,15 @@ namespace StreamOn.Minigames.Runner
         public List<BroadcastGameRule> gameRules = new List<BroadcastGameRule>
         {
             new BroadcastGameRule { gameId = BroadcastGameId.Runner, displayName = "러너", baseDurationSeconds = 300f,
+                ratingTargetScore = 10000,
                 maximumBonusSeconds = 20f, baseGameOverTimeLoss = 8f,
                 timeBonuses = new List<BroadcastTimeBonusRule> { new BroadcastTimeBonusRule { broadcastScoreThreshold = 2500, bonusSeconds = 10f }, new BroadcastTimeBonusRule { broadcastScoreThreshold = 6000, bonusSeconds = 10f } } },
             new BroadcastGameRule { gameId = BroadcastGameId.TileArena, displayName = "타일 아레나", baseDurationSeconds = 300f,
+                ratingTargetScore = 300,
                 maximumBonusSeconds = 20f, baseGameOverTimeLoss = 8f,
                 timeBonuses = new List<BroadcastTimeBonusRule> { new BroadcastTimeBonusRule { broadcastScoreThreshold = 120, bonusSeconds = 10f }, new BroadcastTimeBonusRule { broadcastScoreThreshold = 300, bonusSeconds = 10f } } },
-            new BroadcastGameRule { gameId = BroadcastGameId.PlasticKnightmare, displayName = "Plastic Knightmare", baseDurationSeconds = 60f }
+            new BroadcastGameRule { gameId = BroadcastGameId.PlasticKnightmare, displayName = "Plastic Knightmare",
+                baseDurationSeconds = 60f, ratingTargetScore = 1200 }
         };
         [Tooltip("열기 0/50/100에서 방송 점수에 곱해지는 배율입니다.")]
         public AnimationCurve heatScoreMultiplier = new AnimationCurve(new Keyframe(0f, 0.85f), new Keyframe(50f, 1f), new Keyframe(100f, 1.25f));
@@ -345,6 +350,13 @@ namespace StreamOn.Minigames.Runner
             return rule ?? new BroadcastGameRule { gameId = gameId, displayName = gameId.ToString(), baseDurationSeconds = baseBroadcastSeconds, baseGameOverTimeLoss = gameOverTimePenaltySeconds };
         }
 
+        public int RatingTargetScore(BroadcastGameId gameId)
+        {
+            BroadcastGameRule rule = GameRule(gameId);
+            if (rule != null && rule.ratingTargetScore > 0) return rule.ratingTargetScore;
+            return gameId == BroadcastGameId.TileArena ? 300 : gameId == BroadcastGameId.PlasticKnightmare ? 1200 : 10000;
+        }
+
         public string LeaderboardId(BroadcastGameId gameId, bool followerBoard)
         {
             if (followerBoard) return followerLeaderboardId;
@@ -426,6 +438,7 @@ namespace StreamOn.Minigames.Runner
                 gameRules.Add(new BroadcastGameRule
                 {
                     gameId = BroadcastGameId.Runner, displayName = "러너", baseDurationSeconds = 300f,
+                    ratingTargetScore = 10000,
                     maximumBonusSeconds = 20f, baseGameOverTimeLoss = 8f,
                     timeBonuses = new List<BroadcastTimeBonusRule>
                     {
@@ -437,6 +450,7 @@ namespace StreamOn.Minigames.Runner
                 gameRules.Add(new BroadcastGameRule
                 {
                     gameId = BroadcastGameId.TileArena, displayName = "타일 아레나", baseDurationSeconds = 300f,
+                    ratingTargetScore = 300,
                     maximumBonusSeconds = 20f, baseGameOverTimeLoss = 8f,
                     timeBonuses = new List<BroadcastTimeBonusRule>
                     {
@@ -447,8 +461,15 @@ namespace StreamOn.Minigames.Runner
             if (!gameRules.Exists(rule => rule != null && rule.gameId == BroadcastGameId.PlasticKnightmare))
                 gameRules.Add(new BroadcastGameRule
                 {
-                    gameId = BroadcastGameId.PlasticKnightmare, displayName = "Plastic Knightmare", baseDurationSeconds = 60f
+                    gameId = BroadcastGameId.PlasticKnightmare, displayName = "Plastic Knightmare",
+                    baseDurationSeconds = 60f, ratingTargetScore = 1200
                 });
+            foreach (BroadcastGameRule rule in gameRules)
+            {
+                if (rule == null || rule.ratingTargetScore > 0) continue;
+                rule.ratingTargetScore = rule.gameId == BroadcastGameId.TileArena ? 300
+                    : rule.gameId == BroadcastGameId.PlasticKnightmare ? 1200 : 10000;
+            }
             maximumBroadcasterLevel = Mathf.Max(1, maximumBroadcasterLevel);
             if (broadcasterLevels == null) broadcasterLevels = new List<BroadcasterLevelRule>();
             if (broadcasterLevels.Count == 0)

@@ -61,6 +61,11 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private Image hudControlFill;
         [SerializeField] private TMP_Text hudXpLabel;
         [SerializeField] private Image hudXpFill;
+        [Header("Scene-authored Debug Menu")]
+        [SerializeField] private GameObject debugPanel;
+        [SerializeField] private Button debugAddLevelButton;
+        [SerializeField] private Button debugAddCashButton;
+        [SerializeField] private Button debugResetLevelButton;
         [Header("Scene-authored Save Slots")]
         [SerializeField] private GameObject slotPanel;
         [SerializeField] private TMP_Text slotNotice;
@@ -100,6 +105,10 @@ namespace StreamOn.Minigames.Runner
             if (runnerGameButton != null) runnerGameButton.onClick.AddListener(SelectRunnerGame);
             if (tileArenaGameButton != null) tileArenaGameButton.onClick.AddListener(SelectTileArenaGame);
             if (plasticKnightmareGameButton != null) plasticKnightmareGameButton.onClick.AddListener(SelectPlasticKnightmareGame);
+            if (debugAddLevelButton != null) debugAddLevelButton.onClick.AddListener(DebugAddStreamerLevel);
+            if (debugAddCashButton != null) debugAddCashButton.onClick.AddListener(DebugAddCash);
+            if (debugResetLevelButton != null) debugResetLevelButton.onClick.AddListener(DebugResetStreamerProgression);
+            if (debugPanel != null) debugPanel.SetActive(false);
             if (transitionFade != null)
             {
                 transitionFade.alpha = 0f;
@@ -184,6 +193,12 @@ namespace StreamOn.Minigames.Runner
             // the panel fails to render.
             bool growthPanelOpen = growthAndLeaderboardPanel != null
                 && growthAndLeaderboardPanel.activeInHierarchy;
+            bool roomModalOpen = _transitioning || (_slotPanel != null && _slotPanel.activeSelf)
+                || (gameSelectionPanel != null && gameSelectionPanel.activeInHierarchy)
+                || growthPanelOpen;
+            if (!roomModalOpen && Keyboard.current != null && Keyboard.current.iKey.wasPressedThisFrame
+                && debugPanel != null)
+                debugPanel.SetActive(!debugPanel.activeSelf);
             if (growthPanelOpen && Keyboard.current != null
                 && (Keyboard.current.escapeKey.wasPressedThisFrame
                     || Keyboard.current.eKey.wasPressedThisFrame))
@@ -191,9 +206,7 @@ namespace StreamOn.Minigames.Runner
                 CloseGrowthAndLeaderboardPanel();
                 return;
             }
-            if (_transitioning || (_slotPanel != null && _slotPanel.activeSelf)
-                || (gameSelectionPanel != null && gameSelectionPanel.activeInHierarchy)
-                || growthPanelOpen)
+            if (roomModalOpen)
             {
                 SetBroadcastPromptVisible(false);
                 SetLaptopPromptVisible(false);
@@ -260,7 +273,7 @@ namespace StreamOn.Minigames.Runner
 
         private void BeginBroadcastSelection()
         {
-            if (_save == null || _transitioning) return;
+            if (_transitioning || !ReloadRoomSave()) return;
             _notice = string.Empty;
             if (!_save.broadcastPending)
             {
@@ -317,6 +330,7 @@ namespace StreamOn.Minigames.Runner
             if (growthAndLeaderboardPanel == null || _transitioning) return;
             SetLaptopPromptVisible(false);
             SetStatusHudVisible(false);
+            if (debugPanel != null) debugPanel.SetActive(false);
             // Room UI is a shared container. Several of its panels are left active in the
             // scene and stay hidden only because the container itself is off, so turning
             // it on for one panel would reveal every sibling along with it.
@@ -334,6 +348,7 @@ namespace StreamOn.Minigames.Runner
             // flow that turns it on inherits a half-open UI.
             if (roomUi != null) roomUi.SetActive(false);
             SetPlayerLocked(false);
+            ReloadRoomSave();
             RefreshStatus();
             SetStatusHudVisible(true);
         }
@@ -357,7 +372,7 @@ namespace StreamOn.Minigames.Runner
                 || Time.frameCount < _gameSelectionInputEnabledFrame))
                 return;
 
-            if (_save == null)
+            if (!ReloadRoomSave())
             {
                 ShowSelectionError("저장 데이터를 불러오지 못했습니다.");
                 return;
@@ -389,6 +404,14 @@ namespace StreamOn.Minigames.Runner
             RunnerBroadcastSessionStore.ApplyToSave(_save);
             RunnerCampaignSaveStore.Save(settings, _save, true);
             SceneManager.LoadScene(sceneName);
+        }
+
+        private bool ReloadRoomSave()
+        {
+            if (settings == null || !RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData latest))
+                return false;
+            _save = latest;
+            return true;
         }
 
         private void ResumeLockedBroadcast()
@@ -449,6 +472,7 @@ namespace StreamOn.Minigames.Runner
             SetPlayerLocked(true);
             SetBroadcastPromptVisible(false);
             SetStatusHudVisible(false);
+            if (debugPanel != null) debugPanel.SetActive(false);
 
             if (roomUi != null) roomUi.SetActive(false);
             if (mainRoomCamera != null) mainRoomCamera.gameObject.SetActive(false);
@@ -690,7 +714,7 @@ namespace StreamOn.Minigames.Runner
         private void HideRoomModalPanels() => ShowOnlyRoomModal(null);
 
         private static void SetHudGauge(TMP_Text label, TMP_Text levelText, Image fill,
-            string name, int rank, int maximum)
+            string name, int rank, int maximum, float progress)
         {
             maximum = Mathf.Max(1, maximum);
             rank = Mathf.Clamp(rank, 0, maximum);
@@ -700,8 +724,41 @@ namespace StreamOn.Minigames.Runner
             if (fill != null)
             {
                 RectTransform rect = fill.rectTransform;
-                rect.anchorMax = new Vector2(rank / (float)maximum, 1f);
+                rect.anchorMax = new Vector2(Mathf.Clamp01(progress), 1f);
             }
+        }
+
+        public void DebugAddStreamerLevel()
+        {
+            if (_save == null || settings == null
+                || _save.broadcasterLevel >= settings.maximumBroadcasterLevel) return;
+            _save.broadcasterLevel++;
+            BroadcasterLevelRule reached = settings.broadcasterLevels?
+                .Find(rule => rule != null && rule.level == _save.broadcasterLevel);
+            _save.unspentStatPoints += Mathf.Max(0, reached != null ? reached.statPointsGranted : 1);
+            SaveDebugChange();
+        }
+
+        public void DebugAddCash()
+        {
+            if (_save == null) return;
+            _save.cash = System.Math.Min(long.MaxValue, _save.cash + 10000L);
+            SaveDebugChange();
+        }
+
+        public void DebugResetStreamerProgression()
+        {
+            if (_save == null || settings == null) return;
+            _save.broadcasterLevel = Mathf.Max(1, settings.startingBroadcasterLevel);
+            _save.broadcasterExperience = 0;
+            _save.broadcastSessionExperienceEarned = 0;
+            SaveDebugChange();
+        }
+
+        private void SaveDebugChange()
+        {
+            RunnerCampaignSaveStore.Save(settings, _save, true);
+            RefreshStatus();
         }
 
         private void ArmGameSelectionInput()
@@ -761,11 +818,14 @@ namespace StreamOn.Minigames.Runner
             int maximumComposure = BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Composure);
             int maximumControl = BroadcasterProgression.MaximumRank(settings, BroadcasterStatType.Control);
             SetHudGauge(hudWitLabel, hudWitLevelText, hudWitFill,
-                "재치", _save.witRank, maximumWit);
+                "재치", _save.witRank, maximumWit,
+                BroadcasterProgression.UpgradeProgress(settings, _save, BroadcasterStatType.Wit));
             SetHudGauge(hudComposureLabel, hudComposureLevelText, hudComposureFill,
-                "평정심", _save.ComposureRank, maximumComposure);
+                "평정심", _save.ComposureRank, maximumComposure,
+                BroadcasterProgression.UpgradeProgress(settings, _save, BroadcasterStatType.Composure));
             SetHudGauge(hudControlLabel, hudControlLevelText, hudControlFill,
-                "통제력", _save.ControlRank, maximumControl);
+                "통제력", _save.ControlRank, maximumControl,
+                BroadcasterProgression.UpgradeProgress(settings, _save, BroadcasterStatType.Control));
 
             bool atMaxLevel = _save.broadcasterLevel >= settings.maximumBroadcasterLevel;
             if (hudXpLabel != null)

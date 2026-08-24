@@ -39,6 +39,33 @@ namespace StreamOn.Minigames.Runner
             return granted;
         }
 
+        public static void ExperienceStateBeforeGain(RunnerCampaignSettings settings, int levelAfter,
+            int experienceAfter, int gained, out int levelBefore, out int experienceBefore)
+        {
+            levelBefore = Mathf.Max(1, levelAfter);
+            experienceBefore = Mathf.Max(0, experienceAfter);
+            int remaining = Mathf.Max(0, gained);
+            while (remaining > 0)
+            {
+                if (experienceBefore >= remaining)
+                {
+                    experienceBefore -= remaining;
+                    break;
+                }
+
+                remaining -= experienceBefore;
+                if (levelBefore <= 1)
+                {
+                    experienceBefore = 0;
+                    break;
+                }
+
+                levelBefore--;
+                BroadcasterLevelRule rule = LevelRule(settings, levelBefore);
+                experienceBefore = Mathf.Max(1, rule != null ? rule.experienceToNextLevel : 100);
+            }
+        }
+
         public static bool TryUpgrade(RunnerCampaignSettings settings, RunnerCampaignSaveData save, BroadcasterStatType type)
         {
             if (settings == null || save == null) return false;
@@ -90,12 +117,30 @@ namespace StreamOn.Minigames.Runner
         public static bool TryHireManager(RunnerCampaignSettings settings, RunnerCampaignSaveData save, int tier)
         {
             ManagerTierRule rule = settings?.managerTiers?.Find(candidate => candidate != null && candidate.tier == tier);
-            if (rule == null || save == null || tier > save.unlockedManagerTier || save.cash < rule.hireCostPerBroadcast) return false;
-            save.cash -= rule.hireCostPerBroadcast;
+            if (rule == null || save == null || tier > save.unlockedManagerTier || save.hiredManagerTier == tier) return false;
             save.hiredManagerTier = tier;
             save.managerUsesRemaining = Mathf.Max(0, rule.usesPerBroadcast);
             RunnerCampaignSaveStore.Save(settings, save, true);
             return true;
+        }
+
+        public static void PrepareManagerForBroadcast(RunnerCampaignSettings settings, RunnerCampaignSaveData save)
+        {
+            if (save == null) return;
+            ManagerTierRule manager = HiredManager(settings, save);
+            save.managerUsesRemaining = manager != null ? Mathf.Max(0, manager.usesPerBroadcast) : 0;
+        }
+
+        public static long ApplyManagerSalary(RunnerCampaignSettings settings, RunnerCampaignSaveData save)
+        {
+            ManagerTierRule manager = HiredManager(settings, save);
+            long salary = manager != null ? Math.Max(0L, manager.hireCostPerBroadcast) : 0L;
+            if (save != null)
+            {
+                save.cash -= salary;
+                save.managerUsesRemaining = 0;
+            }
+            return salary;
         }
 
         public static ManagerTierRule HiredManager(RunnerCampaignSettings settings, RunnerCampaignSaveData save) =>
@@ -141,6 +186,15 @@ namespace StreamOn.Minigames.Runner
                 BroadcasterStatType.Composure => save.composureInvestedPoints,
                 _ => save.controlInvestedPoints
             };
+        }
+
+        public static float UpgradeProgress(RunnerCampaignSettings settings,
+            RunnerCampaignSaveData save, BroadcasterStatType type)
+        {
+            if (settings == null || save == null) return 0f;
+            if (Rank(save, type) >= MaximumRank(settings, type)) return 1f;
+            int required = NextUpgradeCost(settings, save, type);
+            return Mathf.Clamp01(InvestedPoints(save, type) / (float)Mathf.Max(1, required));
         }
 
         public static int Rank(RunnerCampaignSaveData save, BroadcasterStatType type) => type switch

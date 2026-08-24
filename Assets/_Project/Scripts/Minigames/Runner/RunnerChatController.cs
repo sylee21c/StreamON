@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -161,6 +162,7 @@ namespace StreamOn.Minigames.Runner
         {
             useAiChat = RunnerUserSettingsStore.Load(useAiChat).aiChatEnabled;
             if (gameManager == null) gameManager = FindFirstObjectByType<RunnerGameManager>();
+            if (campaignSettings == null && gameManager != null) campaignSettings = gameManager.CampaignSettings;
             if (campaignSettings != null && RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData managerSave))
                 RefreshManagerStatus(managerSave, BroadcasterProgression.HiredManager(campaignSettings, managerSave));
             EnsureSlots();
@@ -168,6 +170,14 @@ namespace StreamOn.Minigames.Runner
             _titleText = GetComponentsInChildren<TMP_Text>(true).FirstOrDefault(text => text.name == "Title");
             SetConnectionLabel("LOCAL");
             SelectActiveViewers();
+        }
+
+        public void ConfigureCampaignSettings(RunnerCampaignSettings settings)
+        {
+            if (settings == null) return;
+            campaignSettings = settings;
+            if (RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData managerSave))
+                RefreshManagerStatus(managerSave, BroadcasterProgression.HiredManager(campaignSettings, managerSave));
         }
 
         private void ApplyChatFont()
@@ -291,7 +301,7 @@ namespace StreamOn.Minigames.Runner
         public bool AiEnabled => useAiChat;
 
         public IEnumerator GenerateWitInteraction(string situation, IReadOnlyCollection<string> recentPrompts,
-            Action<RunnerGeneratedWitPrompt> onComplete)
+            int witRank, Action<RunnerGeneratedWitPrompt> onComplete)
         {
             if (!CanUseAi(out string apiKey))
             {
@@ -303,6 +313,7 @@ namespace StreamOn.Minigames.Runner
                 : _externalSnapshot ?? new RunnerChatSnapshot { gameTitle = _externalGameTitle };
             snapshot.events = situation;
             snapshot.recentMessages = string.Join(" | ", _recentChatContext);
+            snapshot.talkingSkill = Mathf.Max(0, witRank);
             RunnerGeneratedWitPrompt generated = null;
             OpenAiRunnerChatClient client = new OpenAiRunnerChatClient(ActiveAiEndpoint(), model, apiKey);
             yield return client.GenerateWit(snapshot, recentPrompts, value => generated = value, _ => { });
@@ -448,13 +459,13 @@ namespace StreamOn.Minigames.Runner
 
         private IEnumerator PumpBroadcastFarewells(int generation)
         {
-            yield return new WaitForSecondsRealtime(farewellInitialDelay);
+            yield return PauseAwareDelay(farewellInitialDelay);
             if (generation != _runGeneration) yield break;
             React(RunnerChatEvent.BroadcastCompleted);
-            yield return new WaitForSecondsRealtime(farewellRepeatDelay);
+            yield return PauseAwareDelay(farewellRepeatDelay);
             if (generation != _runGeneration) yield break;
             React(RunnerChatEvent.BroadcastCompleted);
-            yield return new WaitForSecondsRealtime(farewellRepeatDelay);
+            yield return PauseAwareDelay(farewellRepeatDelay);
             if (generation != _runGeneration) yield break;
             React(RunnerChatEvent.BroadcastCompleted);
             _postGamePump = null;
@@ -466,7 +477,7 @@ namespace StreamOn.Minigames.Runner
                 ? postGameReactionDelays : new[] { 1f };
             foreach (float delay in delays)
             {
-                yield return new WaitForSecondsRealtime(Mathf.Max(0f, delay));
+                yield return PauseAwareDelay(Mathf.Max(0f, delay));
                 if (!IsCurrentGameOver(generation)) yield break;
                 React(RunnerChatEvent.PostGameDiscussion);
             }
@@ -485,7 +496,7 @@ namespace StreamOn.Minigames.Runner
             while (_aiEvents.Count > 0 && generation == _runGeneration)
             {
                 float wait = Mathf.Max(eventBatchWindow, _nextAiRequestAt - Time.unscaledTime);
-                if (wait > 0f) yield return new WaitForSecondsRealtime(wait);
+                if (wait > 0f) yield return PauseAwareDelay(wait);
                 List<RunnerChatEvent> events = new List<RunnerChatEvent>();
                 while (_aiEvents.Count > 0) events.Add(_aiEvents.Dequeue());
                 bool conflictRequest = events.Contains(RunnerChatEvent.ChatConflict);
@@ -626,9 +637,7 @@ namespace StreamOn.Minigames.Runner
         private void RefreshTitle()
         {
             if (_titleText == null) return;
-            if (_conflictActive)
-                _titleText.text = $"채팅  ·  {_connectionMode}\n현재 시청자 {_audienceViewerCount:N0}명  ·  <color=#FF665F>분탕 유저를 클릭해 밴</color>";
-            else _titleText.text = $"채팅  ·  {_connectionMode}\n현재 시청자 {_audienceViewerCount:N0}명";
+            _titleText.text = $"채팅  /  {_connectionMode}\n현재 시청자 {_audienceViewerCount:N0}명";
         }
 
         private bool IsSocialEventActive() => _conflictActive || _fraternizationActive;
@@ -657,20 +666,28 @@ namespace StreamOn.Minigames.Runner
                 if (targets.Length > 0)
                 {
                     _conflictTarget = targets[UnityEngine.Random.Range(0, targets.Length)];
-                    _conflictTargetMessage = _lastMessageByViewer[_conflictTarget.viewerId];
                 }
                 else _conflictTargetsStreamer = true;
             }
             if (_conflictTargetsStreamer)
             {
                 _conflictTarget = null;
-                _conflictTargetMessage = "방금 플레이";
+                _conflictTargetMessage = "아니 이걸 왜 맞음? 이 정도면 겜 접어야지 ㅋㅋ";
+            }
+            else
+            {
+                string[] provocations =
+                {
+                    "아까부터 아는 척은 제일 열심히 하네 ㅋㅋ",
+                    "훈수 둘 거면 니 방송 가서 해 ㅋㅋ",
+                    "님 말만 정답인 줄 아나 보네",
+                    "말은 많은데 아는 건 하나도 없네 ㅋㅋ"
+                };
+                _conflictTargetMessage = $"@{_conflictTarget.nickname} {provocations[UnityEngine.Random.Range(0, provocations.Length)]}";
             }
             _conflictActive = true;
             RefreshTitle();
-            EnqueueRendered(_troublemaker, _conflictTargetsStreamer
-                ? "아니 이걸 왜 맞음? 이 정도면 겜 접어야지 ㅋㅋ"
-                : $"@{_conflictTarget.nickname} {ShortConflictFragment(_conflictTargetMessage)}가 그렇게 어렵냐? 겜안분 티내네 ㅋㅋ");
+            EnqueueRendered(_troublemaker, _conflictTargetMessage);
             React(RunnerChatEvent.ChatConflict);
             if (_conflictPump != null) StopCoroutine(_conflictPump);
             _conflictPump = StartCoroutine(PumpConflictFollowups(_runGeneration));
@@ -693,7 +710,7 @@ namespace StreamOn.Minigames.Runner
             _fraternizers.Add(candidates[1]);
             _pendingFraternizer = candidates.Length >= 3 && UnityEngine.Random.value < thirdFraternizerChance ? candidates[2] : null;
             _fraternizationActive = true;
-            _socialEventStartedAt = Time.unscaledTime;
+            _socialEventStartedAt = Time.time;
             MarkFraternizationOffender(_fraternizers[0]);
             RefreshTitle();
             EnqueueRendered(_fraternizers[0], $"@{_fraternizers[1].nickname} 오늘도 오셨네요 ㅋㅋ");
@@ -717,7 +734,7 @@ namespace StreamOn.Minigames.Runner
 
         private IEnumerator ManagerHandleRoutine(ManagerTierRule manager, bool fraternization, float delayMultiplier)
         {
-            yield return new WaitForSecondsRealtime(Mathf.Max(0f, manager.handlingDelaySeconds * delayMultiplier));
+            yield return PauseAwareDelay(Mathf.Max(0f, manager.handlingDelaySeconds * delayMultiplier));
             _managerRoutine = null;
             if (fraternization ? !_fraternizationActive : !_conflictActive) yield break;
             if (!RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save) || save.managerUsesRemaining <= 0) yield break;
@@ -757,7 +774,7 @@ namespace StreamOn.Minigames.Runner
         private void RefreshManagerStatus(RunnerCampaignSaveData save, ManagerTierRule manager)
         {
             if (managerStatusText == null) return;
-            managerStatusText.text = manager == null ? "매니저 없음" : $"{manager.displayName} · 남은 처리 {save.managerUsesRemaining}회";
+            managerStatusText.text = manager == null ? "매니저 없음" : $"{manager.displayName} / 남은 처리 {save.managerUsesRemaining}회";
         }
 
         private static bool IsConflictViewer(RunnerViewerData viewer) => viewer != null
@@ -836,7 +853,7 @@ namespace StreamOn.Minigames.Runner
         private IEnumerator PumpFraternizationFollowups(int generation)
         {
             int turn = 0;
-            yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(socialOpeningDelayMinimumSeconds,
+            yield return PauseAwareDelay(UnityEngine.Random.Range(socialOpeningDelayMinimumSeconds,
                 Mathf.Max(socialOpeningDelayMinimumSeconds, socialOpeningDelayMaximumSeconds)));
             while (_fraternizationActive && generation == _runGeneration)
             {
@@ -882,14 +899,13 @@ namespace StreamOn.Minigames.Runner
             if (viewer != null && _fraternizationOffenders.Add(viewer.viewerId)) RefreshTitle();
         }
 
-        private WaitForSecondsRealtime SocialReplyDelay() =>
-            new WaitForSecondsRealtime(UnityEngine.Random.Range(socialReplyMinimumSeconds,
-                Mathf.Max(socialReplyMinimumSeconds, socialReplyMaximumSeconds)));
+        private IEnumerator SocialReplyDelay() => PauseAwareDelay(UnityEngine.Random.Range(socialReplyMinimumSeconds,
+            Mathf.Max(socialReplyMinimumSeconds, socialReplyMaximumSeconds)));
 
         private IEnumerator PumpConflictFollowups(int generation)
         {
             int turn = 0;
-            yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(socialOpeningDelayMinimumSeconds,
+            yield return PauseAwareDelay(UnityEngine.Random.Range(socialOpeningDelayMinimumSeconds,
                 Mathf.Max(socialOpeningDelayMinimumSeconds, socialOpeningDelayMaximumSeconds)));
             while (_conflictActive && generation == _runGeneration)
             {
@@ -924,13 +940,6 @@ namespace StreamOn.Minigames.Runner
             if (candidates.Length == 0)
                 candidates = SpeakingViewers().Where(viewer => viewer != _troublemaker && viewer != _conflictTarget).ToArray();
             if (candidates.Length > 0) EnqueueRendered(candidates[UnityEngine.Random.Range(0, candidates.Length)], message);
-        }
-
-        private static string ShortConflictFragment(string message)
-        {
-            string value = (message ?? "방금 한 말").Trim();
-            if (value.Length > 14) value = value.Substring(0, 14).Trim();
-            return string.IsNullOrWhiteSpace(value) ? "방금 한 말" : value;
         }
 
         private void OnViewerClicked(string viewerId)
@@ -974,7 +983,7 @@ namespace StreamOn.Minigames.Runner
                     if (_fraternizationPump != null) StopCoroutine(_fraternizationPump);
                     _fraternizationPump = null;
                     _fraternizers.Clear();
-                    ApplyFraternizationResolved(Time.unscaledTime - _socialEventStartedAt);
+                    ApplyFraternizationResolved(Time.time - _socialEventStartedAt);
                     EnqueueSocialBystander("정리됐네 굿", false);
                 }
                 else EnqueueSocialBystander("남은 사람도 정리해야지", false);
@@ -1004,7 +1013,7 @@ namespace StreamOn.Minigames.Runner
             int count = UnityEngine.Random.Range(minimum, maximum + 1);
             for (int i = 0; i < count; i++)
             {
-                yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(wrongBanReactionMinimumDelay,
+                yield return PauseAwareDelay(UnityEngine.Random.Range(wrongBanReactionMinimumDelay,
                     Mathf.Max(wrongBanReactionMinimumDelay, wrongBanReactionMaximumDelay)));
                 if (generation != _runGeneration) yield break;
                 EnqueueConflictBystander(reactions[UnityEngine.Random.Range(0, reactions.Length)], false);
@@ -1322,7 +1331,7 @@ namespace StreamOn.Minigames.Runner
 
         private bool EnqueueRendered(RunnerViewerData viewer, string message)
         {
-            if (viewer == null || string.IsNullOrWhiteSpace(message) || _pending.Count >= 12) return false;
+            if (viewer == null || _pending.Count >= 12 || !TrySanitize(message, out message)) return false;
             string normalized = NormalizeDuplicateKey(message);
             if (!_recentMessagesByViewer.TryGetValue(viewer.viewerId, out Queue<string> recent))
             {
@@ -1352,7 +1361,7 @@ namespace StreamOn.Minigames.Runner
         {
             while (_pending.Count > 0)
             {
-                yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(minimumDelay, maximumDelay) * _audienceDelayMultiplier);
+                yield return PauseAwareDelay(UnityEngine.Random.Range(minimumDelay, maximumDelay) * _audienceDelayMultiplier);
                 _visible.Enqueue(_pending.Dequeue());
                 while (_visible.Count > messageSlots.Length) _visible.Dequeue();
                 RefreshSlots();
@@ -1360,13 +1369,59 @@ namespace StreamOn.Minigames.Runner
             _displayPump = null;
         }
 
+        private static IEnumerator PauseAwareDelay(float seconds)
+        {
+            float elapsed = 0f;
+            while (elapsed < Mathf.Max(0f, seconds))
+            {
+                if (Time.timeScale > 0f) elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+        }
+
         private static bool TrySanitize(string value, out string sanitized)
         {
-            sanitized = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ")
+            sanitized = StripEmoji(value).Replace("\r", " ").Replace("\n", " ")
                 .Replace("<", string.Empty).Replace(">", string.Empty).Trim();
             if (sanitized.Length > 50) sanitized = sanitized.Substring(0, 50).Trim();
             return sanitized.Length > 0;
         }
+
+        private static string StripEmoji(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            StringBuilder builder = new StringBuilder(value.Length);
+            for (int index = 0; index < value.Length; index++)
+            {
+                int codePoint = value[index];
+                if (char.IsHighSurrogate(value[index]) && index + 1 < value.Length
+                    && char.IsLowSurrogate(value[index + 1]))
+                {
+                    codePoint = char.ConvertToUtf32(value[index], value[index + 1]);
+                    index++;
+                }
+                if (IsEmojiCodePoint(codePoint)) continue;
+                if (codePoint <= char.MaxValue) builder.Append((char)codePoint);
+                else builder.Append(char.ConvertFromUtf32(codePoint));
+            }
+            return builder.ToString();
+        }
+
+        private static bool IsEmojiCodePoint(int codePoint) =>
+            codePoint >= 0x1F000 && codePoint <= 0x1FAFF
+            || codePoint >= 0x2600 && codePoint <= 0x27BF
+            || codePoint >= 0xFE00 && codePoint <= 0xFE0F
+            || codePoint >= 0xE0020 && codePoint <= 0xE007F
+            || codePoint == 0x200D || codePoint == 0x20E3
+            || codePoint == 0x00A9 || codePoint == 0x00AE
+            || codePoint == 0x203C || codePoint == 0x2049
+            || codePoint == 0x2122 || codePoint == 0x2139
+            || codePoint == 0x2300 || codePoint == 0x231A || codePoint == 0x231B
+            || codePoint >= 0x23E9 && codePoint <= 0x23F3
+            || codePoint >= 0x23F8 && codePoint <= 0x23FA
+            || codePoint == 0x2B50 || codePoint == 0x2B55
+            || codePoint == 0x3030 || codePoint == 0x303D
+            || codePoint == 0x3297 || codePoint == 0x3299;
 
         private static string EventLabel(RunnerChatEvent chatEvent) => chatEvent switch
         {
@@ -1403,7 +1458,7 @@ namespace StreamOn.Minigames.Runner
             RunnerChatEvent.TileArenaPlayerHit => "빨간 위험 타일에 닿아 목숨을 잃음",
             RunnerChatEvent.TileArenaLowLives => "타일 아레나에서 남은 목숨이 얼마 없음",
             RunnerChatEvent.TileArenaGameOver => "타일 아레나 게임 오버",
-            RunnerChatEvent.ChatConflict => "분탕 유저가 다른 시청자의 직전 채팅을 지목해 시비를 걸고 실제 채팅 분쟁이 시작됨",
+            RunnerChatEvent.ChatConflict => "분탕 유저가 스트리머나 다른 시청자에게 근거 없는 도발을 던져 실제 채팅 분쟁이 시작됨",
             RunnerChatEvent.ChatFraternization => "일부 시청자들이 서로 닉네임을 부르며 방송과 무관한 친분 대화를 시작함",
             _ => "특별한 사건 없이 게임 플레이 중"
         };

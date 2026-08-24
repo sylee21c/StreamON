@@ -50,7 +50,7 @@ namespace StreamOn.EditorTools
 
             TMP_Text title = root.GetComponentsInChildren<TMP_Text>(true).First(text => text.name == "Title");
             StyleText(title, 16f, new Vector2(306f, 64f), new Vector2(0f, 326f));
-            title.text = "채팅  ·  LOCAL\n현재 시청자 0명";
+            title.text = "채팅  /  LOCAL\n현재 시청자 0명";
 
             TMP_Text[] existing = MessageSlots(root);
             if (existing.Length == 0)

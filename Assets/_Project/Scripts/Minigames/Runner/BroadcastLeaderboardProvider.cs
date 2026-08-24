@@ -263,7 +263,7 @@ namespace StreamOn.Minigames.Runner
             if (message.IndexOf("leaderboard", StringComparison.OrdinalIgnoreCase) >= 0
                 || message.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "Unity Dashboard의 리더보드 ID를 확인하세요.";
-            return "온라인 연결 실패 · 기록은 재전송 대기 중";
+            return "온라인 연결 실패 / 기록은 재전송 대기 중";
         }
     }
 }

@@ -174,7 +174,11 @@ namespace StreamOn.Minigames.Runner
             TrimRecords();
             SaveCampaign(true);
             int experienceGained = 0;
+            int experienceBefore = 0;
+            int experienceAfter = 0;
+            int broadcasterLevelBefore = 1;
             int broadcasterLevelAfter = 1;
+            long managerSalary = 0L;
             if (RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData progressionSave))
             {
                 progressionSave.bestRunnerBroadcastScore = Mathf.Max(progressionSave.bestRunnerBroadcastScore, finalBroadcastScore);
@@ -182,22 +186,28 @@ namespace StreamOn.Minigames.Runner
                 int experience = settings.broadcastCompletionExperience
                     + Mathf.RoundToInt((broadcastResult != null ? broadcastResult.finalRating : 0f) * settings.broadcastRatingExperiencePerPoint)
                     + (_gameManager.FinalRawGameScore > previousBest ? settings.newRecordExperience : 0);
-                experienceGained = BroadcasterProgression.AddBroadcastExperience(settings, progressionSave, experience);
-                progressionSave.hiredManagerTier = 0;
-                progressionSave.managerUsesRemaining = 0;
-                progressionSave.broadcastSessionExperienceEarned = 0;
+                BroadcasterProgression.AddBroadcastExperience(settings, progressionSave, experience);
+                experienceGained = progressionSave.broadcastSessionExperienceEarned;
+                managerSalary = BroadcasterProgression.ApplyManagerSalary(settings, progressionSave);
+                _cash = progressionSave.cash;
                 broadcasterLevelAfter = progressionSave.broadcasterLevel;
+                experienceAfter = progressionSave.broadcasterExperience;
+                BroadcasterProgression.ExperienceStateBeforeGain(settings, broadcasterLevelAfter, experienceAfter,
+                    experienceGained, out broadcasterLevelBefore, out experienceBefore);
+                progressionSave.broadcastSessionExperienceEarned = 0;
                 RunnerCampaignSaveStore.Save(settings, progressionSave, true);
             }
             RunnerBroadcastSessionStore.Complete(settings);
             RefreshStatus();
             _gameManager.NotifyChat(RunnerChatEvent.CampaignSettlement);
             StartCoroutine(ShowResultAfterDelay(succeeded, target, subscriberDelta, mentalDelta, broadcastResult,
-                previousBest, experienceGained, broadcasterLevelAfter));
+                previousBest, experienceGained, broadcasterLevelBefore, experienceBefore,
+                broadcasterLevelAfter, experienceAfter, managerSalary));
         }
 
         private IEnumerator ShowResultAfterDelay(bool succeeded, int target, int subscriberDelta, float mentalDelta,
-            RunnerBroadcastResult result, int previousBest, int experienceGained, int broadcasterLevelAfter)
+            RunnerBroadcastResult result, int previousBest, int experienceGained, int broadcasterLevelBefore,
+            int experienceBefore, int broadcasterLevelAfter, int experienceAfter, long managerSalary)
         {
             int finalBroadcastScore = _gameManager.FinalBroadcastScore;
             if (_settlementView != null)
@@ -208,10 +218,14 @@ namespace StreamOn.Minigames.Runner
                     score = _gameManager.FinalRawGameScore,
                     rawGameScore = _gameManager.FinalRawGameScore,
                     broadcastScore = finalBroadcastScore,
+                    finalScore = finalBroadcastScore,
                     previousBestScore = previousBest,
                     isNewRecord = _gameManager.FinalRawGameScore > previousBest,
                     broadcastCompleted = true,
                     experienceGained = experienceGained,
+                    experienceBefore = experienceBefore,
+                    experienceAfter = experienceAfter,
+                    levelBefore = broadcasterLevelBefore,
                     levelAfter = broadcasterLevelAfter,
                     targetScore = target,
                     enemiesDefeated = _gameManager.EnemiesDefeated,
@@ -220,6 +234,7 @@ namespace StreamOn.Minigames.Runner
                     subscribersAfter = _subscribers,
                     mentalLevel = _mentalLevel,
                     cashAfter = _cash,
+                    managerSalary = managerSalary,
                     broadcastResult = result
                 }, ContinueAfterSettlement, "다음 날");
                 yield break;
@@ -698,6 +713,7 @@ namespace StreamOn.Minigames.Runner
 
         private static string Signed(int value) => value >= 0 ? "+" + value : value.ToString();
         private static string Signed(float value) => value >= 0f ? "+" + value.ToString("0") : value.ToString("0");
-        private static string RatingGrade(float rating) => rating >= 4.6f ? "S" : rating >= 4f ? "A" : rating >= 3.2f ? "B" : rating >= 2.4f ? "C" : "D";
+        private static string RatingGrade(float rating) => rating >= 5f ? "S" : rating >= 4f ? "A"
+            : rating >= 3f ? "B" : rating >= 2f ? "C" : "D";
     }
 }

@@ -171,7 +171,7 @@ BengolCAT | ?
 스튜가좋아 | ㄹㅇㅋㅋ";
 
         private const string EventReactionGuide = @"=== 이벤트별 반응 기준 ===
-피격·하트 손실·죽음: 아니 뭐하냐 / ? / ??? / ㅋㅋㅋㅋㅋㅋ / 개못하네 / 개못하네... / 아니 이걸? / 예? / ... / 에반데 / 아니 / 뭐함?
+피격/하트 손실/죽음: 아니 뭐하냐 / ? / ??? / ㅋㅋㅋㅋㅋㅋ / 개못하네 / 개못하네... / 아니 이걸? / 예? / ... / 에반데 / 아니 / 뭐함?
 방송 종료: ㅈㅈ / 바이바이 / 수고했다 / 수고했어요 / 다음에 봐요~ / 담방에 봐
 오래 버티거나 안정적인 플레이: 오 / 가자 / 좋은데? / ㄱㄱ / ㄱㄱㄱ / 좀만 더 / 이대로만
 최고 기록: ㅅㅅ / 나이스 / 오 / 다음 천 단위 점수 가자 / 가보자 / 가즈아
@@ -250,22 +250,24 @@ BengolCAT | ?
             float baitChance = Mathf.Lerp(0.38f, 0.07f, heat01);
             bool requestBait = UnityEngine.Random.value < baitChance;
             string requestedViewerType = requestBait
-                ? "이번에는 대답할수록 분탕만 신나는 어그로성 채팅을 만들고 shouldIgnore=true로 판정한다."
-                : "이번에는 관심·질문·가벼운 놀림 채팅을 만들고 shouldIgnore=false로 판정한다.";
+                ? "이번에는 약간 도발적이지만 재치 있게 선을 긋거나 받아칠 수 있는 채팅을 만든다. shouldIgnore=false다."
+                : "이번에는 관심/질문/가벼운 놀림 채팅을 만들고 shouldIgnore=false로 판정한다.";
             WitResponseRequest payload = new WitResponseRequest
             {
                 model = _model,
                 store = false,
-                max_output_tokens = 350,
+                max_output_tokens = 500,
                 reasoning = new OpenAiReasoning { effort = "none" },
                 input = new[]
                 {
-                    Input("system", "한국 게임 방송 중 실제 시청자가 막 쓸 법한 짧은 질문·놀림·반응 한 줄과 스트리머 답변 후보 3개를 만든다. "
+                    Input("system", "한국 게임 방송 중 실제 시청자가 막 쓸 법한 짧은 질문/놀림/반응 한 줄과 스트리머 답변 후보 5개를 만든다. "
                         + "사건을 낭독하거나 설명문처럼 쓰지 않고 기존 질문을 반복하지 않는다. "
-                        + "시청자 말이 관심·질문·가벼운 놀림이면 shouldIgnore=false다. 답변 후보를 분위기를 살리는 순서로 quality 2/1/0으로 평가한다. "
-                        + "시청자 말이 대답할수록 분탕만 신나거나 악의적인 어그로에 가까우면 shouldIgnore=true다. 이때 무반응만 정답이며 세 답변의 quality는 모두 0이다. "
-                        + "단순 반말, 가벼운 ㅋㅋ, 실력 놀림만으로 분탕 판정하지 않는다. 각 문장은 35자 이내다. "
-                        + "현재 talkingSkill이 2 이상이면 서로 다른 방식의 좋은 받아치기 후보를 늘리고, 3이면 세 후보 모두 실제로 쓸 만하게 만든다."),
+                        + "shouldIgnore는 항상 false다. 무반응만 정답인 문제는 만들지 않는다. "
+                        + "답변 후보는 정확히 5개다. 누가 봐도 재치 있게 분위기를 살리는 quality 2를 2개, 자연스럽고 무난한 quality 1을 2개, "
+                        + "맥락을 못 읽거나 과민하게 화내거나 구차하게 변명해서 누가 봐도 아쉬운 quality 0을 1개 만든다. "
+                        + "quality 2는 시청자 문구의 핵심 단어를 짧게 비틀거나 자연스럽게 자조해 웃길 수 있어야 한다. "
+                        + "quality 1은 재미를 억지로 만들지 않는 짧고 평범한 대답이어야 한다. quality 0은 다른 후보와 분명히 구별되게 어색해야 한다. "
+                        + "세 등급이 같은 뜻의 말투 차이로만 보이면 안 된다. 답변에서 질문을 그대로 되풀이하지 않는다. 각 문장은 35자 이내다."),
                     Input("user", "현재 상황:\n" + JsonUtility.ToJson(snapshot)
                         + "\n최근 사용해서 반복 금지인 질문:\n" + string.Join(" | ", recentPrompts ?? Array.Empty<string>())
                         + "\n이번 시청자 유형:\n" + requestedViewerType)
@@ -300,7 +302,10 @@ BengolCAT | ?
                 }
                 RunnerGeneratedWitPrompt result = JsonUtility.FromJson<RunnerGeneratedWitPrompt>(outputText);
                 if (result == null || string.IsNullOrWhiteSpace(result.viewerMessage)
-                    || result.choices == null || result.choices.Length != 3)
+                    || result.shouldIgnore || result.choices == null || result.choices.Length != 5
+                    || result.choices.Count(choice => choice.quality == 2) < 2
+                    || result.choices.Count(choice => choice.quality == 1) < 2
+                    || result.choices.Count(choice => choice.quality == 0) < 1)
                 {
                     onFailure?.Invoke("The generated wit interaction was incomplete.");
                     yield break;
@@ -341,27 +346,27 @@ BengolCAT | ?
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("아래 실제 한국 게임방송 채팅 표본과 구별하기 어려운 새 채팅을 만든다.");
-            builder.AppendLine("JSON 사건을 문장으로 다시 읽지 않는다. 보이는 사실의 원인·결과를 친절하게 설명하지 않는다.");
+            builder.AppendLine("JSON 사건을 문장으로 다시 읽지 않는다. 보이는 사실의 원인/결과를 친절하게 설명하지 않는다.");
             builder.AppendLine("금지 예: '적을 처치했네', '체력이 얼마 안 남았네', '죽었는데 신기록 갱신 ㅋㅋ', '점수가 올랐네'.");
-            builder.AppendLine("실제 시청자처럼 반사 반응, 웃음, 물음표, 생략된 평가, 앞 채팅 동조·반박, 가끔만 훈수한다.");
+            builder.AppendLine("실제 시청자처럼 반사 반응, 웃음, 물음표, 생략된 평가, 앞 채팅 동조/반박, 가끔만 훈수한다.");
             builder.AppendLine("긴 ㅋㅋ만 있는 줄, '?', '오', '아', '휴', '어어'도 완전한 정상 메시지다. 억지로 정보를 덧붙이지 않는다.");
             builder.AppendLine("게임 사건이 있으면 그 사건을 설명하지 말고 아래 대응 반응군과 아주 가까운 채팅을 우선한다.");
             builder.AppendLine("여러 메시지면 절반 이상은 1~10자의 원초 반응이어야 하고, 완성된 설명문은 최대 하나다.");
-            builder.AppendLine("같은 뜻도 ?, ??, ???, ㅋㅋ 길이, 점 개수, 띄어쓰기, 말끝, 오타를 매번 달리한다. 모든 줄을 같은 길이·문장형으로 맞추지 않는다.");
+            builder.AppendLine("같은 뜻도 ?, ??, ???, ㅋㅋ 길이, 점 개수, 띄어쓰기, 말끝, 오타를 매번 달리한다. 모든 줄을 같은 길이/문장형으로 맞추지 않는다.");
             builder.AppendLine("최근 채팅에 답할 때 닉네임을 부르지 말고 단어를 되받거나 'ㅇㅇ', '맞음', '그건 아닌듯'처럼 잇는다.");
             builder.AppendLine("현재 상황 JSON의 conflictActive가 false면 시청자끼리 싸운다거나 채팅창이 싸운다는 말을 절대 만들지 않는다.");
             builder.AppendLine("fraternizationActive가 false면 서로 오늘도 왔냐고 알아보거나 방송 밖 친분을 과시하는 친목 대화를 만들지 않는다.");
-            builder.AppendLine("타일 아레나의 패턴은 매번 무작위로 교체된다. 패턴 번호는 진행도·난이도·도달 단계가 아니며 채팅에서 숫자, '벌써', '몇 스테이지', 기록 진척으로 절대 언급하지 않는다.");
+            builder.AppendLine("타일 아레나의 패턴은 매번 무작위로 교체된다. 패턴 번호는 진행도/난이도/도달 단계가 아니며 채팅에서 숫자, '벌써', '몇 스테이지', 기록 진척으로 절대 언급하지 않는다.");
             builder.AppendLine("Plastic Knightmare는 최초 정비 뒤 낮으로 돌아오지 않는 끝없는 밤이다. campaignDay 숫자는 내부 공세 값일 뿐 Day로 부르지 말고, 'Day가 올랐다', '벌써 Day N' 같은 말은 금지한다. plasticPhase가 전투면 '슬슬 빡세지는데', '이제 많이 나오네', 정비면 '벽부터 고쳐', '정비 시간 짧다'처럼 짧게 반응한다.");
             builder.AppendLine("시청자별 수치는 발화자 선택의 약한 확률일 뿐이며 고정 역할을 연기하지 않는다.");
-            builder.AppendLine("message에는 닉네임 없이 한 줄 35자 이내 한국어 채팅만 쓴다. 설명, 따옴표, 괄호 연기, 마크업은 금지한다.");
+            builder.AppendLine("message에는 닉네임 없이 한 줄 35자 이내 한국어 채팅만 쓴다. 이모지와 이모티콘 문자는 절대 쓰지 않는다. 설명, 따옴표, 괄호 연기, 마크업은 금지한다.");
             builder.AppendLine("혐오, 차별, 협박, 심한 욕설, 성적 표현, 현실 인신공격은 금지한다. 가벼운 놀림과 의견 충돌까지만 허용한다.");
             builder.AppendLine(EventReactionGuide);
             builder.AppendLine("\n=== 실제 수집 로그: 닉네임 | 채팅 ===");
             builder.AppendLine(RealChatReferenceCorpus);
             builder.AppendLine("=== 실제 수집 로그 끝 ===");
             builder.AppendLine("위 로그의 게임 고유명사와 사실은 무시한다. 닉네임 작명 감각, 길이, 생략, 반응 밀도만 재현한다.");
-            builder.AppendLine("예시 닉네임은 복사하지 않는다. ?, 오, ㅋㅋ, ㄱㄱ 같은 짧은 반응은 그대로 재사용해도 되며 길이·말끝을 바꾼 변형도 섞는다. 긴 표본 문장은 통째로 복사하지 않는다.");
+            builder.AppendLine("예시 닉네임은 복사하지 않는다. ?, 오, ㅋㅋ, ㄱㄱ 같은 짧은 반응은 그대로 재사용해도 되며 길이/말끝을 바꾼 변형도 섞는다. 긴 표본 문장은 통째로 복사하지 않는다.");
             builder.AppendLine("speakerId는 반드시 아래 현재 시청자의 ID를 한 글자도 바꾸지 않고 사용한다.");
             builder.AppendLine("현재 말할 수 있는 시청자:");
             foreach (RunnerViewerData viewer in viewers)
@@ -380,8 +385,8 @@ BengolCAT | ?
             string events = snapshot?.events ?? string.Empty;
             if (snapshot != null && snapshot.conflictActive && events.Contains("분탕"))
                 return snapshot.conflictTargetsStreamer
-                    ? $"분탕 유저 {snapshot.conflictTroublemakerNickname}가 스트리머 플레이에 시비를 건 직후의 실제 채팅 분쟁형. 정확히 3개를 쓴다. 1) 다른 시청자가 '@{snapshot.conflictTroublemakerNickname}'을 부르며 싫으면 나가라고 반박한다. 2) ID {snapshot.conflictTroublemakerId}가 다시 못한 걸 못한다고 했을 뿐이라며 우긴다. 3) 또 다른 시청자가 밴을 요구하거나 싸움에 짧게 반응한다. 게임 사건을 친절하게 설명하지 않는다."
-                    : $"분탕 유저가 이미 시비를 건 직후의 실제 채팅 분쟁형. 정확히 3개를 시간 순서대로 쓴다. 1) ID {snapshot.conflictTargetId}가 '@{snapshot.conflictTroublemakerNickname}'을 부르며 짧게 맞받아친다. 2) ID {snapshot.conflictTroublemakerId}가 다시 '@{snapshot.conflictTargetNickname}'을 부르며 우긴다. 3) 둘이 아닌 시청자가 싸움을 말리거나 분탕 유저 밴을 요구하거나 팝콘 반응을 한다. 직전 시비의 소재는 '{snapshot.conflictTargetMessage}'였으며 게임 사건 설명은 금지한다.";
+                    ? $"분탕 유저 {snapshot.conflictTroublemakerNickname}가 스트리머에게 '{snapshot.conflictTargetMessage}'라고 명확히 시비를 건 직후다. 정확히 3개를 쓴다. 1) 다른 시청자가 '@{snapshot.conflictTroublemakerNickname}'을 부르며 싫으면 나가라고 반박한다. 2) ID {snapshot.conflictTroublemakerId}가 다시 못한 걸 못한다고 했을 뿐이라며 우긴다. 3) 또 다른 시청자가 밴을 요구하거나 싸움에 짧게 반응한다. 첫 도발을 그대로 반복하거나 게임 사건을 친절하게 설명하지 않는다."
+                    : $"분탕 유저가 {snapshot.conflictTargetNickname}에게 '{snapshot.conflictTargetMessage}'라고 근거 없이 시비를 건 직후다. 정확히 3개를 시간 순서대로 쓴다. 1) ID {snapshot.conflictTargetId}가 '@{snapshot.conflictTroublemakerNickname}'을 부르며 짧게 맞받아친다. 2) ID {snapshot.conflictTroublemakerId}가 다시 '@{snapshot.conflictTargetNickname}'을 부르며 '긁혔네', '아는 척하네'처럼 도발한다. 3) 둘이 아닌 시청자가 싸움을 말리거나 밴을 요구한다. 상대의 원래 평범한 채팅이나 질문을 인용해서 시비의 소재로 삼지 말고, 이미 나온 첫 도발도 그대로 반복하지 않는다.";
             if (snapshot != null && snapshot.fraternizationActive && events.Contains("친목"))
                 return $"친목 대화가 시작된 직후다. 정확히 3개를 쓴다. 1) ID {snapshot.socialViewer2Id}가 '@{snapshot.socialViewer1Nickname}'을 부르며 오늘도 왔다거나 전에 본 이야기를 한다. 2) ID {snapshot.socialViewer1Id}가 '@{snapshot.socialViewer2Nickname}'을 다시 부르며 방송 밖 친분을 이어간다. 3) 둘이 아닌 시청자가 친목 보기 싫다/둘이 따로 연락해라/또 시작이네/밴 필요하다는 식으로 짧게 반응한다. 게임 상황 설명은 금지한다.";
             if (events.Contains("후원"))
@@ -405,7 +410,7 @@ BengolCAT | ?
                 return $"최고 기록 반응형. ㅅㅅ/나이스/오/가보자/가즈아 또는 '{nextThousand}점 가자'처럼 짧게 쓴다. 현재 기록 달성을 해설하지 말고, 점수 목표를 말한다면 {nextThousand}만 사용한다.";
             }
             if (events.Contains("게임 오버") || events.Contains("피격") || events.Contains("목숨을 잃음") || events.Contains("저체력") || events.Contains("남은 목숨"))
-                return "피격·죽음 반응형. 아니 뭐하냐/?/???/ㅋㅋㅋㅋㅋㅋ/개못하네.../아니 이걸?/예?/.../에반데/아니/뭐함?과 아주 가까운 반응을 과반으로 쓴다. 맞았다거나 죽었다는 사실을 서술하지 않는다.";
+                return "피격/죽음 반응형. 아니 뭐하냐/?/???/ㅋㅋㅋㅋㅋㅋ/개못하네.../아니 이걸?/예?/.../에반데/아니/뭐함?과 아주 가까운 반응을 과반으로 쓴다. 맞았다거나 죽었다는 사실을 서술하지 않는다.";
             if (events.Contains("특별한 사건 없이 게임 플레이") || events.Contains("특별한 사건 없이"))
                 return UnityEngine.Random.value < 0.72f
                     ? "안정 플레이 응원형. 오/가자/좋은데?/ㄱㄱ/ㄱㄱㄱ/좀만 더/이대로만과 가까운 1~10자 반응을 쓴다. 오래 버텼다고 설명하지 않는다."
@@ -427,10 +432,10 @@ BengolCAT | ?
         {
             float heat = Mathf.Clamp(snapshot?.broadcastHype ?? 50f, 0f, 100f);
             if (heat >= 70f)
-                return $"방송 열기 {heat:0}%. 채팅 분위기가 살아 있다. 같은 사건에도 응원·웃음·감탄 쪽을 우선한다. 별도 분탕 이벤트가 아니면 시비나 분쟁을 만들지 않는다.";
+                return $"방송 열기 {heat:0}%. 채팅 분위기가 살아 있다. 같은 사건에도 응원/웃음/감탄 쪽을 우선한다. 별도 분탕 이벤트가 아니면 시비나 분쟁을 만들지 않는다.";
             if (heat <= 30f)
-                return $"방송 열기 {heat:0}%. 채팅 분위기가 식었다. 같은 사건에도 ?/ㄴㅈ/.../뭐함?/개노잼 같은 냉담·불만·놀림 쪽을 우선하되 사건을 설명하지 않는다.";
-            return $"방송 열기 {heat:0}%. 긍정·무심·가벼운 놀림이 섞인 보통 채팅 분위기를 유지한다.";
+                return $"방송 열기 {heat:0}%. 채팅 분위기가 식었다. 같은 사건에도 ?/ㄴㅈ/.../뭐함?/개노잼 같은 냉담/불만/놀림 쪽을 우선하되 사건을 설명하지 않는다.";
+            return $"방송 열기 {heat:0}%. 긍정/무심/가벼운 놀림이 섞인 보통 채팅 분위기를 유지한다.";
         }
 
         private static OpenAiObjectSchema CreateSchema() => new OpenAiObjectSchema
@@ -465,7 +470,7 @@ BengolCAT | ?
                 shouldIgnore = new OpenAiBooleanSchema { type = "boolean" },
                 choices = new WitArraySchema
                 {
-                    type = "array", minItems = 3, maxItems = 3,
+                    type = "array", minItems = 5, maxItems = 5,
                     items = new WitChoiceSchema
                     {
                         type = "object",

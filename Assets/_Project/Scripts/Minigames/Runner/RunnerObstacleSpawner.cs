@@ -13,6 +13,9 @@ namespace StreamOn.Minigames.Runner
         [Header("Jump Obstacles (Space / Up)")]
         [SerializeField] private RunnerObstacle[] jumpObstacles;
         [SerializeField, Min(0f)] private float jumpSpawnWeight = 1f;
+        [Tooltip("이 점수 전에는 등장하지 않는 점프 장애물 풀입니다.")]
+        [SerializeField] private RunnerObstacle[] scoreGatedJumpObstacles;
+        [SerializeField, Min(0)] private int scoreGatedJumpUnlockScore = 1100;
 
         [Header("Roll Obstacles (C / Down)")]
         [SerializeField] private RunnerObstacle[] rollObstacles;
@@ -101,19 +104,31 @@ namespace StreamOn.Minigames.Runner
             for (int i = 0; i < pool.Length; i++)
             {
                 RunnerObstacle obstacle = pool[(start + i) % pool.Length];
-                if (obstacle == null || obstacle.ObstacleType != expectedType || !obstacle.IsAvailable) continue;
+                if (!IsAvailableForSpawn(obstacle, expectedType)) continue;
                 obstacle.Activate(spawnPoint.position);
                 return;
             }
         }
 
-        private static bool HasAvailable(RunnerObstacle[] pool, RunnerObstacleType expectedType)
+        private bool HasAvailable(RunnerObstacle[] pool, RunnerObstacleType expectedType)
         {
             if (pool == null) return false;
             foreach (RunnerObstacle obstacle in pool)
-                if (obstacle != null && obstacle.ObstacleType == expectedType && obstacle.IsAvailable)
+                if (IsAvailableForSpawn(obstacle, expectedType))
                     return true;
             return false;
+        }
+
+        private bool IsAvailableForSpawn(RunnerObstacle obstacle, RunnerObstacleType expectedType)
+        {
+            if (obstacle == null || obstacle.ObstacleType != expectedType || !obstacle.IsAvailable) return false;
+            if (gameManager == null || gameManager.Score >= scoreGatedJumpUnlockScore
+                || scoreGatedJumpObstacles == null) return true;
+
+            foreach (RunnerObstacle gatedObstacle in scoreGatedJumpObstacles)
+                if (gatedObstacle == obstacle)
+                    return false;
+            return true;
         }
 
         private static void DeactivatePool(RunnerObstacle[] pool)
@@ -176,6 +191,7 @@ namespace StreamOn.Minigames.Runner
             maximumSpawnDelay = Mathf.Max(minimumSpawnDelay, maximumSpawnDelay);
             initialSpawnDelay = Mathf.Max(0f, initialSpawnDelay);
             initialSpawnDelayRandomness = Mathf.Max(0f, initialSpawnDelayRandomness);
+            scoreGatedJumpUnlockScore = Mathf.Max(0, scoreGatedJumpUnlockScore);
         }
     }
 }

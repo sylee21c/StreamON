@@ -59,7 +59,7 @@ namespace StreamOn.Editor
                 rootRect.anchorMin = rootRect.anchorMax = rootRect.pivot = new Vector2(.5f, 1f);
                 TMP_Text heatLabel = Text("Heat Label", root.transform, "방송 열기 50%", font, 17, new Vector2(330, 24), new Vector2(0, -16));
                 Image heatFill = Bar(root.transform, "Heat", new Vector2(320, 14), new Vector2(0, -42), Color.white);
-                TMP_Text focusLabel = Text("Focus Label", root.transform, "집중력 100 · TAB", font, 15, new Vector2(330, 22), new Vector2(0, -65));
+                TMP_Text focusLabel = Text("Focus Label", root.transform, "집중력 100  TAB", font, 15, new Vector2(330, 22), new Vector2(0, -65));
                 Image focusFill = Bar(root.transform, "Focus", new Vector2(320, 12), new Vector2(0, -89), new Color(.35f, .76f, 1f));
                 TMP_Text alert = Text("Time Bonus Alert", root.transform, string.Empty, font, 19, new Vector2(500, 34), new Vector2(0, -126));
                 alert.color = new Color(.35f, 1f, .68f);
@@ -87,7 +87,7 @@ namespace StreamOn.Editor
                     plastic.nightText = Text("Plastic Night", root.transform, "NIGHT 1", font, 18, new Vector2(180, 24), new Vector2(-250, -48));
                     if (plastic.phaseTimeText == null)
                         plastic.phaseTimeText = Text("Plastic Phase Time", root.transform, "낮 정비 01:00", font, 17, new Vector2(220, 26), new Vector2(-250, -76));
-                    plastic.startNightButton = MakeButton("Start Night Early", root.transform, "정비 완료 · 밤 시작", font,
+                    plastic.startNightButton = MakeButton("Start Night Early", root.transform, "정비 완료 / 밤 시작", font,
                         new Vector2(190, 34), new Vector2(-250, -110), new Color(.42f, .28f, .54f));
                 }
                 foreach (RunnerWitInteractionController wit in All<RunnerWitInteractionController>(scene))
@@ -226,7 +226,7 @@ namespace StreamOn.Editor
             GameObject root = new GameObject("Growth And Leaderboard UI", typeof(RectTransform), typeof(ScenePanelToggle));
             root.transform.SetParent(canvas.transform, false);
             Stretch(root.GetComponent<RectTransform>());
-            Button open = MakeButton("Open Growth", root.transform, "성장 · 매니저 · 순위", font, new Vector2(240, 46), new Vector2(145, -32), new Color(.16f, .58f, .62f));
+            Button open = MakeButton("Open Growth", root.transform, "성장 / 매니저 / 순위", font, new Vector2(240, 46), new Vector2(145, -32), new Color(.16f, .58f, .62f));
             RectTransform openRect = open.GetComponent<RectTransform>();
             openRect.anchorMin = openRect.anchorMax = openRect.pivot = new Vector2(0, 1);
             GameObject panel = Panel("Dashboard", root.transform, new Vector2(1040, 680), Vector2.zero, new Color(.02f, .03f, .055f, .985f));

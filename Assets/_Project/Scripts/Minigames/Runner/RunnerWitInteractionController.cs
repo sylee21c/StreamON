@@ -54,7 +54,7 @@ namespace StreamOn.Minigames.Runner
             }
             ignoreButton?.onClick.AddListener(() => SelectIgnore(false));
             HideImmediate();
-            _nextPromptAt = Time.unscaledTime + (settings != null ? settings.firstPromptDelay : 15f);
+            _nextPromptAt = Time.time + (settings != null ? settings.firstPromptDelay : 15f);
         }
 
         private void Update()
@@ -72,14 +72,14 @@ namespace StreamOn.Minigames.Runner
                 }
                 return;
             }
-            if (Time.unscaledTime >= _nextPromptAt && Time.unscaledTime <= _safeMomentUntil && CanPrompt())
+            if (Time.time >= _nextPromptAt && Time.time <= _safeMomentUntil && CanPrompt())
                 _activePrompt = StartCoroutine(ShowPrompt());
         }
 
         public void NotifySafeMoment(string context, float availableSeconds = 2.5f)
         {
             _safeMomentContext = string.IsNullOrWhiteSpace(context) ? "게임 플레이 중 잠깐 여유가 생김" : context;
-            _safeMomentUntil = Mathf.Max(_safeMomentUntil, Time.unscaledTime + Mathf.Max(0.5f, availableSeconds));
+            _safeMomentUntil = Mathf.Max(_safeMomentUntil, Time.time + Mathf.Max(0.5f, availableSeconds));
         }
 
         private bool CanPrompt()
@@ -117,11 +117,12 @@ namespace StreamOn.Minigames.Runner
             if (settings.useAiGeneratedPrompts && _chat != null && _chat.AiEnabled)
             {
                 RunnerGeneratedWitPrompt generated = null;
-                yield return _chat.GenerateWitInteraction(_safeMomentContext, _recentPromptMessages, value => generated = value);
+                yield return _chat.GenerateWitInteraction(_safeMomentContext, _recentPromptMessages, WitRank,
+                    value => generated = value);
                 prompt = ConvertGeneratedPrompt(generated);
             }
             if (prompt == null) prompt = PickLocalPrompt();
-            prompt = PreparePromptForTalkingLevel(prompt);
+            prompt = PreparePromptForWitRank(prompt);
             if (prompt == null)
             {
                 ScheduleNext();
@@ -150,9 +151,7 @@ namespace StreamOn.Minigames.Runner
             }
             if (ignoreButton != null) ignoreButton.gameObject.SetActive(true);
             if (ignoreLabel != null) ignoreLabel.text = "4. 무반응";
-            canvasGroup.alpha = 1f;
-            canvasGroup.interactable = true;
-            canvasGroup.blocksRaycasts = true;
+            SetPromptVisible(Time.timeScale > 0f, true);
             _answered = false;
             _chat?.React(RunnerChatEvent.WitPrompt);
 
@@ -161,6 +160,13 @@ namespace StreamOn.Minigames.Runner
             float duration = remaining;
             while (!_answered && remaining > 0f && CanPrompt())
             {
+                if (Time.timeScale <= 0f)
+                {
+                    SetPromptVisible(false, false);
+                    yield return null;
+                    continue;
+                }
+                SetPromptVisible(true, true);
                 remaining -= Time.unscaledDeltaTime;
                 if (timerFill != null) timerFill.fillAmount = Mathf.Clamp01(remaining / duration);
                 yield return null;
@@ -168,7 +174,7 @@ namespace StreamOn.Minigames.Runner
             if (!_answered) SelectIgnore(true);
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = false;
-            yield return new WaitForSecondsRealtime(_answered ? 1.4f : 0.7f);
+            yield return HoldFeedbackVisible(_answered ? 1.4f : 0.7f);
             HideImmediate();
             ScheduleNext();
             _activePrompt = null;
@@ -178,12 +184,11 @@ namespace StreamOn.Minigames.Runner
         {
             if (generated == null || string.IsNullOrWhiteSpace(generated.viewerMessage)
                 || generated.choices == null || generated.choices.Length < 3) return null;
-            RunnerGeneratedWitChoice[] ordered = generated.choices.OrderByDescending(choice => choice.quality).Take(3).ToArray();
             return new RunnerWitPrompt
             {
                 viewerMessage = Crop(generated.viewerMessage, 42),
-                ignoreIsCorrect = generated.shouldIgnore,
-                choices = ordered.Select(choice => new RunnerWitChoice
+                ignoreIsCorrect = false,
+                choices = generated.choices.Select(choice => new RunnerWitChoice
                 {
                     text = Crop(choice.text, 42),
                     quality = Mathf.Clamp(choice.quality, 0, 2),
@@ -192,32 +197,47 @@ namespace StreamOn.Minigames.Runner
             };
         }
 
-        private RunnerWitPrompt PreparePromptForTalkingLevel(RunnerWitPrompt prompt)
+        private RunnerWitPrompt PreparePromptForWitRank(RunnerWitPrompt prompt)
         {
             if (prompt == null || prompt.choices == null) return null;
-            RunnerWitChoice[] source = prompt.choices.Where(choice => choice != null && !string.IsNullOrWhiteSpace(choice.text))
-                .Take(3).ToArray();
-            if (source.Length != 3) return null;
+            RunnerWitChoice[] source = prompt.choices
+                .Where(choice => choice != null && !string.IsNullOrWhiteSpace(choice.text)).ToArray();
+            List<RunnerWitChoice> strong = source.Where(choice => choice.quality >= 2).ToList();
+            List<RunnerWitChoice> ordinary = source.Where(choice => choice.quality == 1).ToList();
+            List<RunnerWitChoice> poor = source.Where(choice => choice.quality <= 0).ToList();
+            if (strong.Count == 0 || ordinary.Count == 0) return null;
 
-            int[] ranked = Enumerable.Range(0, source.Length).OrderByDescending(index => source[index].quality).ToArray();
             WitRankRule rule = campaignSettings != null ? campaignSettings.WitRule(WitRank) : null;
-            int successfulAnswers = prompt.ignoreIsCorrect ? 0 : 1;
-            if (!prompt.ignoreIsCorrect && rule != null && Random.value < rule.twoCorrectAnswerChance) successfulAnswers = 2;
-            Dictionary<int, int> rankByIndex = ranked.Select((sourceIndex, rank) => new { sourceIndex, rank })
-                .ToDictionary(item => item.sourceIndex, item => item.rank);
+            bool addSecondStrong = strong.Count >= 2 && rule != null && Random.value < rule.twoCorrectAnswerChance;
+            List<RunnerWitChoice> selected = new List<RunnerWitChoice>
+            {
+                PickRandom(strong),
+                PickRandom(ordinary)
+            };
+            if (addSecondStrong)
+                selected.Add(PickRandom(strong.Where(choice => choice != selected[0]).ToList()));
+            else if (poor.Count > 0) selected.Add(PickRandom(poor));
+            else if (ordinary.Count > 1)
+                selected.Add(PickRandom(ordinary.Where(choice => choice != selected[1]).ToList()));
+            else if (strong.Count > 1)
+                selected.Add(PickRandom(strong.Where(choice => choice != selected[0]).ToList()));
+            if (selected.Count != 3 || selected.Any(choice => choice == null)) return null;
+
             return new RunnerWitPrompt
             {
                 viewerMessage = prompt.viewerMessage,
-                ignoreIsCorrect = prompt.ignoreIsCorrect,
-                choices = source.Select((choice, index) => new RunnerWitChoice
+                ignoreIsCorrect = false,
+                choices = selected.Select(choice => new RunnerWitChoice
                 {
                     text = choice.text,
-                    quality = rankByIndex[index] < successfulAnswers ? 2
-                        : !prompt.ignoreIsCorrect && rankByIndex[index] == successfulAnswers ? 1 : 0,
+                    quality = Mathf.Clamp(choice.quality, 0, 2),
                     minimumTalkingLevel = 1
                 }).ToList()
             };
         }
+
+        private static RunnerWitChoice PickRandom(IReadOnlyList<RunnerWitChoice> choices) =>
+            choices != null && choices.Count > 0 ? choices[Random.Range(0, choices.Count)] : null;
 
         private static string Crop(string value, int maximum) => string.IsNullOrWhiteSpace(value)
             ? string.Empty : value.Trim().Substring(0, Mathf.Min(value.Trim().Length, maximum));
@@ -303,8 +323,28 @@ namespace StreamOn.Minigames.Runner
             Debug.LogWarning("재치 UI의 4번 무반응 버튼이 씬에 연결되지 않았습니다.", this);
         }
 
-        private void ScheduleNext() => _nextPromptAt = Time.unscaledTime
+        private void ScheduleNext() => _nextPromptAt = Time.time
             + Random.Range(settings.minimumPromptInterval, Mathf.Max(settings.minimumPromptInterval, settings.maximumPromptInterval));
+
+        private IEnumerator HoldFeedbackVisible(float seconds)
+        {
+            float elapsed = 0f;
+            while (elapsed < Mathf.Max(0f, seconds))
+            {
+                bool unpaused = Time.timeScale > 0f;
+                SetPromptVisible(unpaused, false);
+                if (unpaused) elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+        }
+
+        private void SetPromptVisible(bool visible, bool interactable)
+        {
+            if (canvasGroup == null) return;
+            canvasGroup.alpha = visible ? 1f : 0f;
+            canvasGroup.interactable = visible && interactable;
+            canvasGroup.blocksRaycasts = visible && interactable;
+        }
 
         private void HideImmediate()
         {

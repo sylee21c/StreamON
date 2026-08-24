@@ -89,11 +89,11 @@ namespace StreamOn.Minigames.Runner
             int controlInvested = BroadcasterProgression.InvestedPoints(_save, BroadcasterStatType.Control);
 
             if (witText != null) witText.text = _save.witRank < maxWit
-                ? $"재치 {_save.witRank}/{maxWit} · {witInvested}/{witCost}P" : $"재치 {maxWit}/{maxWit} · MAX";
+                ? $"재치 {_save.witRank}/{maxWit} / {witInvested}/{witCost}P" : $"재치 {maxWit}/{maxWit} / MAX";
             if (composureText != null) composureText.text = _save.ComposureRank < maxComposure
-                ? $"평정심 {_save.ComposureRank}/{maxComposure} · {composureInvested}/{composureCost}P" : $"평정심 {maxComposure}/{maxComposure} · MAX";
+                ? $"평정심 {_save.ComposureRank}/{maxComposure} / {composureInvested}/{composureCost}P" : $"평정심 {maxComposure}/{maxComposure} / MAX";
             if (controlText != null) controlText.text = _save.ControlRank < maxControl
-                ? $"통제력 {_save.ControlRank}/{maxControl} · {controlInvested}/{controlCost}P" : $"통제력 {maxControl}/{maxControl} · MAX";
+                ? $"통제력 {_save.ControlRank}/{maxControl} / {controlInvested}/{controlCost}P" : $"통제력 {maxControl}/{maxControl} / MAX";
             if (cashText != null) cashText.text = $"보유금 {_save.cash:N0}원";
             if (managerText != null) managerText.text = _save.hiredManagerTier > 0
                 ? $"고용 매니저 Lv.{_save.hiredManagerTier}" : "매니저 미고용";
@@ -164,11 +164,7 @@ namespace StreamOn.Minigames.Runner
 
         private float StatProgress(BroadcasterStatType type)
         {
-            int rank = BroadcasterProgression.Rank(_save, type);
-            int maximum = BroadcasterProgression.MaximumRank(settings, type);
-            if (rank >= maximum) return 1f;
-            int required = BroadcasterProgression.NextUpgradeCost(settings, _save, type);
-            return BroadcasterProgression.InvestedPoints(_save, type) / (float)Mathf.Max(1, required);
+            return BroadcasterProgression.UpgradeProgress(settings, _save, type);
         }
 
         private void AnimateGauge(ref float displayed, ref float target, ref bool completing,
@@ -194,7 +190,7 @@ namespace StreamOn.Minigames.Runner
 
         private static void SetLevelText(TMP_Text label, int rank, int maximum)
         {
-            if (label != null) label.text = rank >= maximum ? "MAX" : $"Lvl. {rank}";
+            if (label != null) label.text = rank >= maximum ? "Lvl. MAX" : $"Lvl. {rank + 1}";
         }
     }
 }
