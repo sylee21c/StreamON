@@ -17,6 +17,8 @@ namespace StreamOn.Minigames.Runner
         private readonly Queue<DonationNotice> _pending = new Queue<DonationNotice>();
         private Coroutine _pump;
 
+        public bool IsShowing => _pump != null || _pending.Count > 0;
+
         private void Awake()
         {
             // Donation notices must render above the chat and the rest of the HUD.

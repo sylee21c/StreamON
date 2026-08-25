@@ -46,6 +46,39 @@ namespace StreamOn.Minigames.Runner
         public int MaxHealth => _runtimeMaxHealth > 0 ? _runtimeMaxHealth : maxHealth;
         public int CurrentHealth { get; private set; }
 
+        public IEnumerator WaitForDeathAnimationComplete(float fallbackSeconds)
+        {
+            fallbackSeconds = Mathf.Max(0f, fallbackSeconds);
+            if (animator == null || !animator.isActiveAndEnabled)
+            {
+                if (fallbackSeconds > 0f) yield return new WaitForSecondsRealtime(fallbackSeconds);
+                yield break;
+            }
+
+            bool enteredDeathState = false;
+            float timeoutAt = Time.realtimeSinceStartup + Mathf.Max(2f, fallbackSeconds + 1f);
+            while (Time.realtimeSinceStartup < timeoutAt)
+            {
+                AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
+                if (state.fullPathHash == DeathStateHash)
+                {
+                    enteredDeathState = true;
+                    if (!animator.IsInTransition(0) && state.normalizedTime >= 1f)
+                    {
+                        // Let the final death sprite render for one full frame before UI covers it.
+                        yield return new WaitForEndOfFrame();
+                        yield break;
+                    }
+                }
+                else if (enteredDeathState && !animator.IsInTransition(0))
+                {
+                    yield break;
+                }
+
+                yield return null;
+            }
+        }
+
         private Rigidbody2D _body;
         private Collider2D _collider;
         private Vector3 _startPosition;
@@ -120,7 +153,10 @@ namespace StreamOn.Minigames.Runner
                 animator.SetBool(GroundedHash, landed);
 
                 if (landed)
+                {
                     _jumpInProgress = false;
+                    gameManager.OnPlayerLanded();
+                }
             }
             else
             {
@@ -250,6 +286,7 @@ namespace StreamOn.Minigames.Runner
         private void StartRoll()
         {
             _isRolling = true;
+            gameManager.OnPlayerRolled();
             _rollUntil = Time.time + rollDuration;
             BoxCollider2D box = (BoxCollider2D)_collider;
             box.size = new Vector2(_standingColliderSize.x, _standingColliderSize.y * 0.46f);
@@ -268,6 +305,7 @@ namespace StreamOn.Minigames.Runner
         private IEnumerator AttackRoutine()
         {
             _isAttacking = true;
+            gameManager.OnPlayerAttacked();
             _attackReadyAt = Time.time + _runtimeAttackCooldown;
             animator.SetTrigger(AttackHash);
             bool hit = false;

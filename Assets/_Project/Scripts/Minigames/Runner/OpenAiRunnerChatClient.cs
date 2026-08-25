@@ -263,10 +263,13 @@ BengolCAT | ?
                     Input("system", "한국 게임 방송 중 실제 시청자가 막 쓸 법한 짧은 질문/놀림/반응 한 줄과 스트리머 답변 후보 5개를 만든다. "
                         + "사건을 낭독하거나 설명문처럼 쓰지 않고 기존 질문을 반복하지 않는다. "
                         + "shouldIgnore는 항상 false다. 무반응만 정답인 문제는 만들지 않는다. "
-                        + "답변 후보는 정확히 5개다. 누가 봐도 재치 있게 분위기를 살리는 quality 2를 2개, 자연스럽고 무난한 quality 1을 2개, "
-                        + "맥락을 못 읽거나 과민하게 화내거나 구차하게 변명해서 누가 봐도 아쉬운 quality 0을 1개 만든다. "
-                        + "quality 2는 시청자 문구의 핵심 단어를 짧게 비틀거나 자연스럽게 자조해 웃길 수 있어야 한다. "
-                        + "quality 1은 재미를 억지로 만들지 않는 짧고 평범한 대답이어야 한다. quality 0은 다른 후보와 분명히 구별되게 어색해야 한다. "
+                        + "답변 후보는 정확히 5개다. 밝고 자신감 있게 받아쳐 누가 봐도 분위기를 살리는 quality 2를 2개, "
+                        + "질문에 자연스럽게 답하지만 웃기려고 하지는 않는 quality 1을 2개, 누가 봐도 사회적으로 어색한 quality 0을 1개 만든다. "
+                        + "quality 2는 질문의 핵심에 바로 답하면서 핵심 단어를 재치 있게 비틀고, 당당하고 유쾌한 완성문이어야 한다. "
+                        + "quality 1은 담담하고 솔직한 보통 답변이다. 호감도 반감도 살 억지 드립도 넣지 않는다. "
+                        + "quality 0은 화내거나 시청자에게 무례한 답변으로 때우지 않는다. 반드시 '어...', '저...', '하하...' 중 하나를 실제 문장에 넣고, "
+                        + "말을 더듬거나 자신 없이 변명하거나 맥락과 전혀 안 맞는 억지 드립을 쳐서 즉시 머쓱함이 느껴져야 한다. "
+                        + "quality 2에는 말 더듬기, 머뭇거림, 사과, 자신 없는 표현을 절대 넣지 않는다. "
                         + "세 등급이 같은 뜻의 말투 차이로만 보이면 안 된다. 답변에서 질문을 그대로 되풀이하지 않는다. 각 문장은 35자 이내다."),
                     Input("user", "현재 상황:\n" + JsonUtility.ToJson(snapshot)
                         + "\n최근 사용해서 반복 금지인 질문:\n" + string.Join(" | ", recentPrompts ?? Array.Empty<string>())
@@ -303,9 +306,12 @@ BengolCAT | ?
                 RunnerGeneratedWitPrompt result = JsonUtility.FromJson<RunnerGeneratedWitPrompt>(outputText);
                 if (result == null || string.IsNullOrWhiteSpace(result.viewerMessage)
                     || result.shouldIgnore || result.choices == null || result.choices.Length != 5
+                    || result.choices.Any(choice => choice == null || string.IsNullOrWhiteSpace(choice.text))
                     || result.choices.Count(choice => choice.quality == 2) < 2
                     || result.choices.Count(choice => choice.quality == 1) < 2
-                    || result.choices.Count(choice => choice.quality == 0) < 1)
+                    || result.choices.Count(choice => choice.quality == 0) < 1
+                    || result.choices.Where(choice => choice.quality == 0).Any(choice => !HasClearAwkwardCue(choice.text))
+                    || result.choices.Where(choice => choice.quality == 2).Any(choice => HasClearAwkwardCue(choice.text)))
                 {
                     onFailure?.Invoke("The generated wit interaction was incomplete.");
                     yield break;
@@ -342,6 +348,12 @@ BengolCAT | ?
             role = role, content = new[] { new OpenAiInputContent { type = "input_text", text = text } }
         };
 
+        private static bool HasClearAwkwardCue(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            return text.Contains("어...") || text.Contains("저...") || text.Contains("하하...");
+        }
+
         private static string BuildSystemPrompt(IReadOnlyList<RunnerViewerData> viewers)
         {
             StringBuilder builder = new StringBuilder();
@@ -357,7 +369,7 @@ BengolCAT | ?
             builder.AppendLine("현재 상황 JSON의 conflictActive가 false면 시청자끼리 싸운다거나 채팅창이 싸운다는 말을 절대 만들지 않는다.");
             builder.AppendLine("fraternizationActive가 false면 서로 오늘도 왔냐고 알아보거나 방송 밖 친분을 과시하는 친목 대화를 만들지 않는다.");
             builder.AppendLine("타일 아레나의 패턴은 매번 무작위로 교체된다. 패턴 번호는 진행도/난이도/도달 단계가 아니며 채팅에서 숫자, '벌써', '몇 스테이지', 기록 진척으로 절대 언급하지 않는다.");
-            builder.AppendLine("Plastic Knightmare는 최초 정비 뒤 낮으로 돌아오지 않는 끝없는 밤이다. campaignDay 숫자는 내부 공세 값일 뿐 Day로 부르지 말고, 'Day가 올랐다', '벌써 Day N' 같은 말은 금지한다. plasticPhase가 전투면 '슬슬 빡세지는데', '이제 많이 나오네', 정비면 '벽부터 고쳐', '정비 시간 짧다'처럼 짧게 반응한다.");
+            builder.AppendLine("Plastic Knightmare는 낮 정비와 밤 공세가 반복되며 낮이 돌아올 때 Day가 증가한다. plasticPhase가 밤 전투면 '슬슬 빡세지는데', '이제 많이 나오네', 낮 정비면 '벽부터 고쳐', '정비 시간 짧다'처럼 짧게 반응한다.");
             builder.AppendLine("시청자별 수치는 발화자 선택의 약한 확률일 뿐이며 고정 역할을 연기하지 않는다.");
             builder.AppendLine("message에는 닉네임 없이 한 줄 35자 이내 한국어 채팅만 쓴다. 이모지와 이모티콘 문자는 절대 쓰지 않는다. 설명, 따옴표, 괄호 연기, 마크업은 금지한다.");
             builder.AppendLine("혐오, 차별, 협박, 심한 욕설, 성적 표현, 현실 인신공격은 금지한다. 가벼운 놀림과 의견 충돌까지만 허용한다.");
@@ -399,8 +411,10 @@ BengolCAT | ?
             }
             if (events.Contains("재치 있게 받아쳐") || events.Contains("반응이 좋아짐"))
                 return "좋은 리액션형. 첫 message는 반드시 ㅋㅋ만 5~20자로 쓴다. 나머지도 아 ㅋㅋ/미쳤네ㅋㅋ/ㅋㅋㅋㅋ처럼 웃음 위주이며 왜 웃긴지 설명하지 않는다.";
-            if (events.Contains("답변이 어색") || events.Contains("무난하게 답변"))
-                return "미지근하거나 나쁜 리액션형. ㄴㅈ/개노잼/?/음..../예?/하하/이건 좀.../아...와 아주 가까운 1~10자 반응을 과반으로 쓴다. 어색해졌다고 설명하지 않는다.";
+            if (events.Contains("무난하게 답변"))
+                return "무난한 리액션형. ㅇㅇ/그렇구나/오케이/그건 맞지/납득/그럴 수 있지처럼 짧게 수긍한다. 웃음이 폭발하거나 분위기가 싸해진 반응은 만들지 않는다.";
+            if (events.Contains("답변이 어색"))
+                return "싸늘한 리액션형. ㄴㅈ/개노잼/?/음..../예?/하하/이건 좀.../아...와 아주 가까운 1~10자 반응을 과반으로 쓴다. 어색해졌다고 설명하지 않는다.";
             if (events.Contains("방송을 정상 종료") || events.Contains("방송 종료"))
                 return "방종 인사형. ㅈㅈ/바이바이/수고했다/수고했어요/다음에 봐요~/담방에 봐와 가까운 짧은 인사만 쓴다. 방송이 끝났다는 사실을 설명하지 않는다.";
             if (events.Contains("새 최고 기록") || events.Contains("신기록"))

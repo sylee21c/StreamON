@@ -22,49 +22,49 @@ MonoBehaviour:
   prompts:
   - viewerMessage: "아까 그거 일부러 맞은 거죠?"
     choices:
-    - {text: "방송각을 위한 큰 그림이지", quality: 2, minimumTalkingLevel: 1}
-    - {text: "맞은 게 아니라 웃음 포인트를 잡은 거지", quality: 2, minimumTalkingLevel: 1}
-    - {text: "아니 진짜 실수였어", quality: 1, minimumTalkingLevel: 1}
-    - {text: "내가 알아서 할게, 질문 그만해", quality: 0, minimumTalkingLevel: 1}
+    - {text: "맞아, 방송각 하나 제대로 챙겼습니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "딜은 내가 받고 웃음은 여러분이 받는 겁니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "아니, 방금은 그냥 실수였어", quality: 1, minimumTalkingLevel: 1}
+    - {text: "어... 그게... 손이 갑자기 저기... 미안", quality: 0, minimumTalkingLevel: 1}
   - viewerMessage: "오늘도 엔딩 못 보는 거 아님?"
     choices:
-    - {text: "엔딩이 나를 아직 못 본 거지", quality: 2, minimumTalkingLevel: 1}
-    - {text: "엔딩이 자꾸 나를 피해 다니네", quality: 2, minimumTalkingLevel: 1}
-    - {text: "오늘은 진짜 가능함", quality: 1, minimumTalkingLevel: 1}
-    - {text: "그걸 왜 자꾸 물어봐?", quality: 0, minimumTalkingLevel: 1}
+    - {text: "엔딩한테 전해, 오늘은 도망 못 간다고", quality: 2, minimumTalkingLevel: 1}
+    - {text: "오늘은 엔딩이 먼저 나를 보게 될 겁니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "오늘은 끝까지 한번 가볼게", quality: 1, minimumTalkingLevel: 1}
+    - {text: "어... 엔딩은... 다음 생에 보면 되나? 하하...", quality: 0, minimumTalkingLevel: 1}
   - viewerMessage: "실력 방송 맞나요?"
     choices:
-    - {text: "웃기는 것도 실력입니다", quality: 2, minimumTalkingLevel: 1}
-    - {text: "실력보다 입담 티어가 더 높습니다", quality: 2, minimumTalkingLevel: 1}
-    - {text: "아직 연습 중인 실력 방송", quality: 1, minimumTalkingLevel: 1}
-    - {text: "보기 싫으면 나가세요", quality: 0, minimumTalkingLevel: 1}
+    - {text: "실력도 웃음도 둘 다 챙기는 방송입니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "지금부터 실력 방송으로 장르 변경합니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "아직 연습 중이긴 해", quality: 1, minimumTalkingLevel: 1}
+    - {text: "저... 실력이... 어제 세탁기에 들어가서...", quality: 0, minimumTalkingLevel: 1}
   - viewerMessage: "방금 플레이 해명 부탁드립니다"
     choices:
-    - {text: "해명은 다음 판의 나에게 맡긴다", quality: 2, minimumTalkingLevel: 1}
-    - {text: "해명 대신 다음 판으로 증명합니다", quality: 2, minimumTalkingLevel: 1}
-    - {text: "손이 잠깐 미끄러졌어", quality: 1, minimumTalkingLevel: 1}
-    - {text: "그 장면 본 사람이 잘못임", quality: 0, minimumTalkingLevel: 1}
+    - {text: "해명 대신 다음 플레이로 증명하겠습니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "방금 장면은 웃음 예고편이었습니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "방금은 판단이 조금 늦었어", quality: 1, minimumTalkingLevel: 1}
+    - {text: "어... 제 손이 저한테 말도 없이 움직여서...", quality: 0, minimumTalkingLevel: 1}
   - viewerMessage: "이거 클립 따도 됨?"
     choices:
-    - {text: "제목은 전설의 시작으로 부탁", quality: 2, minimumTalkingLevel: 1}
-    - {text: "클립 따면 실패 부분은 잘라줘", quality: 2, minimumTalkingLevel: 1}
-    - {text: "잘 나온 부분만 따줘", quality: 1, minimumTalkingLevel: 1}
-    - {text: "그걸 왜 클립으로 따?", quality: 0, minimumTalkingLevel: 1}
+    - {text: "좋지, 제목은 오늘의 명장면으로 부탁", quality: 2, minimumTalkingLevel: 1}
+    - {text: "따줘, 다음 장면이랑 비교하면 더 재밌다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "잘 나온 부분이면 괜찮아", quality: 1, minimumTalkingLevel: 1}
+    - {text: "어... 클립은... 가위로 따는 건가? 하하...", quality: 0, minimumTalkingLevel: 1}
   - viewerMessage: "오늘 왜 이렇게 잘함?"
     choices:
-    - {text: "오늘만 잘한다는 전제가 이상한데?", quality: 2, minimumTalkingLevel: 1}
-    - {text: "잘하는 날도 있어야 방송이지", quality: 2, minimumTalkingLevel: 1}
+    - {text: "이제야 평소 실력이 화면에 제대로 잡히네", quality: 2, minimumTalkingLevel: 1}
+    - {text: "오늘 폼 좋습니다, 이대로 엔딩까지 갑니다", quality: 2, minimumTalkingLevel: 1}
     - {text: "오늘 컨디션이 좀 좋네", quality: 1, minimumTalkingLevel: 1}
-    - {text: "원래 잘했는데 뭘 본 거야?", quality: 0, minimumTalkingLevel: 1}
+    - {text: "어... 잘하면... 제가 아닌 건가요? 누구지...", quality: 0, minimumTalkingLevel: 1}
   - viewerMessage: "그 실력으로 방송 왜 켰냐 걍 접어"
     choices:
-    - {text: "접으라면서 끝까지 보는 건 뭐임 ㅋㅋ", quality: 2, minimumTalkingLevel: 1}
-    - {text: "오늘 폐업 심사관 오셨네", quality: 2, minimumTalkingLevel: 1}
-    - {text: "조금만 더 해보고 판단해줘", quality: 1, minimumTalkingLevel: 1}
-    - {text: "너보단 잘하거든?", quality: 0, minimumTalkingLevel: 1}
+    - {text: "접으라면서 끝까지 봐주는 건 인정이지", quality: 2, minimumTalkingLevel: 1}
+    - {text: "폐업 심사는 방송 끝나고 받겠습니다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "조금만 더 보고 판단해줘", quality: 1, minimumTalkingLevel: 1}
+    - {text: "어... 접으려면... 종이부터 가져와야 하나...", quality: 0, minimumTalkingLevel: 1}
   - viewerMessage: "시청자도 없는데 혼자 뭐함?"
     choices:
-    - {text: "한 명 생겼네, 어서 와", quality: 2, minimumTalkingLevel: 1}
-    - {text: "첫 시청자 발견, 이제 둘이 한다", quality: 2, minimumTalkingLevel: 1}
-    - {text: "사람 올 때까지 게임하는 중", quality: 1, minimumTalkingLevel: 1}
-    - {text: "시청자 수까지 왜 신경 써?", quality: 0, minimumTalkingLevel: 1}
+    - {text: "한 명 왔네, 어서 와. 이제 방송 시작이다", quality: 2, minimumTalkingLevel: 1}
+    - {text: "첫 관객 입장, 지금부터 둘이 재밌게 가자", quality: 2, minimumTalkingLevel: 1}
+    - {text: "사람 올 때까지 게임하고 있었어", quality: 1, minimumTalkingLevel: 1}
+    - {text: "어... 혼자는 둘이 아니니까... 셋인가? 하하...", quality: 0, minimumTalkingLevel: 1}

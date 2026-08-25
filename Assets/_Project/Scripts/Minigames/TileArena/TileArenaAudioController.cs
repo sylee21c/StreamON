@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 namespace StreamOn.Minigames.TileArena
@@ -20,6 +21,8 @@ namespace StreamOn.Minigames.TileArena
         [Header("Mix")]
         [SerializeField, Range(0f, 1f)] private float defaultMusicVolume = 0.35f;
         [SerializeField, Range(0f, 1f)] private float defaultEffectsVolume = 1f;
+        [SerializeField, Min(0.01f)] private float gameOverMusicFadeSeconds = 2f;
+        [SerializeField, Min(0f)] private float pitchChangeSpeed = 4f;
 
         private AudioClip _jump;
         private AudioClip _pickup;
@@ -30,6 +33,8 @@ namespace StreamOn.Minigames.TileArena
         private bool _musicWanted;
         private float _musicLevel;
         private float _effectsLevel;
+        private Coroutine _musicFadeRoutine;
+        private float _musicFadeMultiplier = 1f;
 
         public bool Muted => _muted;
         public float MusicLevel => _musicLevel;
@@ -69,6 +74,14 @@ namespace StreamOn.Minigames.TileArena
             }
         }
 
+        private void Update()
+        {
+            if (musicSource == null || Time.timeScale <= 0f) return;
+            float targetPitch = Mathf.Clamp(Time.timeScale, 0.01f, 1f);
+            musicSource.pitch = Mathf.MoveTowards(musicSource.pitch, targetPitch,
+                Mathf.Max(0.01f, pitchChangeSpeed) * Time.unscaledDeltaTime);
+        }
+
         public void PlayJump() => Play(_jump, 0.55f);
         public void PlayPickup() => Play(_pickup, 0.65f);
         public void PlayHit() => Play(_hit, 1f);
@@ -77,7 +90,14 @@ namespace StreamOn.Minigames.TileArena
 
         public void StartMusic()
         {
+            if (_musicFadeRoutine != null)
+            {
+                StopCoroutine(_musicFadeRoutine);
+                _musicFadeRoutine = null;
+            }
+            _musicFadeMultiplier = 1f;
             _musicWanted = true;
+            ApplyMusicVolume();
             if (!_muted && musicSource != null && musicSource.clip != null && !musicSource.isPlaying) musicSource.Play();
         }
 
@@ -87,13 +107,20 @@ namespace StreamOn.Minigames.TileArena
             if (musicSource != null) musicSource.Pause();
         }
 
+        public void FadeOutMusicForGameOver()
+        {
+            _musicWanted = false;
+            if (_musicFadeRoutine != null) StopCoroutine(_musicFadeRoutine);
+            _musicFadeRoutine = StartCoroutine(FadeOutMusicRoutine());
+        }
+
         public void ToggleMute()
         {
             _muted = !_muted;
             PlayerPrefs.SetInt("tileArenaMuted", _muted ? 1 : 0);
             if (musicSource != null)
             {
-                musicSource.volume = _muted ? 0f : _musicLevel;
+                ApplyMusicVolume();
                 if (_muted) musicSource.Pause();
                 else if (_musicWanted) StartMusic();
             }
@@ -104,7 +131,7 @@ namespace StreamOn.Minigames.TileArena
         {
             _musicLevel = Mathf.Clamp01(value);
             PlayerPrefs.SetFloat("tileArenaBgmVolume", _musicLevel);
-            if (musicSource != null) musicSource.volume = _muted ? 0f : _musicLevel;
+            ApplyMusicVolume();
             PlayerPrefs.Save();
         }
 
@@ -118,6 +145,30 @@ namespace StreamOn.Minigames.TileArena
         private void Play(AudioClip clip, float clipVolume)
         {
             if (!_muted && effectsSource != null && clip != null) effectsSource.PlayOneShot(clip, clipVolume * _effectsLevel);
+        }
+
+        private IEnumerator FadeOutMusicRoutine()
+        {
+            float startMultiplier = _musicFadeMultiplier;
+            float elapsed = 0f;
+            float duration = gameOverMusicFadeSeconds > 0f ? gameOverMusicFadeSeconds : 2f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                _musicFadeMultiplier = Mathf.Lerp(startMultiplier, 0f, Mathf.Clamp01(elapsed / duration));
+                ApplyMusicVolume();
+                yield return null;
+            }
+            _musicFadeMultiplier = 0f;
+            ApplyMusicVolume();
+            musicSource?.Pause();
+            _musicFadeRoutine = null;
+        }
+
+        private void ApplyMusicVolume()
+        {
+            if (musicSource != null)
+                musicSource.volume = _muted ? 0f : _musicLevel * _musicFadeMultiplier;
         }
 
         private static AudioClip BuildBackgroundMusic()

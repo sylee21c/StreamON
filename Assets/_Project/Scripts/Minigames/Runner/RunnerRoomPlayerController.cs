@@ -17,6 +17,7 @@ namespace StreamOn.Minigames.Runner
         private static readonly int IdleState = Animator.StringToHash("Base Layer.idle");
         private static readonly int MoveState = Animator.StringToHash("Base Layer.move");
         private static readonly int SpeedParameter = Animator.StringToHash("Speed");
+        public bool IsMoving => _isMoving && !_inputLocked;
 
         public bool InputLocked
         {

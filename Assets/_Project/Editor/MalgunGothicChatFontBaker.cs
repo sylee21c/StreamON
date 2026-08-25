@@ -1,24 +1,28 @@
 #if UNITY_EDITOR
-using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.TextCore.LowLevel;
 using StreamOn.Minigames.Runner;
 
 namespace StreamOn.EditorTools
 {
     public static class MalgunGothicChatFontBaker
     {
-        private const string SourceWindowsFont = @"C:\Windows\Fonts\malgun.ttf";
-        private const string FontFolder = "Assets/_Project/Fonts";
-        private const string SourceAssetPath = FontFolder + "/MalgunGothic.ttf";
-        private const string FontAssetPath = FontFolder + "/Malgun Gothic SDF.asset";
-        private const string ChatPrefabPath = "Assets/_Project/Prefabs/SharedLiveChat.prefab";
-        private const string SessionKey = "StreamOn.MalgunGothicChatFont.2026-08-23.v4";
+        private const string FontAssetPath = "Assets/TextMesh Pro/Examples & Extras/Fonts/Galmuri14 SDF.asset";
+        private static readonly string[] BroadcastPrefabPaths =
+        {
+            "Assets/_Project/Prefabs/SharedLiveChat.prefab",
+            "Assets/_Project/Prefabs/SharedDonationPopup.prefab",
+            "Assets/_Project/Prefabs/SharedMissionEvent.prefab",
+            "Assets/_Project/Prefabs/SharedWitInteraction.prefab",
+            "Assets/Prefabs/Broadcast Heat Scene UI.prefab",
+            "Assets/_Project/Prefabs/SharedBroadcastSettlement.prefab"
+        };
+        private const string SessionKey = "StreamOn.Galmuri14BroadcastFont.2026-08-25.v1";
         private static readonly string[] ChatScenes =
         {
             "Assets/Scenes/BroadcastRunner.unity",
@@ -38,65 +42,29 @@ namespace StreamOn.EditorTools
             };
         }
 
-        [MenuItem("STREAM ON/Apply Malgun Gothic To All Game Chats")]
+        [MenuItem("STREAM ON/Apply Galmuri14 To Broadcast System")]
         public static void Bake()
         {
             TMP_FontAsset font = EnsureFontAsset();
             if (font == null) return;
-            ApplyToChatPrefab(font);
+            foreach (string prefabPath in BroadcastPrefabPaths) ApplyToBroadcastPrefab(prefabPath, font);
             foreach (string scenePath in ChatScenes) ApplyToScene(scenePath, font);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("STREAM ON: every game chat now uses Malgun Gothic Dynamic SDF.");
+            Debug.Log("STREAM ON: every shared broadcast UI now uses Galmuri14 SDF.");
         }
 
         private static TMP_FontAsset EnsureFontAsset()
         {
-            TMP_FontAsset existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontAssetPath);
-            if (existing != null) return existing;
-            if (!File.Exists(SourceWindowsFont))
-            {
-                Debug.LogError("Windows Malgun Gothic was not found at " + SourceWindowsFont);
-                return null;
-            }
-            if (!AssetDatabase.IsValidFolder(FontFolder))
-            {
-                if (!AssetDatabase.IsValidFolder("Assets/_Project")) AssetDatabase.CreateFolder("Assets", "_Project");
-                AssetDatabase.CreateFolder("Assets/_Project", "Fonts");
-            }
-            Font sourceFont = AssetDatabase.LoadAssetAtPath<Font>(SourceAssetPath);
-            if (sourceFont == null)
-            {
-                File.Copy(SourceWindowsFont, Path.GetFullPath(SourceAssetPath), true);
-                AssetDatabase.ImportAsset(SourceAssetPath, ImportAssetOptions.ForceSynchronousImport);
-                sourceFont = AssetDatabase.LoadAssetAtPath<Font>(SourceAssetPath);
-            }
-            if (sourceFont == null)
-            {
-                Debug.LogError("Malgun Gothic TTF could not be imported as a Unity Font.");
-                return null;
-            }
-
-            TMP_FontAsset fontAsset = TMP_FontAsset.CreateFontAsset(sourceFont, 48, 9,
-                GlyphRenderMode.SDFAA, 1024, 1024, AtlasPopulationMode.Dynamic, true);
-            fontAsset.name = "Malgun Gothic SDF";
-            fontAsset.atlasPopulationMode = AtlasPopulationMode.Dynamic;
-            fontAsset.isMultiAtlasTexturesEnabled = true;
-            Texture2D[] atlases = fontAsset.atlasTextures;
-            Material material = fontAsset.material;
-            AssetDatabase.CreateAsset(fontAsset, FontAssetPath);
-            if (atlases != null)
-                foreach (Texture2D atlas in atlases.Where(atlas => atlas != null && !AssetDatabase.Contains(atlas)))
-                    AssetDatabase.AddObjectToAsset(atlas, fontAsset);
-            if (material != null && !AssetDatabase.Contains(material)) AssetDatabase.AddObjectToAsset(material, fontAsset);
-            EditorUtility.SetDirty(fontAsset);
-            AssetDatabase.SaveAssets();
-            return fontAsset;
+            TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontAssetPath);
+            if (font == null) Debug.LogError("Galmuri14 SDF was not found at " + FontAssetPath);
+            return font;
         }
 
-        private static void ApplyToChatPrefab(TMP_FontAsset font)
+        private static void ApplyToBroadcastPrefab(string prefabPath, TMP_FontAsset font)
         {
-            GameObject root = PrefabUtility.LoadPrefabContents(ChatPrefabPath);
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) == null) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(prefabPath);
             if (root == null) return;
             foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true))
             {
@@ -110,7 +78,7 @@ namespace StreamOn.EditorTools
                 serialized.FindProperty("chatFont").objectReferenceValue = font;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
             }
-            PrefabUtility.SaveAsPrefabAsset(root, ChatPrefabPath);
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             PrefabUtility.UnloadPrefabContents(root);
         }
 
@@ -120,8 +88,9 @@ namespace StreamOn.EditorTools
             Scene scene = SceneManager.GetSceneByPath(scenePath);
             bool openedHere = !scene.IsValid() || !scene.isLoaded;
             if (openedHere) scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
-            RunnerChatController[] chats = scene.GetRootGameObjects()
-                .SelectMany(root => root.GetComponentsInChildren<RunnerChatController>(true)).ToArray();
+            List<RunnerChatController> chats = new List<RunnerChatController>();
+            foreach (GameObject root in scene.GetRootGameObjects())
+                chats.AddRange(root.GetComponentsInChildren<RunnerChatController>(true));
             foreach (RunnerChatController chat in chats)
             {
                 SerializedObject serialized = new SerializedObject(chat);
@@ -133,7 +102,7 @@ namespace StreamOn.EditorTools
                     EditorUtility.SetDirty(text);
                 }
             }
-            if (chats.Length > 0)
+            if (chats.Count > 0)
             {
                 EditorSceneManager.MarkSceneDirty(scene);
                 EditorSceneManager.SaveScene(scene);

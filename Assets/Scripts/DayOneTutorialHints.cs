@@ -13,7 +13,7 @@ public sealed class DayOneTutorialHints : MonoBehaviour
     [TextArea(2, 5)]
     [SerializeField] private string readyMessage = "전투 준비가 완료되었다면\n모니터에서 [준비 완료!] 버튼을 클릭하세요";
     [TextArea(2, 5)]
-    [SerializeField] private string firstNightMessage = "끝없는 밤이 시작되었습니다.\n유령이 침대에 도달하지 못하게 막아보세요.";
+    [SerializeField] private string firstNightMessage = "밤이 시작되었습니다.\n유령이 침대에 도달하지 못하게 막아보세요.";
 
     [Header("Timing")]
     [SerializeField, Min(0f)] private float introDuration = 3f;

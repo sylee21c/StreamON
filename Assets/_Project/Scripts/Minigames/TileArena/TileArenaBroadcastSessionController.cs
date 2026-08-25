@@ -123,14 +123,18 @@ namespace StreamOn.Minigames.TileArena
 
         private IEnumerator FinishBroadcastPresentation(RunnerBroadcastResult result, int rawScore, int score)
         {
-            float exitDuration = audience != null ? Mathf.Max(0.5f, audience.ViewerExitDuration) : 3.2f;
-            if (audience != null) yield return audience.DrainViewersToZero(exitDuration);
+            // Commit and present the result in the game-over frame. Viewer drain is only
+            // background presentation and must not delay settlement interaction.
             if (RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData stagedSave)) _save = stagedSave;
             RunnerSettlementDisplayData display = RunnerBroadcastSettlementService.ApplyTileResult(settings,
                 _save, result, rawScore, score, TotalHitsTaken);
             RunnerBroadcastSessionStore.Complete(settings, _save);
+            RunnerBroadcastHeatGauge.Hide();
             if (settlementView != null) settlementView.Show(display, ReturnToRoom, "다음 날");
             else ReturnToRoom();
+
+            float exitDuration = audience != null ? Mathf.Max(0.5f, audience.ViewerExitDuration) : 3.2f;
+            if (audience != null) yield return audience.DrainViewersToZero(exitDuration);
         }
 
         private void ReturnToRoom()

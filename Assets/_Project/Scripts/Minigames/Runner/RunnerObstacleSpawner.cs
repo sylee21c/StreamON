@@ -38,6 +38,17 @@ namespace StreamOn.Minigames.Runner
         private float _timer;
         private float _spawnDelayMultiplier = 1f;
 
+        public bool HasActiveEnemy
+        {
+            get
+            {
+                if (enemyObstacles == null) return false;
+                foreach (RunnerObstacle obstacle in enemyObstacles)
+                    if (obstacle != null && !obstacle.IsAvailable) return true;
+                return false;
+            }
+        }
+
         private void Awake()
         {
             if (autoIncludeSceneObstacles)

@@ -106,11 +106,9 @@ namespace StreamOn.Minigames.Runner
 
             SetSection(audienceText, true);
             List<string> audienceLines = new List<string>();
-            yield return CountLine(audienceText, audienceLines, "총 시청자", result != null ? result.totalVisitors : 0,
+            yield return CountLine(audienceText, audienceLines, "최고 시청자 수", result != null ? result.peakViewers : 0,
                 value => value.ToString("N0"));
-            yield return CountFloatLine(audienceText, audienceLines, "평균 시청자", result != null ? result.averageViewers : 0f,
-                value => value.ToString("0.0"));
-            yield return CountLine(audienceText, audienceLines, "최고 시청자", result != null ? result.peakViewers : 0,
+            yield return CountLine(audienceText, audienceLines, "총 시청자 수", result != null ? result.totalVisitors : 0,
                 value => value.ToString("N0"));
             yield return Wait(sectionRevealDelay);
 

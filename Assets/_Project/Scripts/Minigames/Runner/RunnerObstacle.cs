@@ -55,10 +55,11 @@ namespace StreamOn.Minigames.Runner
             // must never damage the player from this position check: health damage
             // is handled exclusively by the actual collider contact in
             // RunnerPlayerController.OnTriggerEnter2D.
-            if (obstacleType != RunnerObstacleType.Enemy && !_counted && transform.position.x < -5f)
+            if (!_counted && transform.position.x < -5f)
             {
                 _counted = true;
-                gameManager.OnObstacleCleared(obstacleType);
+                if (obstacleType == RunnerObstacleType.Enemy) gameManager.OnEnemyAvoided();
+                else gameManager.OnObstacleCleared(obstacleType);
             }
             if (transform.position.x <= despawnX) Deactivate();
         }

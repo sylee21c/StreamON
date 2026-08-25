@@ -143,6 +143,7 @@ public sealed class GameOverUIController : MonoBehaviour
     {
         if (showing) return;
         NightFailed?.Invoke();
+        BGMManager.Instance?.EnterGameOverMusic();
         if (suppressNextPresentation)
         {
             suppressNextPresentation = false;
@@ -153,9 +154,6 @@ public sealed class GameOverUIController : MonoBehaviour
         }
         rewardCountFrom = CoinWallet.Instance != null ? CoinWallet.Instance.Coins : 0;
         rewardCountTo = rewardCountFrom;
-
-        // 밤 BGM 페이드아웃 → 게임오버 전용 곡 페이드인 (1회 재생)
-        BGMManager.Instance?.EnterGameOverMusic();
 
         StartCoroutine(ShowRoutine());
     }

@@ -13,7 +13,7 @@ namespace StreamOn.EditorTools
     public static class BroadcastMultiGameIntegrationBaker
     {
         private const string SessionBakeKey = "StreamOn.MultiGameBroadcastBake.2026-08-23.v2";
-        private const string ExplorerSessionKey = "StreamOn.CleanGameExplorer.2026-08-23.v1";
+        private const string ExplorerSessionKey = "StreamOn.CleanGameExplorer.2026-08-26.v5";
         private const string RunnerScene = "Assets/Scenes/BroadcastRunner.unity";
         private const string RoomScene = "Assets/Scenes/StreamerRoom.unity";
         private const string TileScene = "Assets/Scenes/TileArena.unity";
@@ -26,7 +26,6 @@ namespace StreamOn.EditorTools
         private const string SettlementPrefab = "Assets/_Project/Prefabs/SharedBroadcastSettlement.prefab";
         private const string ExplorerPrefab = "Assets/_Project/Prefabs/BroadcastGameExplorer.prefab";
 
-        [InitializeOnLoadMethod]
         private static void ScheduleBakeAfterCompilation()
         {
             if (Application.isBatchMode || SessionState.GetBool(SessionBakeKey, false)) return;
@@ -38,19 +37,43 @@ namespace StreamOn.EditorTools
             };
         }
 
-        [InitializeOnLoadMethod]
         private static void ScheduleCleanExplorerAfterCompilation()
         {
             if (Application.isBatchMode || SessionState.GetBool(ExplorerSessionKey, false)) return;
-            SessionState.SetBool(ExplorerSessionKey, true);
-            EditorApplication.delayCall += () =>
+            EditorApplication.delayCall += TryBakeCleanExplorer;
+        }
+
+        private static void TryBakeCleanExplorer()
+        {
+            if (SessionState.GetBool(ExplorerSessionKey, false)) return;
+            if (EditorApplication.isCompiling)
             {
-                if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling) return;
-                BuildCleanExplorerPrefab();
-                BakeExplorerSelection();
-                AssetDatabase.SaveAssets();
-                Debug.Log("STREAM ON: clean Windows-style broadcast game explorer baked.");
-            };
+                EditorApplication.delayCall += TryBakeCleanExplorer;
+                return;
+            }
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                EditorApplication.playModeStateChanged -= HandleCleanExplorerPlayModeState;
+                EditorApplication.playModeStateChanged += HandleCleanExplorerPlayModeState;
+                return;
+            }
+            BakeCleanExplorerNow();
+        }
+
+        private static void HandleCleanExplorerPlayModeState(PlayModeStateChange state)
+        {
+            if (state != PlayModeStateChange.EnteredEditMode) return;
+            EditorApplication.playModeStateChanged -= HandleCleanExplorerPlayModeState;
+            EditorApplication.delayCall += TryBakeCleanExplorer;
+        }
+
+        private static void BakeCleanExplorerNow()
+        {
+            SessionState.SetBool(ExplorerSessionKey, true);
+            BuildCleanExplorerPrefab();
+            BakeExplorerSelection();
+            AssetDatabase.SaveAssets();
+            Debug.Log("STREAM ON: clean Windows-style broadcast game explorer baked.");
         }
 
         [MenuItem("STREAM ON/Bake Multi-Game Broadcast Integration")]
@@ -98,6 +121,7 @@ namespace StreamOn.EditorTools
             TMP_Text title = CreateText(titleBar.transform, "Window Title", "방송 게임 선택", 22);
             title.color = new Color32(32, 35, 40, 255); title.alignment = TextAlignmentOptions.MidlineLeft;
             SetRect(title.rectTransform, Vector2.zero, Vector2.one, new Vector2(30, 0), new Vector2(-60, 0));
+            CreateExplorerTitleBarButton(titleBar.transform, uiSprite);
 
             GameObject address = CreateImage(window.transform, "Address Bar", new Color32(255, 255, 255, 255));
             Image addressImage = address.GetComponent<Image>(); addressImage.sprite = uiSprite; addressImage.type = Image.Type.Sliced;
@@ -117,6 +141,38 @@ namespace StreamOn.EditorTools
             TMP_Text footer = CreateText(window.transform, "Status Bar", "3개 항목", 17);
             footer.color = new Color32(95, 99, 106, 255); footer.alignment = TextAlignmentOptions.MidlineLeft;
             SetRect(footer.rectTransform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(28, 22), new Vector2(-56, 44));
+
+            // This modal is authored into the prefab itself. RunnerRoomController only
+            // changes its text/visibility at runtime; it must never construct UI in code.
+            GameObject confirmation = CreateImage(root.transform, "Launch Confirmation", new Color(0.025f, 0.035f, 0.05f, .55f));
+            SetRect(confirmation.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            GameObject confirmationWindow = CreateImage(confirmation.transform, "Confirmation Window", new Color32(248, 249, 251, 255));
+            Image confirmationImage = confirmationWindow.GetComponent<Image>();
+            confirmationImage.sprite = uiSprite;
+            confirmationImage.type = Image.Type.Sliced;
+            RectTransform confirmationRect = confirmationWindow.GetComponent<RectTransform>();
+            confirmationRect.anchorMin = confirmationRect.anchorMax = new Vector2(.5f, .5f);
+            confirmationRect.sizeDelta = new Vector2(540, 250);
+            confirmationRect.anchoredPosition = Vector2.zero;
+
+            GameObject confirmationTitleBar = CreateImage(confirmationWindow.transform, "Title Bar", new Color32(245, 246, 248, 255));
+            SetRect(confirmationTitleBar.GetComponent<RectTransform>(), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -25), new Vector2(0, 50));
+            TMP_Text confirmationTitle = CreateText(confirmationTitleBar.transform, "Title", "Broadcast Game Explorer", 18);
+            confirmationTitle.color = new Color32(32, 35, 40, 255);
+            confirmationTitle.alignment = TextAlignmentOptions.MidlineLeft;
+            SetRect(confirmationTitle.rectTransform, Vector2.zero, Vector2.one, new Vector2(22, 0), new Vector2(-44, 0));
+
+            TMP_Text confirmationMessage = CreateText(confirmationWindow.transform, "Message", "TileArena.exe를 실행하시겠습니까?", 22);
+            confirmationMessage.color = new Color32(32, 35, 40, 255);
+            confirmationMessage.alignment = TextAlignmentOptions.MidlineLeft;
+            SetRect(confirmationMessage.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(34, -10), new Vector2(-68, -100));
+
+            Button confirm = CreateExplorerDialogButton(confirmationWindow.transform, "Confirm Launch", "확인", new Vector2(-85, 34), uiSprite);
+            Button cancel = CreateExplorerDialogButton(confirmationWindow.transform, "Cancel Launch", "취소", new Vector2(85, 34), uiSprite);
+            confirm.transform.SetAsLastSibling();
+            cancel.transform.SetAsLastSibling();
+            confirmation.SetActive(false);
 
             // Stable names let RunnerRoomController and designers find the three references easily.
             runner.name = "Runner Game Button"; tile.name = "Tile Arena Game Button"; plastic.name = "Plastic Knightmare Game Button";
@@ -158,6 +214,68 @@ namespace StreamOn.EditorTools
             kind.color = new Color32(112, 116, 123, 255);
             kind.rectTransform.anchorMin = new Vector2(0, 0); kind.rectTransform.anchorMax = new Vector2(1, 0);
             kind.rectTransform.pivot = new Vector2(.5f, 0); kind.rectTransform.anchoredPosition = new Vector2(0, 36); kind.rectTransform.sizeDelta = new Vector2(-12, 30);
+            return button;
+        }
+
+        private static Button CreateExplorerDialogButton(Transform parent, string name, string label,
+            Vector2 bottomPosition, Sprite uiSprite)
+        {
+            GameObject go = CreateImage(parent, name, new Color32(240, 242, 245, 255));
+            Image image = go.GetComponent<Image>();
+            image.sprite = uiSprite;
+            image.type = Image.Type.Sliced;
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(.5f, 0f);
+            rect.pivot = new Vector2(.5f, 0f);
+            rect.anchoredPosition = bottomPosition;
+            rect.sizeDelta = new Vector2(140, 46);
+
+            Button button = go.AddComponent<Button>();
+            button.targetGraphic = image;
+            ColorBlock colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color32(220, 234, 250, 255);
+            colors.pressedColor = new Color32(195, 218, 245, 255);
+            colors.selectedColor = colors.highlightedColor;
+            colors.fadeDuration = .08f;
+            button.colors = colors;
+
+            TMP_Text text = CreateText(go.transform, "Label", label, 19);
+            text.color = new Color32(32, 35, 40, 255);
+            text.rectTransform.anchorMin = Vector2.zero;
+            text.rectTransform.anchorMax = Vector2.one;
+            text.rectTransform.offsetMin = text.rectTransform.offsetMax = Vector2.zero;
+            return button;
+        }
+
+        private static Button CreateExplorerTitleBarButton(Transform parent, Sprite uiSprite)
+        {
+            GameObject go = CreateImage(parent, "Close Button", new Color32(245, 246, 248, 255));
+            Image image = go.GetComponent<Image>();
+            image.sprite = uiSprite;
+            image.type = Image.Type.Sliced;
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(1f, .5f);
+            rect.pivot = new Vector2(1f, .5f);
+            rect.anchoredPosition = new Vector2(-8f, 0f);
+            rect.sizeDelta = new Vector2(44f, 38f);
+
+            Button button = go.AddComponent<Button>();
+            button.targetGraphic = image;
+            ColorBlock colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color32(232, 17, 35, 255);
+            colors.pressedColor = new Color32(196, 15, 28, 255);
+            colors.selectedColor = colors.highlightedColor;
+            colors.fadeDuration = .06f;
+            button.colors = colors;
+
+            TMP_Text label = CreateText(go.transform, "Label", "X", 19f);
+            label.color = new Color32(32, 35, 40, 255);
+            label.fontStyle = FontStyles.Bold;
+            label.rectTransform.anchorMin = Vector2.zero;
+            label.rectTransform.anchorMax = Vector2.one;
+            label.rectTransform.offsetMin = label.rectTransform.offsetMax = Vector2.zero;
             return button;
         }
 
@@ -238,10 +356,15 @@ namespace StreamOn.EditorTools
                 SceneManager.MoveGameObjectToScene(go, scene);
                 controller = go.AddComponent<PlasticKnightmareBroadcastController>();
             }
-            EnsurePrefab(scene, ChatPrefab, "Shared Live Chat");
-            EnsurePrefab(scene, DonationPrefab, "Shared Donation Popup");
-            EnsurePrefab(scene, WitPrefab, "Shared Wit Interaction");
-            EnsurePrefab(scene, SettlementPrefab, "Shared Broadcast Settlement");
+            bool hasSharedComposite = scene.GetRootGameObjects().SelectMany(root =>
+                root.GetComponentsInChildren<SharedBroadcastSystemRoot>(true)).Any();
+            if (!hasSharedComposite)
+            {
+                EnsurePrefab(scene, ChatPrefab, "Shared Live Chat");
+                EnsurePrefab(scene, DonationPrefab, "Shared Donation Popup");
+                EnsurePrefab(scene, WitPrefab, "Shared Wit Interaction");
+                EnsurePrefab(scene, SettlementPrefab, "Shared Broadcast Settlement");
+            }
 
             TMP_Text timer = EnsureTimerHud(scene);
             SerializedObject so = new SerializedObject(controller);
@@ -266,9 +389,29 @@ namespace StreamOn.EditorTools
             if (controller == null) { EditorSceneManager.CloseScene(scene, true); return; }
             SerializedObject so = new SerializedObject(controller);
             GameObject oldPanel = so.FindProperty("gameSelectionPanel").objectReferenceValue as GameObject;
-            Transform parent = oldPanel != null ? oldPanel.transform.parent : controller.transform;
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ExplorerPrefab);
             if (prefab == null) { EditorSceneManager.CloseScene(scene, true); return; }
+
+            // Older versions only removed the single object referenced by the controller.
+            // Once that reference became stale, every bake left the orphan behind and added
+            // another explorer. Collect every matching instance before creating the new one.
+            GameObject[] existingPanels = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
+                .Where(item => item != null
+                    && item.name.Replace(" ", string.Empty) == "BroadcastGameExplorer")
+                .Select(item => PrefabUtility.GetNearestPrefabInstanceRoot(item.gameObject) ?? item.gameObject)
+                .Distinct()
+                .ToArray();
+            Transform parent = oldPanel != null && oldPanel.scene == scene
+                ? oldPanel.transform.parent
+                : existingPanels.FirstOrDefault() != null
+                    ? existingPanels[0].transform.parent
+                    : controller.transform;
+            foreach (GameObject existingPanel in existingPanels)
+                if (existingPanel != null) Object.DestroyImmediate(existingPanel);
+            if (oldPanel != null && !existingPanels.Contains(oldPanel))
+                Object.DestroyImmediate(oldPanel);
+
             GameObject panel = PrefabUtility.InstantiatePrefab(prefab, scene) as GameObject;
             panel.transform.SetParent(parent, false);
             panel.name = "Broadcast Game Explorer";
@@ -280,7 +423,6 @@ namespace StreamOn.EditorTools
             so.FindProperty("tileArenaGameButton").objectReferenceValue = tile;
             so.FindProperty("plasticKnightmareGameButton").objectReferenceValue = plastic;
             so.ApplyModifiedPropertiesWithoutUndo();
-            if (oldPanel != null) Object.DestroyImmediate(oldPanel);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
             EditorSceneManager.CloseScene(scene, true);
@@ -388,8 +530,8 @@ namespace StreamOn.EditorTools
             go.transform.SetParent(parent, false);
             TextMeshProUGUI text = go.GetComponent<TextMeshProUGUI>();
             text.text = value; text.fontSize = size; text.alignment = TextAlignmentOptions.Center; text.color = Color.white;
-            string[] fonts = AssetDatabase.FindAssets("Galmuri14 SDF t:TMP_FontAsset");
-            if (fonts.Length > 0) text.font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetDatabase.GUIDToAssetPath(fonts[0]));
+            TMP_FontAsset galmuri = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/TextMesh Pro/Examples & Extras/Fonts/Galmuri14 SDF.asset");
+            if (galmuri != null) text.font = galmuri;
             return text;
         }
 

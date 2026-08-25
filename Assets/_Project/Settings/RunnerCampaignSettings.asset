@@ -492,7 +492,9 @@ MonoBehaviour:
   useThreeDimensionalRoomFlow: 1
   roomSceneName: StreamerRoom
   broadcastSceneName: BroadcastRunner
+  runnerMenuSceneName: RunnerMainMenu
   runnerSceneName: BroadcastRunner
+  tileArenaMenuSceneName: TileArenaMainMenu
   tileArenaSceneName: TileArena
   plasticKnightmareMenuSceneName: MainMenu
   plasticKnightmareSceneName: MainScene

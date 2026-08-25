@@ -49,6 +49,25 @@ namespace StreamOn.Minigames.Runner
         public int PeakViewers => _peakViewers;
         public int ChattingViewers => growthSettings != null ? growthSettings.ChattersForViewers(_currentViewers) : 0;
         public bool CanShowWitInteraction => _initialized && !_finishing && _nightStarted;
+        public bool MissionGameplayActive => _initialized && !_finishing && _nightStarted
+            && _spawner != null && (_spawner.CurrentState == GhostSpawner.AssaultState.Combat
+                || _spawner.CurrentState == GhostSpawner.AssaultState.ClearingRemaining);
+        public int GhostsDefeated => _ghostsDefeated;
+        public int CurrentCombo => Time.unscaledTime - _lastKillAt <= comboKeepSeconds ? _combo : 0;
+        public int ActiveGhostCount => _spawner != null ? _spawner.ActiveGhostCount : 0;
+        public float BedHealth => _bed != null ? _bed.CurrentHealth : 0f;
+        public float PlayerHealth
+        {
+            get
+            {
+                PlayerController player = FindFirstObjectByType<PlayerController>();
+                Damageable health = player != null ? player.GetComponent<Damageable>() : null;
+                return health != null ? health.CurrentHealth : 0f;
+            }
+        }
+        public int DamagedFacilityCount => _protectedObjects.Count(candidate => candidate != null
+            && candidate != _bed && candidate.GetComponent<PlayerController>() == null
+            && (candidate.IsDead || candidate.CurrentHealth < candidate.MaxHealth));
 
         private RunnerCampaignSaveData _save;
         private DayNightManager _dayNight;
@@ -298,6 +317,15 @@ namespace StreamOn.Minigames.Runner
             float change = Mathf.Sign(_bufferedHeat) * Mathf.Min(Mathf.Abs(_bufferedHeat), eventHeatChangePerSecond * delta);
             _heat = Mathf.Clamp(_heat + change, 0f, 100f);
             _bufferedHeat -= change;
+        }
+
+        public void ApplyMissionOutcome(float heatChange, int donationReward)
+        {
+            if (!_initialized || _finishing) return;
+            AddHeat(heatChange);
+            _liveDonationWon = Mathf.Min(settings != null ? settings.plasticDonationCapPerNight : int.MaxValue,
+                _liveDonationWon + Mathf.Max(0, donationReward));
+            RefreshChatScale();
         }
 
         public void OnModerationResult(bool correct)
@@ -612,8 +640,8 @@ namespace StreamOn.Minigames.Runner
                 score = _rawScore,
                 highScore = _save != null ? _save.bestPlasticGameScoreAtNight : 0,
                 campaignDay = _night,
-                plasticPhase = !_nightStarted ? "최초 정비"
-                    : _spawner == null ? "끝없는 밤"
+                plasticPhase = !_nightStarted ? "낮 정비"
+                    : _spawner == null ? "밤 전투"
                     : _spawner.CurrentState == GhostSpawner.AssaultState.Maintenance ? "짧은 정비"
                     : _spawner.CurrentState == GhostSpawner.AssaultState.ClearingRemaining ? "남은 유령 처리"
                     : "전투",
@@ -662,29 +690,7 @@ namespace StreamOn.Minigames.Runner
 
         private void RefreshHud()
         {
-            if (phaseTimeText != null)
-            {
-                int seconds;
-                if (!_nightStarted)
-                {
-                    seconds = Mathf.CeilToInt(_daySecondsRemaining);
-                    phaseTimeText.text = $"최초 정비 {seconds / 60:00}:{seconds % 60:00}";
-                }
-                else if (_spawner == null) phaseTimeText.text = "끝없는 밤";
-                else
-                {
-                    seconds = Mathf.CeilToInt(_spawner.StateSecondsRemaining);
-                    phaseTimeText.text = _spawner.CurrentState switch
-                    {
-                        GhostSpawner.AssaultState.Combat => $"다음 정비까지 {seconds / 60:00}:{seconds % 60:00}",
-                        GhostSpawner.AssaultState.ClearingRemaining => $"남은 유령 {_spawner.ActiveGhostCount} | 잠시 소강 상태 임박",
-                        GhostSpawner.AssaultState.Maintenance => $"보급 도착 | 정비 {seconds / 60:00}:{seconds % 60:00}",
-                        _ => "끝없는 밤"
-                    };
-                }
-            }
             if (scoreText != null) scoreText.text = $"점수 {_rawScore:N0}";
-            if (nightText != null) nightText.text = _nightStarted ? "끝없는 밤" : "최초 정비";
         }
 
         private void ReturnToRoom() => SceneManager.LoadScene(settings.roomSceneName);

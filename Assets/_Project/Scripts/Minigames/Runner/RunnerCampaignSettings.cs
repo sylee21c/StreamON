@@ -324,7 +324,9 @@ namespace StreamOn.Minigames.Runner
         public string roomSceneName = "StreamerRoom";
         [Tooltip("기존 저장/씬과의 호환을 위한 러너 씬 이름")]
         public string broadcastSceneName = "BroadcastRunner";
+        public string runnerMenuSceneName = "RunnerMainMenu";
         public string runnerSceneName = "BroadcastRunner";
+        public string tileArenaMenuSceneName = "TileArenaMainMenu";
         public string tileArenaSceneName = "TileArena";
         public string plasticKnightmareMenuSceneName = "MainMenu";
         public string plasticKnightmareSceneName = "MainScene";

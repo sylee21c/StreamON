@@ -62,21 +62,30 @@ public sealed class DayNightManager : MonoBehaviour
         if (CurrentPhase == Phase.Night) return;
         CoinWallet.Instance?.ResetNightEarnings();
         if (activeTransition != null) StopCoroutine(activeTransition);
-        activeTransition = StartCoroutine(TransitionRoutine(Phase.Night));
+        activeTransition = StartCoroutine(TransitionRoutine(Phase.Night, true));
     }
 
-    // Legacy API. Plastic Knightmare no longer returns to day after the night starts.
+    // 공세 종료 뒤 정비 낮으로 전환한다. Day는 이 시점에 증가한다.
     public void BeginDay()
     {
-        if (CurrentPhase == Phase.Night)
-            Debug.LogWarning("[DayNightManager] 끝없는 밤에서는 낮 전환 요청을 무시합니다.", this);
+        BeginMaintenanceDay();
     }
 
-    // Opens the existing build/shop controls without changing the night lighting or combat phase.
-    public void SetNightMaintenance(bool enabled)
+    public void BeginMaintenanceDay()
     {
-        if (CurrentPhase != Phase.Night) return;
-        SetBuildingEnabled(enabled);
+        if (CurrentPhase == Phase.Day) return;
+        DayCount++;
+        if (activeTransition != null) StopCoroutine(activeTransition);
+        activeTransition = StartCoroutine(TransitionRoutine(Phase.Day, false));
+    }
+
+    // 정비 종료 뒤 다음 밤으로 전환한다. 스포너 상태는 유지한다.
+    public void BeginNextNight()
+    {
+        if (CurrentPhase == Phase.Night) return;
+        CoinWallet.Instance?.ResetNightEarnings();
+        if (activeTransition != null) StopCoroutine(activeTransition);
+        activeTransition = StartCoroutine(TransitionRoutine(Phase.Night, false));
     }
 
     public void ReturnToCurrentDayAfterGameOver()
@@ -109,7 +118,7 @@ public sealed class DayNightManager : MonoBehaviour
         OnDayBegin?.Invoke();
     }
 
-    private IEnumerator TransitionRoutine(Phase targetPhase)
+    private IEnumerator TransitionRoutine(Phase targetPhase, bool startSpawnerOnNight)
     {
         CurrentPhase = targetPhase;
 
@@ -144,13 +153,12 @@ public sealed class DayNightManager : MonoBehaviour
         if (targetPhase == Phase.Night)
         {
             OnNightBegin?.Invoke();
-            // 이벤트 구독 실패 대비 직접 호출
-            FindAnyObjectByType<GhostSpawner>()?.StartSpawning();
+            if (startSpawnerOnNight)
+                FindAnyObjectByType<GhostSpawner>()?.StartSpawning();
         }
         else
         {
             OnDayBegin?.Invoke();
-            FindAnyObjectByType<GhostSpawner>()?.StopSpawning();
             HealAllOnDayBegin();
         }
     }

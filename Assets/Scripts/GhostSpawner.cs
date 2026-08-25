@@ -130,7 +130,8 @@ public sealed class GhostSpawner : MonoBehaviour
     private void Update()
     {
         bool isNight = DayNightManager.Instance != null && DayNightManager.Instance.CurrentPhase == DayNightManager.Phase.Night;
-        if (!isNight || CurrentState == AssaultState.Inactive || CurrentState == AssaultState.GameOver) return;
+        if (CurrentState == AssaultState.Inactive || CurrentState == AssaultState.GameOver) return;
+        if (!isNight && CurrentState != AssaultState.Maintenance) return;
 
         PruneGhosts();
         if (CurrentState == AssaultState.Combat)
@@ -169,7 +170,6 @@ public sealed class GhostSpawner : MonoBehaviour
     {
         CurrentState = AssaultState.GameOver;
         stateTimer = 0f;
-        DayNightManager.Instance?.SetNightMaintenance(false);
         StateChanged?.Invoke(CurrentState, CurrentAssault);
     }
 
@@ -179,13 +179,13 @@ public sealed class GhostSpawner : MonoBehaviour
         bossesSpawnedThisAssault = 0;
         stateTimer = Mathf.Max(1f, baseCombatDuration + (CurrentAssault - 1) * combatDurationPerAssault);
         spawnTimer = 0f;
-        DayNightManager.Instance?.SetNightMaintenance(false);
+        DayNightManager.Instance?.BeginNextNight();
         SetState(AssaultState.Combat);
     }
     private void BeginMaintenance()
     {
         stateTimer = Mathf.Max(1f, maintenanceDuration);
-        DayNightManager.Instance?.SetNightMaintenance(true);
+        DayNightManager.Instance?.BeginMaintenanceDay();
         SetState(AssaultState.Maintenance);
     }
     private void SetState(AssaultState state) { CurrentState = state; StateChanged?.Invoke(state, CurrentAssault); }

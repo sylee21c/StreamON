@@ -77,17 +77,17 @@ namespace StreamOn.Editor
                 UpgradeExistingWitPrefab(settings);
                 return AssetDatabase.LoadAssetAtPath<GameObject>(WitPrefabPath);
             }
-            TMP_FontAsset font = FindGalmuriFont();
+            TMP_FontAsset font = FindChatFont();
             Sprite panelSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
             GameObject root = new GameObject("Wit Interaction", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(CanvasGroup));
-            root.GetComponent<RectTransform>().sizeDelta = new Vector2(440f, 170f);
+            root.GetComponent<RectTransform>().sizeDelta = new Vector2(760f, 400f);
             Image panel = root.GetComponent<Image>();
             panel.sprite = panelSprite; panel.type = Image.Type.Sliced; panel.color = new Color(0.035f, 0.045f, 0.075f, 0.97f);
             panel.raycastTarget = false;
-            TMP_Text viewer = Label("Viewer Message", root.transform, "시청자  질문이 들어옵니다", font, 16f,
-                TextAlignmentOptions.MidlineLeft, new Vector2(360f, 34f), new Vector2(-18f, 58f));
+            TMP_Text viewer = Label("Viewer Message", root.transform, "시청자  질문이 들어옵니다", font, 26f,
+                TextAlignmentOptions.MidlineLeft, new Vector2(650f, 60f), new Vector2(-20f, 155f));
             viewer.color = new Color(0.58f, 0.92f, 1f);
-            Image timer = CreateTimerRing(root.transform, new Vector2(190f, 58f));
+            Image timer = CreateTimerRing(root.transform, new Vector2(330f, 155f));
             Button[] buttons = new Button[3];
             TMP_Text[] labels = new TMP_Text[3];
             for (int i = 0; i < 3; i++)
@@ -95,18 +95,18 @@ namespace StreamOn.Editor
                 GameObject buttonObject = new GameObject($"Choice {i + 1}", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
                 buttonObject.transform.SetParent(root.transform, false);
                 RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
-                buttonRect.sizeDelta = new Vector2(400f, 30f); buttonRect.anchoredPosition = new Vector2(0f, 20f - i * 35f);
+                buttonRect.sizeDelta = new Vector2(700f, 62f); buttonRect.anchoredPosition = new Vector2(0f, 70f - i * 74f);
                 Image image = buttonObject.GetComponent<Image>();
                 image.sprite = panelSprite; image.type = Image.Type.Sliced; image.color = new Color(0.11f, 0.14f, 0.22f, 1f);
                 buttons[i] = buttonObject.GetComponent<Button>();
                 ColorBlock colors = buttons[i].colors;
                 colors.normalColor = Color.white; colors.highlightedColor = new Color(0.72f, 1f, 0.92f);
                 colors.pressedColor = new Color(0.45f, 0.85f, 0.76f); buttons[i].colors = colors;
-                labels[i] = Label("Label", buttonObject.transform, $"{i + 1}. 답변", font, 14f,
-                    TextAlignmentOptions.MidlineLeft, new Vector2(370f, 28f), Vector2.zero);
+                labels[i] = Label("Label", buttonObject.transform, $"{i + 1}. 답변", font, 22f,
+                    TextAlignmentOptions.MidlineLeft, new Vector2(650f, 56f), Vector2.zero);
             }
-            TMP_Text feedback = Label("Feedback", root.transform, string.Empty, font, 14f,
-                TextAlignmentOptions.Midline, new Vector2(400f, 22f), new Vector2(0f, -75f));
+            TMP_Text feedback = Label("Feedback", root.transform, string.Empty, font, 20f,
+                TextAlignmentOptions.Midline, new Vector2(700f, 44f), new Vector2(0f, -165f));
             feedback.color = new Color(1f, 0.84f, 0.30f);
             RunnerWitInteractionController controller = root.AddComponent<RunnerWitInteractionController>();
             SerializedObject serialized = new SerializedObject(controller);
@@ -132,33 +132,32 @@ namespace StreamOn.Editor
                 RunnerWitInteractionController controller = root.GetComponent<RunnerWitInteractionController>();
                 if (controller == null) return;
                 RectTransform rootRect = root.GetComponent<RectTransform>();
-                bool legacyLayout = Vector2.Distance(rootRect.sizeDelta, new Vector2(620f, 230f)) < 1f;
                 Transform oldTimer = root.transform.Find("Timer");
                 if (oldTimer != null) Object.DestroyImmediate(oldTimer.gameObject);
                 Image timer = root.transform.Find("Timer Ring Fill")?.GetComponent<Image>();
-                if (timer == null) timer = CreateTimerRing(root.transform, legacyLayout ? new Vector2(190f, 58f) : new Vector2(rootRect.rect.width * 0.43f, rootRect.rect.height * 0.34f));
+                if (timer == null) timer = CreateTimerRing(root.transform, new Vector2(330f, 155f));
                 timer.type = Image.Type.Filled;
                 timer.fillMethod = Image.FillMethod.Radial360;
                 timer.fillOrigin = 2;
                 timer.fillClockwise = false;
-                if (legacyLayout)
+                rootRect.sizeDelta = new Vector2(760f, 400f);
+                SetRect(root.transform.Find("Viewer Message") as RectTransform, new Vector2(650f, 60f), new Vector2(-20f, 155f));
+                TMP_Text viewer = root.transform.Find("Viewer Message")?.GetComponent<TMP_Text>();
+                if (viewer != null) viewer.fontSize = 26f;
+                for (int i = 0; i < 3; i++)
                 {
-                    rootRect.sizeDelta = new Vector2(440f, 170f);
-                    SetRect(root.transform.Find("Viewer Message") as RectTransform, new Vector2(360f, 34f), new Vector2(-18f, 58f));
-                    TMP_Text viewer = root.transform.Find("Viewer Message")?.GetComponent<TMP_Text>();
-                    if (viewer != null) viewer.fontSize = 16f;
-                    for (int i = 0; i < 3; i++)
-                    {
-                        Transform choice = root.transform.Find($"Choice {i + 1}");
-                        SetRect(choice as RectTransform, new Vector2(400f, 30f), new Vector2(0f, 20f - i * 35f));
-                        TMP_Text label = choice?.Find("Label")?.GetComponent<TMP_Text>();
-                        if (label != null) { label.fontSize = 14f; SetRect(label.rectTransform, new Vector2(370f, 28f), Vector2.zero); }
-                    }
-                    Transform feedback = root.transform.Find("Feedback");
-                    SetRect(feedback as RectTransform, new Vector2(400f, 22f), new Vector2(0f, -75f));
-                    TMP_Text feedbackText = feedback?.GetComponent<TMP_Text>();
-                    if (feedbackText != null) feedbackText.fontSize = 14f;
+                    Transform choice = root.transform.Find($"Choice {i + 1}");
+                    SetRect(choice as RectTransform, new Vector2(700f, 62f), new Vector2(0f, 70f - i * 74f));
+                    TMP_Text label = choice?.Find("Label")?.GetComponent<TMP_Text>();
+                    if (label != null) { label.fontSize = 22f; SetRect(label.rectTransform, new Vector2(650f, 56f), Vector2.zero); }
                 }
+                Transform feedback = root.transform.Find("Feedback");
+                SetRect(feedback as RectTransform, new Vector2(700f, 44f), new Vector2(0f, -165f));
+                TMP_Text feedbackText = feedback?.GetComponent<TMP_Text>();
+                if (feedbackText != null) feedbackText.fontSize = 20f;
+                Transform timerBackground = root.transform.Find("Timer Ring Background");
+                SetRect(timerBackground as RectTransform, new Vector2(54f, 54f), new Vector2(330f, 155f));
+                SetRect(timer.rectTransform, new Vector2(48f, 48f), new Vector2(330f, 155f));
                 Image panel = root.GetComponent<Image>();
                 if (panel != null) panel.raycastTarget = false;
                 SerializedObject serialized = new SerializedObject(controller);
@@ -176,13 +175,13 @@ namespace StreamOn.Editor
             Image background = new GameObject("Timer Ring Background", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image)).GetComponent<Image>();
             background.transform.SetParent(parent, false);
             background.sprite = circle; background.color = new Color(0.18f, 0.22f, 0.30f, 0.9f); background.raycastTarget = false;
-            SetRect(background.rectTransform, new Vector2(28f, 28f), position);
+            SetRect(background.rectTransform, new Vector2(54f, 54f), position);
             Image fill = new GameObject("Timer Ring Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image)).GetComponent<Image>();
             fill.transform.SetParent(parent, false);
             fill.sprite = circle; fill.color = new Color(0.20f, 0.92f, 0.78f, 1f); fill.raycastTarget = false;
             // Counter-clockwise fill means decreasing fillAmount erases clockwise: 12 -> 3 -> 6 -> 9 -> 12.
             fill.type = Image.Type.Filled; fill.fillMethod = Image.FillMethod.Radial360; fill.fillOrigin = 2; fill.fillClockwise = false; fill.fillAmount = 1f;
-            SetRect(fill.rectTransform, new Vector2(24f, 24f), position);
+            SetRect(fill.rectTransform, new Vector2(48f, 48f), position);
             return fill;
         }
 
@@ -204,7 +203,7 @@ namespace StreamOn.Editor
             GameObject existing = AssetDatabase.LoadAssetAtPath<GameObject>(DonationPrefabPath);
             if (existing != null) return existing;
             if (!AssetDatabase.IsValidFolder(PrefabFolder)) AssetDatabase.CreateFolder("Assets/_Project", "Prefabs");
-            TMP_FontAsset font = FindGalmuriFont();
+            TMP_FontAsset font = FindChatFont();
             Sprite panelSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
             GameObject root = new GameObject("Donation Popup", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(CanvasGroup));
             RectTransform rect = root.GetComponent<RectTransform>();
@@ -426,8 +425,7 @@ namespace StreamOn.Editor
 
         private static TMP_FontAsset FindChatFont()
         {
-            TMP_FontAsset malgun = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/_Project/Fonts/Malgun Gothic SDF.asset");
-            return malgun != null ? malgun : FindGalmuriFont();
+            return FindGalmuriFont();
         }
     }
 }

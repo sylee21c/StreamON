@@ -15,8 +15,10 @@ namespace StreamOn.Editor
     {
         private const string Folder = "Assets/_Project/Prefabs";
         private const string SettlementPath = Folder + "/SharedBroadcastSettlement.prefab";
-        private const string TileHudPath = Folder + "/TileBroadcastSessionHUD.prefab";
         private const string ShopPath = Folder + "/RoomEquipmentShop.prefab";
+        private const string DashboardPath = "Assets/Prefabs/Growth And Leaderboard UI.prefab";
+        private const string PausePath = Folder + "/SharedBroadcastPause.prefab";
+        private const string ExplorerPath = Folder + "/BroadcastGameExplorer.prefab";
         private const string SettingsPath = "Assets/_Project/Settings/RunnerCampaignSettings.asset";
         private const string RunnerScene = "Assets/Scenes/BroadcastRunner.unity";
         private const string TileScene = "Assets/Scenes/TileArena.unity";
@@ -32,13 +34,17 @@ namespace StreamOn.Editor
             RunnerCampaignSettings settings = AssetDatabase.LoadAssetAtPath<RunnerCampaignSettings>(SettingsPath);
             if (settings == null) return;
             GameObject settlement = EnsureSettlementPrefab(settings);
-            GameObject tileHud = EnsureTileHudPrefab();
             GameObject shop = EnsureShopPrefab(settings);
+            EnsureDashboardShopButton();
+            EnsurePauseAudioSliders();
+            EnsureGameLaunchConfirmation();
+            EnsureExplorerCloseButton();
             PlaceSettlement(RunnerScene, settlement);
             PlaceSettlement(TileScene, settlement);
             PlaceSettlement(PlasticScene, settlement);
-            UpgradeTile(tileHud, settings);
+            UpgradeTile(settings);
             UpgradeRoom(shop);
+            EnsureRoomAudioController();
             AssetDatabase.SaveAssets();
         }
 
@@ -50,12 +56,12 @@ namespace StreamOn.Editor
                 UpgradeSettlementPrefab(settings);
                 return AssetDatabase.LoadAssetAtPath<GameObject>(SettlementPath);
             }
-            TMP_FontAsset font = Font(); Sprite sprite = PanelSprite();
+            TMP_FontAsset font = SettlementFont(); Sprite sprite = PanelSprite();
             GameObject root = Panel("Broadcast Settlement Dashboard", new Vector2(680, 530), new Color(.025f, .035f, .06f, .985f), sprite);
             root.AddComponent<CanvasGroup>();
             TMP_Text title = Text("Title", root.transform, "방송 결과", font, 31, new Vector2(610, 52), new Vector2(0, 215));
             TMP_Text game = ResultCard("Game Result", root.transform, "최고 점수", font, new Vector2(0, 130), sprite);
-            TMP_Text audience = ResultCard("Audience Result", root.transform, "시청자", font, new Vector2(0, 30), sprite);
+            TMP_Text audience = ResultCard("Audience Result", root.transform, "최고 시청자 수  0\n총 시청자 수  0", font, new Vector2(0, 30), sprite);
             TMP_Text rating = ResultCard("Rating Result", root.transform, "방송 평점", font, new Vector2(0, -70), sprite);
             TMP_Text growth = ResultCard("Growth Result", root.transform, "성장 및 수익", font, new Vector2(0, -170), sprite);
             Button next = Button("Continue Button", root.transform, "다음 날", font, new Vector2(260, 52), new Vector2(0, -236), new Color(.16f, .68f, .58f), sprite, out TMP_Text nextLabel);
@@ -80,6 +86,11 @@ namespace StreamOn.Editor
             GameObject root = PrefabUtility.LoadPrefabContents(SettlementPath);
             try
             {
+                TMP_FontAsset settlementFont = SettlementFont();
+                if (settlementFont != null)
+                    foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true))
+                        text.font = settlementFont;
+
                 RectTransform rootRect = root.GetComponent<RectTransform>();
                 // Scene instances historically use 680x530. Keep the authored prefab at that
                 // exact size and fit every child inside it so no scene override can crop a card.
@@ -92,6 +103,7 @@ namespace StreamOn.Editor
                     new Vector2(0f, 160f), new Vector2(574f, 88f), Vector2.zero);
                 TMP_Text audience = ConfigureSettlementCard(root.transform, "Audience Result", new Vector2(620f, 68f),
                     new Vector2(0f, 75f), new Vector2(574f, 62f), Vector2.zero);
+                if (audience != null) audience.text = "최고 시청자 수  0\n총 시청자 수  0";
                 TMP_Text growth = ConfigureSettlementCard(root.transform, "Growth Result", new Vector2(620f, 135f),
                     new Vector2(0f, -30f), new Vector2(574f, 118f), new Vector2(0f, 5f));
                 TMP_Text rating = ConfigureSettlementCard(root.transform, "Rating Result", new Vector2(620f, 75f),
@@ -184,18 +196,6 @@ namespace StreamOn.Editor
             rect.anchoredPosition = position;
         }
 
-        private static GameObject EnsureTileHudPrefab()
-        {
-            GameObject existing = AssetDatabase.LoadAssetAtPath<GameObject>(TileHudPath);
-            if (existing != null) return existing;
-            TMP_FontAsset font = Font(); Sprite sprite = PanelSprite();
-            GameObject root = Panel("Tile Broadcast Session HUD", new Vector2(310, 74), new Color(.025f, .035f, .06f, .92f), sprite);
-            TMP_Text time = Text("Remaining Time", root.transform, "방송 01:30", font, 20, new Vector2(270, 30), new Vector2(0, 15));
-            time.color = new Color(.35f, .95f, .82f);
-            TMP_Text attempt = Text("Attempt", root.transform, "도전 1회", font, 15, new Vector2(270, 24), new Vector2(0, -17));
-            return Save(root, TileHudPath);
-        }
-
         private static GameObject EnsureShopPrefab(RunnerCampaignSettings settings)
         {
             GameObject existing = AssetDatabase.LoadAssetAtPath<GameObject>(ShopPath);
@@ -236,6 +236,155 @@ namespace StreamOn.Editor
             return Save(root, ShopPath);
         }
 
+        private static void EnsureDashboardShopButton()
+        {
+            GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(DashboardPath);
+            if (asset == null) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(DashboardPath);
+            try
+            {
+                Transform dashboard = root.transform.Find("Dashboard");
+                if (dashboard == null || dashboard.Find("Shop") != null) return;
+                Button close = dashboard.Find("Close")?.GetComponent<Button>();
+                TMP_FontAsset font = close != null
+                    ? close.GetComponentInChildren<TMP_Text>(true)?.font
+                    : root.GetComponentInChildren<TMP_Text>(true)?.font;
+                Button shop = Button("Shop", dashboard, "상점", font, new Vector2(120f, 40f),
+                    new Vector2(-445f, 305f), new Color(.32f, .34f, .42f), PanelSprite(), out _);
+                if (close != null)
+                {
+                    Image closeImage = close.GetComponent<Image>();
+                    Image shopImage = shop.GetComponent<Image>();
+                    if (closeImage != null && shopImage != null)
+                    {
+                        shopImage.sprite = closeImage.sprite;
+                        shopImage.type = closeImage.type;
+                        shopImage.color = closeImage.color;
+                    }
+                    shop.colors = close.colors;
+                }
+                PrefabUtility.SaveAsPrefabAsset(root, DashboardPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        private static void EnsurePauseAudioSliders()
+        {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(PausePath) == null) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(PausePath);
+            try
+            {
+                Transform settings = root.GetComponentsInChildren<Transform>(true).FirstOrDefault(item => item.name == "Settings Menu");
+                Slider master = settings?.GetComponentsInChildren<Slider>(true).FirstOrDefault(item => item.name == "Master Volume");
+                TMP_Text masterLabel = settings?.GetComponentsInChildren<TMP_Text>(true).FirstOrDefault(item => item.name == "Volume Label");
+                if (settings == null || master == null || masterLabel == null) return;
+                EnsureAudioSlider(settings, master, masterLabel, "BGM Volume", "BGM Volume Label", "BGM", -65f);
+                EnsureAudioSlider(settings, master, masterLabel, "SFX Volume", "SFX Volume Label", "SFX", -130f);
+                PrefabUtility.SaveAsPrefabAsset(root, PausePath);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        private static void EnsureGameLaunchConfirmation()
+        {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(ExplorerPath) == null) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(ExplorerPath);
+            try
+            {
+                if (root.transform.Find("Launch Confirmation") != null) return;
+                TMP_FontAsset font = root.GetComponentInChildren<TMP_Text>(true)?.font;
+                Sprite sprite = PanelSprite();
+                GameObject panel = Panel("Launch Confirmation", new Vector2(480f, 230f),
+                    new Color(.055f, .065f, .085f, 1f), sprite);
+                panel.transform.SetParent(root.transform, false);
+                RectTransform rect = panel.GetComponent<RectTransform>();
+                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f, .5f);
+                rect.anchoredPosition = Vector2.zero;
+                Text("Dialog Title", panel.transform, "Broadcast Game Explorer", font, 18f,
+                    new Vector2(430f, 36f), new Vector2(0f, 82f));
+                TMP_Text message = Text("Message", panel.transform, "TileArena.exe를 실행하시겠습니까?", font, 21f,
+                    new Vector2(420f, 70f), new Vector2(0f, 22f));
+                message.alignment = TextAlignmentOptions.Center;
+                Button("Confirm Launch", panel.transform, "확인", font, new Vector2(150f, 42f),
+                    new Vector2(-88f, -70f), new Color(.18f, .55f, .62f), sprite, out _);
+                Button("Cancel Launch", panel.transform, "취소", font, new Vector2(150f, 42f),
+                    new Vector2(88f, -70f), new Color(.30f, .32f, .38f), sprite, out _);
+                panel.SetActive(false);
+                PrefabUtility.SaveAsPrefabAsset(root, ExplorerPath);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        private static void EnsureExplorerCloseButton()
+        {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(ExplorerPath) == null) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(ExplorerPath);
+            try
+            {
+                Transform titleBar = root.transform.Find("Window/Title Bar");
+                if (titleBar == null || titleBar.Find("Close Button") != null) return;
+                TMP_FontAsset font = root.GetComponentInChildren<TMP_Text>(true)?.font;
+                Button close = Button("Close Button", titleBar, "X", font, new Vector2(44f, 38f),
+                    Vector2.zero, new Color32(245, 246, 248, 255), PanelSprite(), out TMP_Text label);
+                RectTransform rect = close.GetComponent<RectTransform>();
+                rect.anchorMin = rect.anchorMax = new Vector2(1f, .5f);
+                rect.pivot = new Vector2(1f, .5f);
+                rect.anchoredPosition = new Vector2(-8f, 0f);
+                label.fontStyle = FontStyles.Bold;
+                label.color = new Color32(32, 35, 40, 255);
+                ColorBlock colors = close.colors;
+                colors.highlightedColor = new Color32(232, 17, 35, 255);
+                colors.pressedColor = new Color32(196, 15, 28, 255);
+                close.colors = colors;
+                PrefabUtility.SaveAsPrefabAsset(root, ExplorerPath);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        private static void EnsureAudioSlider(Transform parent, Slider template, TMP_Text labelTemplate,
+            string sliderName, string labelName, string label, float yOffset)
+        {
+            if (parent.Find(sliderName) == null)
+            {
+                Slider slider = Object.Instantiate(template, parent);
+                slider.name = sliderName;
+                slider.GetComponent<RectTransform>().anchoredPosition += new Vector2(0f, yOffset);
+            }
+            if (parent.Find(labelName) == null)
+            {
+                TMP_Text text = Object.Instantiate(labelTemplate, parent);
+                text.name = labelName;
+                text.text = label + "  100%";
+                text.rectTransform.anchoredPosition += new Vector2(0f, yOffset);
+            }
+        }
+
+        private static void EnsureRoomAudioController()
+        {
+            Scene scene = Open(RoomScene, out bool opened);
+            if (!scene.IsValid()) return;
+            RunnerRoomAudioController audio = Find<RunnerRoomAudioController>(scene);
+            if (audio == null)
+            {
+                GameObject obj = new GameObject("Streamer Room Audio", typeof(AudioSource), typeof(AudioSource),
+                    typeof(AudioSource), typeof(RunnerRoomAudioController));
+                SceneManager.MoveGameObjectToScene(obj, scene);
+                audio = obj.GetComponent<RunnerRoomAudioController>();
+                SerializedObject serialized = new SerializedObject(audio);
+                AudioSource[] sources = obj.GetComponents<AudioSource>();
+                serialized.FindProperty("backgroundMusicSource").objectReferenceValue = sources[0];
+                serialized.FindProperty("effectsSource").objectReferenceValue = sources[1];
+                serialized.FindProperty("footstepSource").objectReferenceValue = sources[2];
+                serialized.FindProperty("player").objectReferenceValue = Find<RunnerRoomPlayerController>(scene);
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                EditorSceneManager.MarkSceneDirty(scene);
+            }
+            SaveClose(scene, opened);
+        }
+
         private static void PlaceSettlement(string path, GameObject prefab)
         {
             Scene scene = Open(path, out bool opened); if (!scene.IsValid()) return;
@@ -268,26 +417,34 @@ namespace StreamOn.Editor
             SaveClose(scene, opened);
         }
 
-        private static void UpgradeTile(GameObject hudPrefab, RunnerCampaignSettings settings)
+        private static void UpgradeTile(RunnerCampaignSettings settings)
         {
             Scene scene = Open(TileScene, out bool opened); if (!scene.IsValid()) return;
-            Canvas canvas = Find<Canvas>(scene); TileArenaController game = Find<TileArenaController>(scene);
-            if (canvas == null || game == null) { SaveClose(scene, opened); return; }
+            TileArenaController game = Find<TileArenaController>(scene);
+            if (game == null) { SaveClose(scene, opened); return; }
             TileArenaBroadcastSessionController session = game.GetComponent<TileArenaBroadcastSessionController>();
             if (session == null) session = game.gameObject.AddComponent<TileArenaBroadcastSessionController>();
-            Transform hud = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Transform>(true)).FirstOrDefault(item => item.name == "Tile Broadcast Session HUD");
-            if (hud == null)
+
+            // This HUD is obsolete. Older versions searched for the spaced name while the
+            // saved prefab instances were named without spaces, so every refresh added one more.
+            GameObject[] legacyHuds = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
+                .Where(item => item.name == "TileBroadcastSessionHUD" || item.name == "Tile Broadcast Session HUD")
+                .Select(item => PrefabUtility.GetNearestPrefabInstanceRoot(item.gameObject) ?? item.gameObject)
+                .Distinct()
+                .ToArray();
+            foreach (GameObject legacyHud in legacyHuds)
             {
-                GameObject instance = PrefabUtility.InstantiatePrefab(hudPrefab, scene) as GameObject; instance.transform.SetParent(canvas.transform, false); hud = instance.transform;
-                RectTransform rect = hud.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f, 1f); rect.anchoredPosition = new Vector2(-150, -42);
+                Object.DestroyImmediate(legacyHud);
             }
+
             SerializedObject serialized = new SerializedObject(session);
             serialized.FindProperty("gameController").objectReferenceValue = game;
             serialized.FindProperty("audience").objectReferenceValue = game.GetComponent<TileArenaChatAdapter>();
             serialized.FindProperty("settings").objectReferenceValue = settings;
             serialized.FindProperty("settlementView").objectReferenceValue = Find<RunnerBroadcastSettlementView>(scene);
-            serialized.FindProperty("remainingTimeText").objectReferenceValue = hud.Find("Remaining Time")?.GetComponent<TMP_Text>();
-            serialized.FindProperty("attemptText").objectReferenceValue = hud.Find("Attempt")?.GetComponent<TMP_Text>();
+            serialized.FindProperty("remainingTimeText").objectReferenceValue = null;
+            serialized.FindProperty("attemptText").objectReferenceValue = null;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             SerializedObject gameSerialized = new SerializedObject(game);
             gameSerialized.FindProperty("broadcastSession").objectReferenceValue = session;
@@ -335,7 +492,15 @@ namespace StreamOn.Editor
 
         private static GameObject Save(GameObject root, string path) { GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, path); Object.DestroyImmediate(root); return saved; }
         private static Sprite PanelSprite() => AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
-        private static TMP_FontAsset Font() { string guid = AssetDatabase.FindAssets("Galmuri14 SDF t:TMP_FontAsset").FirstOrDefault(); return string.IsNullOrEmpty(guid) ? null : AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetDatabase.GUIDToAssetPath(guid)); }
+        private static TMP_FontAsset Font()
+        {
+            return AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/TextMesh Pro/Examples & Extras/Fonts/Galmuri14 SDF.asset");
+        }
+        private static TMP_FontAsset SettlementFont()
+        {
+            TMP_FontAsset galmuri = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/TextMesh Pro/Examples & Extras/Fonts/Galmuri14 SDF.asset");
+            return galmuri != null ? galmuri : Font();
+        }
         private static Scene Open(string path, out bool opened) { Scene scene = SceneManager.GetSceneByPath(path); opened = !scene.IsValid() || !scene.isLoaded; return opened && AssetDatabase.LoadAssetAtPath<SceneAsset>(path) != null ? EditorSceneManager.OpenScene(path, OpenSceneMode.Additive) : scene; }
         private static T Find<T>(Scene scene) where T : Component => scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<T>(true)).FirstOrDefault();
         private static void SaveClose(Scene scene, bool opened) { if (scene.IsValid() && scene.isLoaded && scene.isDirty) EditorSceneManager.SaveScene(scene); if (opened && scene.IsValid() && scene.isLoaded) EditorSceneManager.CloseScene(scene, true); }

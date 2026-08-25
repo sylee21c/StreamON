@@ -22,6 +22,10 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private Button runnerGameButton;
         [SerializeField] private Button tileArenaGameButton;
         [SerializeField] private Button plasticKnightmareGameButton;
+        [SerializeField] private GameObject gameLaunchConfirmationPanel;
+        [SerializeField] private TMP_Text gameLaunchConfirmationText;
+        [SerializeField] private Button gameLaunchConfirmButton;
+        [SerializeField] private Button gameLaunchCancelButton;
         [Header("Room Cameras")]
         [SerializeField] private Camera mainRoomCamera;
         [SerializeField] private Camera broadcastCutsceneCamera;
@@ -87,6 +91,11 @@ namespace StreamOn.Minigames.Runner
         private Vector3 _cutsceneCameraInitialPosition;
         private GameObject[] _roomSiblingPanels;
         private ScenePanelToggle _growthPanelToggle;
+        private RunnerEquipmentShopController _equipmentShop;
+        private bool _shopOpenedFromDashboard;
+        private RunnerRoomAudioController _roomAudio;
+        private string _pendingGameId;
+        private string _pendingGameScene;
         private void Start()
         {
             // The room is never a paused gameplay scene. A pause left behind by the
@@ -102,9 +111,12 @@ namespace StreamOn.Minigames.Runner
             AudioListener.volume = RunnerUserSettingsStore.Load().masterVolume;
             ResolveGameSelectionUi();
             ResolveRoomPresentation();
+            _roomAudio = FindFirstObjectByType<RunnerRoomAudioController>();
             if (runnerGameButton != null) runnerGameButton.onClick.AddListener(SelectRunnerGame);
             if (tileArenaGameButton != null) tileArenaGameButton.onClick.AddListener(SelectTileArenaGame);
             if (plasticKnightmareGameButton != null) plasticKnightmareGameButton.onClick.AddListener(SelectPlasticKnightmareGame);
+            gameLaunchConfirmButton?.onClick.AddListener(ConfirmSelectedGameLaunch);
+            gameLaunchCancelButton?.onClick.AddListener(CancelSelectedGameLaunch);
             if (debugAddLevelButton != null) debugAddLevelButton.onClick.AddListener(DebugAddStreamerLevel);
             if (debugAddCashButton != null) debugAddCashButton.onClick.AddListener(DebugAddCash);
             if (debugResetLevelButton != null) debugResetLevelButton.onClick.AddListener(DebugResetStreamerProgression);
@@ -193,8 +205,29 @@ namespace StreamOn.Minigames.Runner
             // the panel fails to render.
             bool growthPanelOpen = growthAndLeaderboardPanel != null
                 && growthAndLeaderboardPanel.activeInHierarchy;
+            if (_shopOpenedFromDashboard && _equipmentShop != null && _equipmentShop.IsOpen
+                && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            {
+                _equipmentShop.CloseShop();
+                return;
+            }
+            if (gameLaunchConfirmationPanel != null && gameLaunchConfirmationPanel.activeInHierarchy
+                && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            {
+                CancelSelectedGameLaunch();
+                return;
+            }
+            bool gameSelectionOpen = gameSelectionPanel != null && gameSelectionPanel.activeInHierarchy;
+            bool launchConfirmationOpen = gameLaunchConfirmationPanel != null
+                && gameLaunchConfirmationPanel.activeInHierarchy;
+            if (gameSelectionOpen && !launchConfirmationOpen && Keyboard.current != null
+                && Keyboard.current.eKey.wasPressedThisFrame)
+            {
+                CloseGameSelection();
+                return;
+            }
             bool roomModalOpen = _transitioning || (_slotPanel != null && _slotPanel.activeSelf)
-                || (gameSelectionPanel != null && gameSelectionPanel.activeInHierarchy)
+                || gameSelectionOpen
                 || growthPanelOpen;
             if (!roomModalOpen && Keyboard.current != null && Keyboard.current.iKey.wasPressedThisFrame
                 && debugPanel != null)
@@ -274,6 +307,7 @@ namespace StreamOn.Minigames.Runner
         private void BeginBroadcastSelection()
         {
             if (_transitioning || !ReloadRoomSave()) return;
+            _roomAudio?.PlayAccessOpen();
             _notice = string.Empty;
             if (!_save.broadcastPending)
             {
@@ -328,6 +362,7 @@ namespace StreamOn.Minigames.Runner
         private void OpenGrowthAndLeaderboardPanel()
         {
             if (growthAndLeaderboardPanel == null || _transitioning) return;
+            _roomAudio?.PlayAccessOpen();
             SetLaptopPromptVisible(false);
             SetStatusHudVisible(false);
             if (debugPanel != null) debugPanel.SetActive(false);
@@ -342,6 +377,7 @@ namespace StreamOn.Minigames.Runner
 
         private void CloseGrowthAndLeaderboardPanel()
         {
+            _roomAudio?.PlayAccessClose();
             _growthPanelToggle?.Close();
             if (growthAndLeaderboardPanel != null) growthAndLeaderboardPanel.SetActive(false);
             // Restore the container to the state the room starts in, otherwise the next
@@ -353,15 +389,71 @@ namespace StreamOn.Minigames.Runner
             SetStatusHudVisible(true);
         }
 
-        public void SelectRunnerGame() => LoadSelectedGame("runner",
-            string.IsNullOrWhiteSpace(settings.runnerSceneName) ? settings.broadcastSceneName : settings.runnerSceneName);
+        private void OpenEquipmentShopFromDashboard()
+        {
+            if (_equipmentShop == null || _transitioning) return;
+            _shopOpenedFromDashboard = true;
+            _growthPanelToggle?.Close();
+            ShowOnlyRoomModal(_equipmentShop.gameObject);
+            if (roomUi != null) roomUi.SetActive(true);
+            _equipmentShop.OpenShop();
+            SetStatusHudVisible(false);
+            SetPlayerLocked(true);
+        }
 
-        public void SelectTileArenaGame() => LoadSelectedGame("tile_arena", settings.tileArenaSceneName);
+        private void HandleEquipmentShopClosed()
+        {
+            if (!_shopOpenedFromDashboard) return;
+            _shopOpenedFromDashboard = false;
+            ReloadRoomSave();
+            ShowOnlyRoomModal(growthAndLeaderboardPanel);
+            if (roomUi != null) roomUi.SetActive(true);
+            _growthPanelToggle?.Open();
+            SetStatusHudVisible(false);
+            SetPlayerLocked(true);
+        }
 
-        public void SelectPlasticKnightmareGame() => LoadSelectedGame("plastic_knightmare",
+        public void SelectRunnerGame() => RequestGameLaunch("Runner.exe", "runner",
+            string.IsNullOrWhiteSpace(settings.runnerMenuSceneName)
+                ? (string.IsNullOrWhiteSpace(settings.runnerSceneName) ? settings.broadcastSceneName : settings.runnerSceneName)
+                : settings.runnerMenuSceneName);
+
+        public void SelectTileArenaGame() => RequestGameLaunch("TileArena.exe", "tile_arena",
+            string.IsNullOrWhiteSpace(settings.tileArenaMenuSceneName)
+                ? settings.tileArenaSceneName
+                : settings.tileArenaMenuSceneName);
+
+        public void SelectPlasticKnightmareGame() => RequestGameLaunch("PlasticKnightmare.exe", "plastic_knightmare",
             string.IsNullOrWhiteSpace(settings.plasticKnightmareMenuSceneName)
                 ? settings.plasticKnightmareSceneName
                 : settings.plasticKnightmareMenuSceneName);
+
+        private void RequestGameLaunch(string executableName, string gameId, string sceneName)
+        {
+            if (gameSelectionPanel == null || !gameSelectionPanel.activeInHierarchy
+                || Time.frameCount < _gameSelectionInputEnabledFrame) return;
+            _pendingGameId = gameId;
+            _pendingGameScene = sceneName;
+            if (gameLaunchConfirmationText != null)
+                gameLaunchConfirmationText.text = $"{executableName}를 실행하시겠습니까?";
+            if (gameLaunchConfirmationPanel != null) gameLaunchConfirmationPanel.SetActive(true);
+        }
+
+        private void ConfirmSelectedGameLaunch()
+        {
+            if (string.IsNullOrWhiteSpace(_pendingGameId)) return;
+            string gameId = _pendingGameId;
+            string sceneName = _pendingGameScene;
+            CancelSelectedGameLaunch();
+            LoadSelectedGame(gameId, sceneName);
+        }
+
+        private void CancelSelectedGameLaunch()
+        {
+            _pendingGameId = string.Empty;
+            _pendingGameScene = string.Empty;
+            if (gameLaunchConfirmationPanel != null) gameLaunchConfirmationPanel.SetActive(false);
+        }
 
         private void LoadSelectedGame(string gameId, string sceneName)
         {
@@ -431,12 +523,17 @@ namespace StreamOn.Minigames.Runner
                 ShowGameSelection(false);
                 return;
             }
-            string sceneName = gameId == BroadcastGameId.TileArena ? settings.tileArenaSceneName
+            string sceneName = gameId == BroadcastGameId.TileArena
+                ? (string.IsNullOrWhiteSpace(settings.tileArenaMenuSceneName)
+                    ? settings.tileArenaSceneName
+                    : settings.tileArenaMenuSceneName)
                 : gameId == BroadcastGameId.PlasticKnightmare
                     ? (string.IsNullOrWhiteSpace(settings.plasticKnightmareMenuSceneName)
                         ? settings.plasticKnightmareSceneName
                         : settings.plasticKnightmareMenuSceneName)
-                : string.IsNullOrWhiteSpace(settings.runnerSceneName) ? settings.broadcastSceneName : settings.runnerSceneName;
+                : string.IsNullOrWhiteSpace(settings.runnerMenuSceneName)
+                    ? (string.IsNullOrWhiteSpace(settings.runnerSceneName) ? settings.broadcastSceneName : settings.runnerSceneName)
+                    : settings.runnerMenuSceneName;
             if (string.IsNullOrWhiteSpace(sceneName) || !Application.CanStreamedLevelBeLoaded(sceneName))
             {
                 RunnerBroadcastSessionStore.End(settings, _save);
@@ -582,6 +679,13 @@ namespace StreamOn.Minigames.Runner
             runnerGameButton = explorerButtons.FirstOrDefault(button => button.name == "Runner Game Button");
             tileArenaGameButton = explorerButtons.FirstOrDefault(button => button.name == "Tile Arena Game Button");
             plasticKnightmareGameButton = explorerButtons.FirstOrDefault(button => button.name == "Plastic Knightmare Game Button");
+            gameLaunchConfirmationPanel = explorer.GetComponentsInChildren<Transform>(true)
+                .FirstOrDefault(item => item.name == "Launch Confirmation")?.gameObject;
+            gameLaunchConfirmationText = gameLaunchConfirmationPanel?.GetComponentsInChildren<TMP_Text>(true)
+                .FirstOrDefault(item => item.name == "Message");
+            gameLaunchConfirmButton = explorerButtons.FirstOrDefault(button => button.name == "Confirm Launch");
+            gameLaunchCancelButton = explorerButtons.FirstOrDefault(button => button.name == "Cancel Launch");
+            if (gameLaunchConfirmationPanel != null) gameLaunchConfirmationPanel.SetActive(false);
             Button closeButton = explorerButtons.FirstOrDefault(button => button.name == "Close Button");
             if (closeButton != null) closeButton.onClick.AddListener(CloseGameSelection);
 
@@ -590,6 +694,8 @@ namespace StreamOn.Minigames.Runner
 
         public void CloseGameSelection()
         {
+            CancelSelectedGameLaunch();
+            _roomAudio?.PlayAccessClose();
             if (gameSelectionPanel != null) gameSelectionPanel.SetActive(false);
             if (_save != null)
             {
@@ -681,6 +787,19 @@ namespace StreamOn.Minigames.Runner
                 if (closeButton != null) closeButton.onClick.AddListener(CloseGrowthAndLeaderboardPanel);
                 else Debug.LogWarning("STREAM ON laptop: 패널에서 'Close' 버튼을 찾지 못했습니다. 닫기가 동작하지 않습니다.",
                     growthAndLeaderboardPanel);
+
+                _equipmentShop = FindFirstObjectByType<RunnerEquipmentShopController>(FindObjectsInactive.Include);
+                Button shopButton = growthAndLeaderboardPanel.GetComponentsInChildren<Button>(true)
+                    .FirstOrDefault(button => button.name == "Shop");
+                if (_equipmentShop != null && shopButton != null)
+                {
+                    shopButton.onClick.AddListener(OpenEquipmentShopFromDashboard);
+                    _equipmentShop.Closed += HandleEquipmentShopClosed;
+                }
+                else if (_equipmentShop == null)
+                    Debug.LogWarning("STREAM ON laptop: RoomEquipmentShop을 씬에서 찾지 못했습니다.", this);
+                else
+                    Debug.LogWarning("STREAM ON laptop: 대시보드의 'Shop' 버튼을 찾지 못했습니다.", growthAndLeaderboardPanel);
             }
 
             CacheRoomSiblingPanels();

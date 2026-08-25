@@ -1,8 +1,9 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using StreamOn.Minigames.Runner;
 
-// 좌측 상단에 최초 정비 / 끝없는 밤 상태를 표시.
+// 좌측 상단에 Day 번호와 낮 정비의 남은 시간을 표시.
 // 씬에 UI 계층이 있으면 그것을 사용, 없으면 코드로 자동 생성.
 public sealed class DayCounterUI : MonoBehaviour
 {
@@ -10,6 +11,9 @@ public sealed class DayCounterUI : MonoBehaviour
     [SerializeField] private TMP_Text tmpText;
     [SerializeField] private Text legacyText;
     [SerializeField] private Image phaseIcon;
+    [SerializeField] private TMP_Text countdownText;
+    [SerializeField] private GhostSpawner ghostSpawner;
+    [SerializeField] private PlasticKnightmareBroadcastController broadcastController;
 
     [Header("Position Pin (앵커 문제 없이 좌상단 강제 고정)")]
     [Tooltip("이 오브젝트의 RectTransform 을 시작 시 강제로 좌상단 고정 (앵커/피벗 자동 세팅). 비우면 안 함.")]
@@ -24,10 +28,8 @@ public sealed class DayCounterUI : MonoBehaviour
     [SerializeField] private Color nightIconTint = Color.white;
 
     [Header("Format")]
-    [Tooltip("{0}=일수, {1}=페이즈 문자열. 예: \"Day {0}\" → \"Day 3\"")]
+    [Tooltip("{0}=일수. 예: \"Day {0}\" → \"Day 3\"")]
     [SerializeField] private string format = "Day {0}";
-    [SerializeField] private string dayLabel = "낮";
-    [SerializeField] private string nightLabel = "밤";
 
     [Header("Colors")]
     [SerializeField] private Color dayTextColor = new Color(1f, 0.9f, 0.55f, 1f);
@@ -168,19 +170,17 @@ public sealed class DayCounterUI : MonoBehaviour
     private void Refresh(bool force)
     {
         DayNightManager mgr = DayNightManager.Instance;
-        int day = 1;
+        int day = mgr != null ? mgr.DayCount : 1;
         DayNightManager.Phase phase = mgr != null ? mgr.CurrentPhase : DayNightManager.Phase.Day;
+
+        RefreshCountdown(phase);
 
         if (!force && phaseInitialized && day == lastDay && phase == lastPhase) return;
         lastDay = day;
         lastPhase = phase;
         phaseInitialized = true;
 
-        string configuredLabel = phase == DayNightManager.Phase.Night ? nightLabel : dayLabel;
-        string phaseText = string.IsNullOrWhiteSpace(configuredLabel)
-            ? (phase == DayNightManager.Phase.Night ? "끝없는 밤" : "최초 정비")
-            : configuredLabel;
-        string s = string.Format(format, day, phaseText);
+        string s = string.Format(format, day);
         Color c = phase == DayNightManager.Phase.Night ? nightTextColor : dayTextColor;
 
         if (tmpText != null)   { tmpText.text = s;   tmpText.color = c; }
@@ -200,6 +200,33 @@ public sealed class DayCounterUI : MonoBehaviour
             {
                 phaseIcon.enabled = false;
             }
+        }
+    }
+
+    private void RefreshCountdown(DayNightManager.Phase phase)
+    {
+        if (countdownText == null) return;
+
+        bool show = phase == DayNightManager.Phase.Day;
+        countdownText.gameObject.SetActive(show);
+        if (!show) return;
+
+        if (ghostSpawner == null) ghostSpawner = FindFirstObjectByType<GhostSpawner>();
+        if (broadcastController == null)
+            broadcastController = FindFirstObjectByType<PlasticKnightmareBroadcastController>();
+
+        float remaining = ghostSpawner != null && ghostSpawner.CurrentState == GhostSpawner.AssaultState.Maintenance
+            ? ghostSpawner.StateSecondsRemaining
+            : broadcastController != null ? broadcastController.DaySecondsRemaining : 0f;
+        int seconds = Mathf.Max(0, Mathf.CeilToInt(remaining));
+        countdownText.text = $"밤까지 {seconds / 60}:{seconds % 60:00}";
+        countdownText.color = dayTextColor;
+
+        if (tmpText != null)
+        {
+            countdownText.font = tmpText.font;
+            countdownText.fontSize = tmpText.fontSize;
+            countdownText.fontStyle = tmpText.fontStyle;
         }
     }
 

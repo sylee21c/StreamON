@@ -39,6 +39,8 @@ namespace StreamOn.Minigames.Runner
         private string _safeMomentContext = "게임 플레이 중 잠깐 여유가 생김";
         private int _correctAnswerStreak;
 
+        public bool IsShowing => _activePrompt != null || (canvasGroup != null && canvasGroup.alpha > 0.01f);
+
         private void Awake()
         {
             if (canvasGroup == null) canvasGroup = GetComponent<CanvasGroup>();

@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/StreamON_Mainmenu.unity
+    guid: 73fbcc1134a1d8f4c9aae72a5ca79115
+  - enabled: 1
     path: Assets/Scenes/StreamerRoom.unity
     guid: 79babc3ec68903e408cea16c38e38d0b
   - enabled: 1
@@ -26,6 +29,12 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/MainScene.unity
     guid: 83e4b13722f654c4a980a9150351b733
+  - enabled: 1
+    path: Assets/Scenes/RunnerMainMenu.unity
+    guid: 258d287c127e8724ead5ffd6c746e40d
+  - enabled: 1
+    path: Assets/Scenes/TileArenaMainMenu.unity
+    guid: 5fe75428e0431ee4882bca86b1571d61
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

@@ -18,6 +18,8 @@ public sealed class BuildingHotbarUI : MonoBehaviour
     private static int selectedSlotIndex = 0;
 
     [SerializeField] private bool preserveSceneAuthoredLayout = true;
+    [SerializeField, Tooltip("낮에만 표시할 소지 아이템 슬롯 루트")]
+    private GameObject hotbarRoot;
     [SerializeField] private string hotbarResourcePath = "";
     [SerializeField] private Vector2 hotbarSize = new Vector2(520f, 126f);
     [SerializeField] private Vector2 hotbarAnchoredPosition = new Vector2(0f, 18f);
@@ -90,6 +92,7 @@ public sealed class BuildingHotbarUI : MonoBehaviour
     private void Awake()
     {
         instance = this;
+        ResolveHotbarRoot();
         EnsureCanvasRect();
         BuildSlotsIfEmpty();
         EnsureSlotBoxes();
@@ -99,12 +102,19 @@ public sealed class BuildingHotbarUI : MonoBehaviour
     private void OnEnable()
     {
         instance = this;
+        ResolveHotbarRoot();
         EnsureCanvasRect();
         BuildSlotsIfEmpty();
         EnsureSlotBoxes();
         RefreshSelectedSlot();
         SubscribeInventory();
         RefreshAllCounts();
+        RefreshPhaseVisibility();
+    }
+
+    private void Update()
+    {
+        if (Application.isPlaying) RefreshPhaseVisibility();
     }
 
     private void OnValidate()
@@ -761,6 +771,20 @@ public sealed class BuildingHotbarUI : MonoBehaviour
     {
         Transform hotbar = transform.Find("Toy Hotbar");
         return hotbar != null ? hotbar : transform;
+    }
+
+    private void ResolveHotbarRoot()
+    {
+        if (hotbarRoot == null) hotbarRoot = FindHotbarTransform().gameObject;
+    }
+
+    private void RefreshPhaseVisibility()
+    {
+        ResolveHotbarRoot();
+        if (hotbarRoot == null) return;
+        DayNightManager manager = DayNightManager.Instance;
+        bool visible = manager == null || manager.CurrentPhase == DayNightManager.Phase.Day;
+        if (hotbarRoot.activeSelf != visible) hotbarRoot.SetActive(visible);
     }
 
     private Vector2 GetSlotPosition(int index)

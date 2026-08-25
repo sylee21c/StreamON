@@ -2,8 +2,7 @@ using System.Collections;
 using UnityEngine;
 
 // 낮/밤 배경음악을 반복 재생. 페이즈 전환 시 크로스페이드.
-// 게임오버 시엔 자동 페이즈 감지를 잠시 멈추고 gameOverMusic 을 1회 재생.
-// Retry 로 낮 음악으로 돌아올 때 다시 크로스페이드.
+// 게임오버 시에는 현재 배경음악을 서서히 0으로 줄인다.
 public sealed class BGMManager : MonoBehaviour
 {
     public static BGMManager Instance { get; private set; }
@@ -22,6 +21,7 @@ public sealed class BGMManager : MonoBehaviour
     [SerializeField] private float overrideFadeDuration = 0f;
     [Tooltip("게임오버 진입 시 페이드 시간")]
     [SerializeField] private float gameOverFadeDuration = 2f;
+    [SerializeField, Min(0f)] private float pitchChangeSpeed = 4f;
 
     private AudioSource sourceA;
     private AudioSource sourceB;
@@ -76,6 +76,13 @@ public sealed class BGMManager : MonoBehaviour
 
     private void Update()
     {
+        if (Time.timeScale > 0f)
+        {
+            float targetPitch = Mathf.Clamp(Time.timeScale, 0.01f, 1f);
+            float pitchStep = Mathf.Max(0.01f, pitchChangeSpeed) * Time.unscaledDeltaTime;
+            sourceA.pitch = Mathf.MoveTowards(sourceA.pitch, targetPitch, pitchStep);
+            sourceB.pitch = Mathf.MoveTowards(sourceB.pitch, targetPitch, pitchStep);
+        }
         if (overrideActive) return; // 게임오버 중엔 자동 전환 잠금
 
         DayNightManager mgr = DayNightManager.Instance;
@@ -89,12 +96,12 @@ public sealed class BGMManager : MonoBehaviour
         }
     }
 
-    // ── 게임오버 진입: 현재 곡 → gameOverMusic (반복 없음) ──────────
+    // 게임오버 진입: 재생 중인 모든 배경음악을 0까지 줄인다.
     public void EnterGameOverMusic()
     {
-        if (gameOverMusic == null) return;
         overrideActive = true;
-        Crossfade(gameOverMusic, false, gameOverVolume, gameOverFadeDuration);
+        if (activeFade != null) StopCoroutine(activeFade);
+        activeFade = StartCoroutine(FadeOutAllRoutine(gameOverFadeDuration));
     }
 
     // ── Retry: gameOverMusic → 낮 음악 (반복) ─────────────────────
@@ -138,7 +145,7 @@ public sealed class BGMManager : MonoBehaviour
         duration = Mathf.Max(0.01f, duration);
         while (elapsed < duration)
         {
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime;
             float t = elapsed / duration;
             oldS.volume = Mathf.Lerp(startOldVol, 0f, t);
             newS.volume = Mathf.Lerp(0f, targetVolume, t);
@@ -147,6 +154,27 @@ public sealed class BGMManager : MonoBehaviour
         oldS.volume = 0f;
         newS.volume = targetVolume;
         oldS.Stop();
+        activeFade = null;
+    }
+
+    private IEnumerator FadeOutAllRoutine(float duration)
+    {
+        float startA = sourceA.volume;
+        float startB = sourceB.volume;
+        float elapsed = 0f;
+        duration = Mathf.Max(0.01f, duration);
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            sourceA.volume = Mathf.Lerp(startA, 0f, t);
+            sourceB.volume = Mathf.Lerp(startB, 0f, t);
+            yield return null;
+        }
+        sourceA.volume = 0f;
+        sourceB.volume = 0f;
+        sourceA.Stop();
+        sourceB.Stop();
         activeFade = null;
     }
 }

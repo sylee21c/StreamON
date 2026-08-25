@@ -18,6 +18,7 @@ namespace StreamOn.Minigames.Runner
         PostGameDiscussion, IdleChat, CampaignDayStarted, CampaignGameTraining,
         CampaignTalkingTraining, CampaignRest, CampaignActionSelected, CampaignSettlement, CampaignClear, CampaignFailed,
         BroadcastCompleted, DonationReceived, WitPrompt, WitReplySuccess, WitReplyOkay, WitReplyAwkward,
+        MissionStarted, MissionSuccess, MissionNearMiss, MissionFailed, MissionFailedBadly,
         TileArenaStarted, TileArenaJumped, TileArenaPickup,
         TileArenaStageCleared, TileArenaPlayerHit, TileArenaLowLives, TileArenaGameOver,
         ChatConflict, ChatFraternization
@@ -296,6 +297,22 @@ namespace StreamOn.Minigames.Runner
             }
             _aiEvents.Enqueue(chatEvent);
             if (_aiPump == null) _aiPump = StartCoroutine(PumpAi(apiKey, _runGeneration));
+        }
+
+        public void ReactMissionEvent(RunnerChatEvent chatEvent, int minimumMessages = 2, int maximumMessages = 4)
+        {
+            StartCoroutine(PumpMissionReactions(chatEvent, minimumMessages, maximumMessages));
+        }
+
+        private IEnumerator PumpMissionReactions(RunnerChatEvent chatEvent, int minimumMessages, int maximumMessages)
+        {
+            int minimum = Mathf.Max(1, minimumMessages);
+            int count = UnityEngine.Random.Range(minimum, Mathf.Max(minimum, maximumMessages) + 1);
+            for (int i = 0; i < count; i++)
+            {
+                React(chatEvent);
+                if (i + 1 < count) yield return PauseAwareDelay(UnityEngine.Random.Range(0.25f, 0.75f));
+            }
         }
 
         public bool AiEnabled => useAiChat;
@@ -1239,8 +1256,13 @@ namespace StreamOn.Minigames.Runner
                 RunnerChatEvent.BroadcastCompleted => new[] { "ㅈㅈ", "바이바이", "수고했다", "수고했어요", "다음에 봐요~", "담방에 봐" },
                 RunnerChatEvent.WitPrompt => new[] { "대답해봐 ㅋㅋ", "채팅 읽었냐", "이건 뭐라 할 건데", "해명해" },
                 RunnerChatEvent.WitReplySuccess => new[] { "ㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋ", "ㅋㅋㅋㅋㅋ", "아 ㅋㅋ", "미쳤네ㅋㅋ" },
-                RunnerChatEvent.WitReplyOkay => new[] { "음....", "예?", "하하", "?", "이건 좀..." },
+                RunnerChatEvent.WitReplyOkay => new[] { "ㅇㅇ", "그렇구나", "오케이", "그건 맞지", "납득", "그럴 수 있지" },
                 RunnerChatEvent.WitReplyAwkward => new[] { "ㄴㅈ", "개노잼", "?", "음....", "예?", "하하", "이건 좀...", "아..." },
+                RunnerChatEvent.MissionStarted => new[] { "오", "미션 왔다", "가자", "이건 해야지", "ㄱㄱ", "???", "보상 얼마임?", "해봐" },
+                RunnerChatEvent.MissionSuccess => new[] { "ㅅㅅ", "나이스", "오", "와", "해냈네", "미션 성공", "ㄱㅅ", "깔끔" },
+                RunnerChatEvent.MissionNearMiss => new[] { "아 ㄲㅂ", "와 거의", "아깝다", "한끗인데", "ㄲㅂㄲㅂ", "아...", "거의했는데", "와 저기서" },
+                RunnerChatEvent.MissionFailed => new[] { "뭐함?", "아니", "예?", "ㅋㅋㅋㅋㅋ", "이걸 못하네", "에반데", "아니 이걸?", "음....", "?", "아..." },
+                RunnerChatEvent.MissionFailedBadly => new[] { "?", "??", "???", "ㅋㅋㅋㅋㅋㅋㅋㅋ", "아니 뭐하냐", "개못하네", "개못하네...", "뭐함?", "예?", "...", "이걸?", "시작하자마자 ㅋㅋ" },
                 RunnerChatEvent.NewHighScore => BuildLocalHighScorePool(),
                 RunnerChatEvent.QuietMoment => new[] { "오", "가자", "좋은데?", "ㄱㄱ", "ㄱㄱㄱ", "좀만 더", "이대로만" },
                 RunnerChatEvent.PostGameDiscussion => new[] { "그래서 다시함?", "아까 그거만 안맞았어도", "이번 판은 좀 아깝다", "R 안누름?", "한판 더 ㄱ" },
@@ -1298,6 +1320,11 @@ namespace StreamOn.Minigames.Runner
                 RunnerChatEvent.WitPrompt => new[] { "teaser", "baiter", "chat_fighter", "new_viewer", "casual" },
                 RunnerChatEvent.WitReplySuccess => new[] { "teaser", "clipper", "loyal_fan", "casual" },
                 RunnerChatEvent.WitReplyAwkward => new[] { "baiter", "chat_fighter", "teaser", "skeptic" },
+                RunnerChatEvent.MissionStarted => new[] { "casual", "loyal_fan", "teaser", "new_viewer" },
+                RunnerChatEvent.MissionSuccess => new[] { "loyal_fan", "clipper", "casual", "lurker" },
+                RunnerChatEvent.MissionNearMiss => new[] { "loyal_fan", "worrier", "casual", "teaser" },
+                RunnerChatEvent.MissionFailed => new[] { "teaser", "baiter", "chat_fighter", "skeptic", "casual" },
+                RunnerChatEvent.MissionFailedBadly => new[] { "baiter", "chat_fighter", "teaser", "skeptic" },
                 RunnerChatEvent.PostGameDiscussion => new[] { "baiter", "chat_fighter", "peacekeeper", "loyal_fan", "teaser", "casual" },
                 RunnerChatEvent.IdleChat => new[] { "casual", "new_viewer", "loyal_fan", "lurker" },
                 _ => Array.Empty<string>()

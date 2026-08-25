@@ -29,6 +29,8 @@ namespace StreamOn.Minigames.Runner
         public int version = 2;
         public int activeSaveSlot = 1;
         public float masterVolume = 1f;
+        public float bgmVolume = 1f;
+        public float sfxVolume = 1f;
         public bool aiChatEnabled = true;
         public int runnerHighScore;
         public List<BroadcastPendingLeaderboardSubmission> pendingLeaderboardSubmissions = new List<BroadcastPendingLeaderboardSubmission>();
@@ -86,6 +88,8 @@ namespace StreamOn.Minigames.Runner
             }
             _cached.activeSaveSlot = Mathf.Max(1, _cached.activeSaveSlot);
             _cached.masterVolume = Mathf.Clamp01(_cached.masterVolume);
+            _cached.bgmVolume = Mathf.Clamp01(_cached.bgmVolume);
+            _cached.sfxVolume = Mathf.Clamp01(_cached.sfxVolume);
             _cached.version = Mathf.Max(2, _cached.version);
             if (_cached.pendingLeaderboardSubmissions == null)
                 _cached.pendingLeaderboardSubmissions = new List<BroadcastPendingLeaderboardSubmission>();

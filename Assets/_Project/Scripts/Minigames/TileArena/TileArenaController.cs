@@ -90,7 +90,12 @@ namespace StreamOn.Minigames.TileArena
         public int MaximumLives => maximumLives;
         public int CurrentStage => _stage != null ? _stage.Id : 0;
         public int BlueTilesRemaining => _blue.Count;
-        public float ElapsedSeconds => _running ? Mathf.Max(0f, Time.unscaledTime - _runStartedAt) : _elapsedAtEnd;
+        public float ElapsedSeconds => _running ? Mathf.Max(0f, Time.time - _runStartedAt) : _elapsedAtEnd;
+        public bool IsTransitioning => _transitioning;
+        public int BlueTilesCollected { get; private set; }
+        public int PatternsCleared { get; private set; }
+        public int JumpsPerformed { get; private set; }
+        public int HitsTaken { get; private set; }
 
         private void Awake()
         {
@@ -126,13 +131,13 @@ namespace StreamOn.Minigames.TileArena
             {
                 _pointerDirections.Clear();
                 _joystickVector = Vector2.zero;
-                _focusLostAt = Time.unscaledTime;
+                _focusLostAt = Time.time;
             }
             else if (_focusLostAt >= 0f)
             {
                 if (_running)
                 {
-                    float pauseDuration = Mathf.Max(0f, Time.unscaledTime - _focusLostAt);
+                    float pauseDuration = Mathf.Max(0f, Time.time - _focusLostAt);
                     _activeStartedAt += pauseDuration;
                     _runStartedAt += pauseDuration;
                 }
@@ -143,8 +148,10 @@ namespace StreamOn.Minigames.TileArena
         private void Update()
         {
             if (!_running) return;
-            float now = Time.unscaledTime;
-            bool playerMoved = UpdatePlayerMovement(Mathf.Min(Time.unscaledDeltaTime, 0.05f));
+            // Tile Arena gameplay must respect the shared focus-mode time scale.
+            // Broadcast/session clocks intentionally remain real-time in their own controller.
+            float now = Time.time;
+            bool playerMoved = UpdatePlayerMovement(Mathf.Min(Time.deltaTime, 0.05f));
             RenderPlayer(now);
 
             if (_transitioning)
@@ -171,9 +178,13 @@ namespace StreamOn.Minigames.TileArena
             _stageHistory.Clear();
             _pointerDirections.Clear();
             _joystickVector = Vector2.zero;
-            _runStartedAt = Time.unscaledTime;
+            _runStartedAt = Time.time;
             _elapsedAtEnd = 0f;
             _bestAtRunStart = _best;
+            BlueTilesCollected = 0;
+            PatternsCleared = 0;
+            JumpsPerformed = 0;
+            HitsTaken = 0;
             if (startOverlay != null) startOverlay.SetActive(false);
             if (gameOverOverlay != null) gameOverOverlay.SetActive(false);
             RenderHud();
@@ -185,8 +196,9 @@ namespace StreamOn.Minigames.TileArena
         public void TryJump()
         {
             if (!_running || _jumping) return;
+            JumpsPerformed++;
             _jumping = true;
-            _jumpStartedAt = Time.unscaledTime;
+            _jumpStartedAt = Time.time;
             audioController?.PlayJump();
             chatAdapter?.OnJumped();
         }
@@ -241,7 +253,7 @@ namespace StreamOn.Minigames.TileArena
             _movingRed.Clear();
             PrepareRuntime();
             PlaceBlue();
-            _activeStartedAt = Time.unscaledTime;
+            _activeStartedAt = Time.time;
             _lastStageUpdateAt = float.NegativeInfinity;
             UpdateStage(_activeStartedAt, true);
             RenderPlayer(_activeStartedAt);
@@ -251,6 +263,7 @@ namespace StreamOn.Minigames.TileArena
         private void BeginTransition()
         {
             if (_transitioning || !_running) return;
+            PatternsCleared++;
             _transitioning = true;
             _jumping = false;
             chatAdapter?.OnStageCleared();
@@ -260,8 +273,8 @@ namespace StreamOn.Minigames.TileArena
             _movingRed.Clear();
             RenderTiles(true);
             RenderRed();
-            RenderPlayer(Time.unscaledTime);
-            _transitionEndsAt = Time.unscaledTime + transitionSeconds;
+            RenderPlayer(Time.time);
+            _transitionEndsAt = Time.time + transitionSeconds;
             audioController?.PlayStageClear();
         }
 
@@ -315,6 +328,7 @@ namespace StreamOn.Minigames.TileArena
             }
             if (touched.Count == 0) return;
             foreach (Vector2Int cell in touched) _blue.Remove(cell);
+            BlueTilesCollected += touched.Count;
             int earned = Mathf.Max(1, touched.Count * pointsPerBlueTile);
             _score += earned;
             broadcastSession?.OnRawPointsEarned(earned);
@@ -619,6 +633,7 @@ namespace StreamOn.Minigames.TileArena
         {
             if (!_running || _transitioning || now < _invincibleUntil || AirborneSafe(now) || !_red.Contains(PlayerTile())) return;
             _lives--;
+            HitsTaken++;
             _invincibleUntil = now + invincibleSeconds;
             _hurtUntil = now + 0.52f;
             _shakeUntil = now + 0.30f;
@@ -641,14 +656,14 @@ namespace StreamOn.Minigames.TileArena
 
         private void GameOver()
         {
-            _elapsedAtEnd = Mathf.Max(0f, Time.unscaledTime - _runStartedAt);
+            _elapsedAtEnd = Mathf.Max(0f, Time.time - _runStartedAt);
             _running = false;
             _pointerDirections.Clear();
             if (gameOverScore != null) gameOverScore.text = _score.ToString();
             if (gameOverBest != null) gameOverBest.text = _best.ToString();
             bool endingBroadcast = broadcastSession != null && broadcastSession.BroadcastActive;
             if (gameOverOverlay != null) gameOverOverlay.SetActive(!endingBroadcast);
-            audioController?.StopMusic();
+            audioController?.FadeOutMusicForGameOver();
             audioController?.PlayGameOver();
             chatAdapter?.OnGameOver(_score > _bestAtRunStart);
             broadcastSession?.OnAttemptGameOver(_score, maximumLives - _lives);

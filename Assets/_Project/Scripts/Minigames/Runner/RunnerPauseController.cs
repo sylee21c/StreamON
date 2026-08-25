@@ -28,6 +28,10 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private TMP_Text volumeLabel;
         [SerializeField] private TMP_Text aiLabel;
         [SerializeField] private Slider volumeSlider;
+        [SerializeField] private Slider bgmVolumeSlider;
+        [SerializeField] private Slider sfxVolumeSlider;
+        [SerializeField] private TMP_Text bgmVolumeLabel;
+        [SerializeField] private TMP_Text sfxVolumeLabel;
         [SerializeField] private Button resumeButton;
         [SerializeField] private Button settingsButton;
         [SerializeField] private Button manualSaveButton;
@@ -138,9 +142,14 @@ namespace StreamOn.Minigames.Runner
             aiToggleButton ??= settingButtons.FirstOrDefault(item => item.name == "AI Toggle Button");
             settingsBackButton ??= settingButtons.FirstOrDefault(item => item.name == "Back Button");
             volumeSlider ??= settingsPanel.GetComponentInChildren<Slider>(true);
+            Slider[] sliders = settingsPanel.GetComponentsInChildren<Slider>(true);
+            bgmVolumeSlider ??= sliders.FirstOrDefault(item => item.name == "BGM Volume");
+            sfxVolumeSlider ??= sliders.FirstOrDefault(item => item.name == "SFX Volume");
             TMP_Text[] settingTexts = settingsPanel.GetComponentsInChildren<TMP_Text>(true);
             volumeLabel ??= settingTexts.FirstOrDefault(item => item.name == "Volume Label");
             aiLabel ??= settingTexts.FirstOrDefault(item => item.name == "AI Label");
+            bgmVolumeLabel ??= settingTexts.FirstOrDefault(item => item.name == "BGM Volume Label");
+            sfxVolumeLabel ??= settingTexts.FirstOrDefault(item => item.name == "SFX Volume Label");
 
             resumeButton?.onClick.AddListener(ResumeWithCountdown);
             settingsButton?.onClick.AddListener(OpenSettings);
@@ -158,6 +167,17 @@ namespace StreamOn.Minigames.Runner
                 volumeSlider.value = RunnerUserSettingsStore.Load().masterVolume;
                 volumeSlider.onValueChanged.AddListener(SetVolume);
             }
+            RunnerUserSettingsData audioSettings = RunnerUserSettingsStore.Load();
+            if (bgmVolumeSlider != null)
+            {
+                bgmVolumeSlider.SetValueWithoutNotify(audioSettings.bgmVolume);
+                bgmVolumeSlider.onValueChanged.AddListener(SetBgmVolume);
+            }
+            if (sfxVolumeSlider != null)
+            {
+                sfxVolumeSlider.SetValueWithoutNotify(audioSettings.sfxVolume);
+                sfxVolumeSlider.onValueChanged.AddListener(SetSfxVolume);
+            }
             RefreshSettingsLabels();
             countdownText.gameObject.SetActive(false);
             pausePanel.SetActive(false);
@@ -167,6 +187,8 @@ namespace StreamOn.Minigames.Runner
         private void OpenSettings() { pausePanel.SetActive(false); settingsPanel.SetActive(true); RefreshSettingsLabels(); }
         private void CloseSettings() { settingsPanel.SetActive(false); pausePanel.SetActive(true); }
         private void SetVolume(float value) { AudioListener.volume = value; RunnerUserSettingsData data = RunnerUserSettingsStore.Load(); data.masterVolume = value; RunnerUserSettingsStore.Save(data); RefreshSettingsLabels(); }
+        private void SetBgmVolume(float value) { RunnerRoomAudioController.SetGlobalBgmVolume(value); RunnerGameAudioController.SetGlobalBgmVolume(value); RefreshSettingsLabels(); }
+        private void SetSfxVolume(float value) { RunnerRoomAudioController.SetGlobalSfxVolume(value); RunnerGameAudioController.SetGlobalSfxVolume(value); RefreshSettingsLabels(); }
         private void ManualSave()
         {
             bool saved = campaign != null ? campaign.ManualSave()
@@ -180,6 +202,9 @@ namespace StreamOn.Minigames.Runner
         {
             if (volumeLabel != null) volumeLabel.text = $"전체 음량  {Mathf.RoundToInt((volumeSlider != null ? volumeSlider.value : AudioListener.volume) * 100f)}%";
             if (aiLabel != null) aiLabel.text = $"AI 채팅  {(chat != null && chat.AiEnabled ? "ON" : "OFF")}";
+            RunnerUserSettingsData data = RunnerUserSettingsStore.Load();
+            if (bgmVolumeLabel != null) bgmVolumeLabel.text = $"BGM  {Mathf.RoundToInt(data.bgmVolume * 100f)}%";
+            if (sfxVolumeLabel != null) sfxVolumeLabel.text = $"SFX  {Mathf.RoundToInt(data.sfxVolume * 100f)}%";
         }
     }
 }

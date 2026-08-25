@@ -16,6 +16,7 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private RunnerHUD hud;
         [SerializeField] private RunnerCampaignController campaign;
         [SerializeField] private RunnerBroadcastAudienceController audience;
+        [SerializeField] private RunnerGameAudioController audioController;
 
         [Header("Run Balance")]
         [SerializeField] private float startingSpeed = 8f;
@@ -41,6 +42,10 @@ namespace StreamOn.Minigames.Runner
         public float ElapsedSeconds { get; private set; }
         public int EnemiesDefeated { get; private set; }
         public int HitsTaken { get; private set; }
+        public int ObstaclesCleared { get; private set; }
+        public int EnemiesAvoided { get; private set; }
+        public int AttacksPerformed { get; private set; }
+        public bool HasActiveEnemy => spawner != null && spawner.HasActiveEnemy;
         public float BroadcastDurationSeconds { get; private set; } = 90f;
         public float BroadcastSecondsRemaining { get; private set; }
         public float BroadcastElapsedSeconds { get; private set; }
@@ -62,6 +67,7 @@ namespace StreamOn.Minigames.Runner
         private float _runScoreMultiplier = 1f;
         private Coroutine _gameOverPresentationRoutine;
         private Coroutine _broadcastFinishRoutine;
+        private bool _waitingForDeathAnimation;
         private bool _broadcastActive;
         private int _bestAttemptScore;
         private int _lastReportedAttemptScore;
@@ -73,6 +79,7 @@ namespace StreamOn.Minigames.Runner
             if (campaign == null) campaign = GetComponent<RunnerCampaignController>();
             if (audience == null) audience = GetComponent<RunnerBroadcastAudienceController>();
             if (audience == null) audience = gameObject.AddComponent<RunnerBroadcastAudienceController>();
+            if (audioController == null) audioController = GetComponent<RunnerGameAudioController>();
         }
 
         private void Start()
@@ -104,7 +111,7 @@ namespace StreamOn.Minigames.Runner
                 {
                     hud.SetScore(Score, HighScore, WorldSpeed, BroadcastSecondsRemaining);
                     hud.SetRetryAvailable(CanRestartAttempt, BroadcastSecondsRemaining);
-                    if (BroadcastSecondsRemaining <= 0f) FinishBroadcast();
+                    if (BroadcastSecondsRemaining <= 0f && !_waitingForDeathAnimation) FinishBroadcast();
                 }
             }
             if (State != RunnerGameState.Playing) return;
@@ -136,6 +143,9 @@ namespace StreamOn.Minigames.Runner
             ElapsedSeconds = 0f;
             EnemiesDefeated = 0;
             HitsTaken = 0;
+            ObstaclesCleared = 0;
+            EnemiesAvoided = 0;
+            AttacksPerformed = 0;
             LastEndReason = RunnerRunEndReason.None;
             BroadcastResult = null;
             FinalRawGameScore = 0;
@@ -158,6 +168,7 @@ namespace StreamOn.Minigames.Runner
                 StopCoroutine(_gameOverPresentationRoutine);
                 _gameOverPresentationRoutine = null;
             }
+            _waitingForDeathAnimation = false;
             State = RunnerGameState.Playing;
             AttemptsPlayed++;
             WorldSpeed = _runStartingSpeed;
@@ -185,8 +196,12 @@ namespace StreamOn.Minigames.Runner
             ElapsedSeconds = 0f;
             EnemiesDefeated = 0;
             HitsTaken = 0;
+            ObstaclesCleared = 0;
+            EnemiesAvoided = 0;
+            AttacksPerformed = 0;
             LastEndReason = RunnerRunEndReason.None;
             _broadcastActive = false;
+            _waitingForDeathAnimation = false;
             AttemptsPlayed = 0;
             _bestAttemptScore = 0;
             BroadcastElapsedSeconds = 0f;
@@ -220,6 +235,7 @@ namespace StreamOn.Minigames.Runner
         public void OnObstacleCleared(RunnerObstacleType obstacleType)
         {
             if (State != RunnerGameState.Playing) return;
+            ObstaclesCleared++;
             _rawScore += obstacleClearScore;
             Score = Mathf.FloorToInt(_rawScore);
             ReportRawScoreDelta();
@@ -232,6 +248,7 @@ namespace StreamOn.Minigames.Runner
         public void OnPlayerHit()
         {
             if (State != RunnerGameState.Playing) return;
+            audioController?.PlayPlayerHit();
             HitsTaken++;
             audience?.OnPlayerHit(player.CurrentHealth <= 1);
             chat.React(player.CurrentHealth <= 1 ? RunnerChatEvent.LowHealth : RunnerChatEvent.PlayerHit);
@@ -239,7 +256,28 @@ namespace StreamOn.Minigames.Runner
             if (player.CurrentHealth <= 0) EndRun(RunnerRunEndReason.PlayerDefeated);
         }
 
-        public void OnPlayerJumped() => chat.React(RunnerChatEvent.PlayerJumped);
+        public void OnPlayerJumped()
+        {
+            audioController?.PlayJump();
+            chat.React(RunnerChatEvent.PlayerJumped);
+        }
+
+        public void OnPlayerRolled() => audioController?.PlayRoll();
+
+        public void OnPlayerLanded() => audioController?.PlayLanding();
+
+        public void OnPlayerAttacked()
+        {
+            if (State != RunnerGameState.Playing) return;
+            audioController?.PlayAttack();
+            AttacksPerformed++;
+        }
+
+        public void OnEnemyAvoided()
+        {
+            if (State != RunnerGameState.Playing) return;
+            EnemiesAvoided++;
+        }
 
         public void OnAttackMissed()
         {
@@ -250,6 +288,7 @@ namespace StreamOn.Minigames.Runner
         public void OnEnemyDefeated()
         {
             if (State != RunnerGameState.Playing) return;
+            audioController?.PlayEnemyDefeated();
             EnemiesDefeated++;
             _rawScore += enemyDefeatScore;
             Score = Mathf.FloorToInt(_rawScore);
@@ -277,6 +316,8 @@ namespace StreamOn.Minigames.Runner
             }
             if (reason == RunnerRunEndReason.PlayerDefeated)
             {
+                audioController?.FadeOutMusicForGameOver();
+                audioController?.PlayGameOver();
                 audience?.OnAttemptDefeated();
                 if (RunnerBroadcastSessionStore.IsActive)
                 {
@@ -289,6 +330,14 @@ namespace StreamOn.Minigames.Runner
             else if (reason == RunnerRunEndReason.TimeLimitCompleted)
                 BroadcastSecondsRemaining = 0f;
             hud.SetScore(Score, HighScore, WorldSpeed, Mathf.Max(0f, BroadcastSecondsRemaining));
+            if (reason == RunnerRunEndReason.PlayerDefeated)
+            {
+                hud.ShowGameOver(false);
+                _waitingForDeathAnimation = true;
+                _gameOverPresentationRoutine = StartCoroutine(CompleteDeathPresentation(isNewHighScore));
+                return;
+            }
+
             // A failed attempt now ends the broadcast. Do not expose the retry panel
             // or wait for the remaining broadcast timer after game over.
             if (_broadcastActive)
@@ -297,32 +346,36 @@ namespace StreamOn.Minigames.Runner
                 return;
             }
             chat.BeginRunEndedChat(isNewHighScore, false);
-            if (reason == RunnerRunEndReason.PlayerDefeated && deathAnimationDisplaySeconds > 0f)
-            {
-                hud.ShowGameOver(false);
-                _gameOverPresentationRoutine = StartCoroutine(ShowGameOverAfterDeathAnimation());
-            }
-            else
-            {
-                hud.ShowGameOver(true);
-                hud.SetRetryAvailable(CanRestartAttempt, BroadcastSecondsRemaining);
-            }
+            hud.ShowGameOver(true);
+            hud.SetRetryAvailable(CanRestartAttempt, BroadcastSecondsRemaining);
             if (BroadcastSecondsRemaining <= 0f) FinishBroadcast();
         }
 
-        private System.Collections.IEnumerator ShowGameOverAfterDeathAnimation()
+        private System.Collections.IEnumerator CompleteDeathPresentation(bool isNewHighScore)
         {
-            yield return new WaitForSecondsRealtime(deathAnimationDisplaySeconds);
+            if (player != null) yield return player.WaitForDeathAnimationComplete(deathAnimationDisplaySeconds);
+            else if (deathAnimationDisplaySeconds > 0f) yield return new WaitForSecondsRealtime(deathAnimationDisplaySeconds);
+
             _gameOverPresentationRoutine = null;
-            if (State != RunnerGameState.GameOver || !_broadcastActive
-                || LastEndReason != RunnerRunEndReason.PlayerDefeated) yield break;
+            _waitingForDeathAnimation = false;
+            if (State != RunnerGameState.GameOver || LastEndReason != RunnerRunEndReason.PlayerDefeated) yield break;
+
+            if (_broadcastActive)
+            {
+                FinishBroadcast();
+                yield break;
+            }
+
+            chat.BeginRunEndedChat(isNewHighScore, false);
             hud.ShowGameOver(true);
             hud.SetRetryAvailable(CanRestartAttempt, BroadcastSecondsRemaining);
+            if (BroadcastSecondsRemaining <= 0f) FinishBroadcast();
         }
 
         private void FinishBroadcast()
         {
             if (!_broadcastActive) return;
+            _waitingForDeathAnimation = false;
             _broadcastActive = false;
             FinalRawGameScore = RunnerBroadcastSessionStore.RawScore;
             FinalBroadcastScore = RunnerBroadcastSessionStore.BroadcastScore;

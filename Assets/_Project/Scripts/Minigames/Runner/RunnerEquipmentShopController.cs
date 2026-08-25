@@ -1,3 +1,4 @@
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -22,11 +23,13 @@ namespace StreamOn.Minigames.Runner
         [SerializeField] private TMP_Text noticeText;
 
         private RunnerCampaignSaveData _save;
+        public event Action Closed;
+        public bool IsOpen => shopPanel != null && shopPanel.activeInHierarchy;
 
         private void Start()
         {
-            openButton?.onClick.AddListener(Open);
-            closeButton?.onClick.AddListener(Close);
+            openButton?.onClick.AddListener(OpenShop);
+            closeButton?.onClick.AddListener(CloseShop);
             pcButton?.onClick.AddListener(() => Purchase(RunnerEquipmentType.Pc));
             microphoneButton?.onClick.AddListener(() => Purchase(RunnerEquipmentType.Microphone));
             fitnessButton?.onClick.AddListener(() => Purchase(RunnerEquipmentType.Fitness));
@@ -35,8 +38,20 @@ namespace StreamOn.Minigames.Runner
             Reload();
         }
 
-        private void Open() { Reload(); if (shopPanel != null) shopPanel.SetActive(true); }
-        private void Close() { if (shopPanel != null) shopPanel.SetActive(false); }
+        public void OpenShop()
+        {
+            Reload();
+            if (openButton != null) openButton.gameObject.SetActive(false);
+            if (shopPanel != null) shopPanel.SetActive(true);
+        }
+
+        public void CloseShop()
+        {
+            bool wasOpen = shopPanel != null && shopPanel.activeSelf;
+            if (shopPanel != null) shopPanel.SetActive(false);
+            if (openButton != null) openButton.gameObject.SetActive(true);
+            if (wasOpen) Closed?.Invoke();
+        }
 
         private void Reload()
         {

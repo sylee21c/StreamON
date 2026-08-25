@@ -435,6 +435,13 @@ namespace StreamOn.Minigames.TileArena
                 -growthSettings.maximumBufferedHeatChange, growthSettings.maximumBufferedHeatChange);
         }
 
+        public void ApplyMissionOutcome(float heatChange, int donationReward)
+        {
+            AddHype(heatChange);
+            _liveDonationWon += Mathf.Max(0, donationReward);
+            RefreshChatScale();
+        }
+
         private ComposureRankRule CurrentComposureRule()
         {
             if (campaignSettings == null || !RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save)) return null;

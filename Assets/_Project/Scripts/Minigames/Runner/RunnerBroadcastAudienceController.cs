@@ -332,6 +332,14 @@ namespace StreamOn.Minigames.Runner
                 -_settings.maximumBufferedHeatChange, _settings.maximumBufferedHeatChange);
         }
 
+        public void ApplyMissionOutcome(float heatChange, int donationReward)
+        {
+            if (!_running) return;
+            AddHype(heatChange);
+            LiveDonationWon += Mathf.Max(0, donationReward);
+            RefreshChatScale();
+        }
+
         private ComposureRankRule CurrentComposureRule()
         {
             RunnerCampaignSettings campaignSettings = _gameManager != null ? _gameManager.CampaignSettings : null;
