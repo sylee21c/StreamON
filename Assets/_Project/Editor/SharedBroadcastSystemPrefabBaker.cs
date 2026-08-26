@@ -64,8 +64,14 @@ namespace StreamOn.EditorTools
             }
 
             Dictionary<Type, LayoutSnapshot> runnerLayout = CaptureRunnerLayout();
+            GameObject existingComposite = AssetDatabase.LoadAssetAtPath<GameObject>(CompositePrefabPath);
+            BroadcastUiAudioController existingAudio = existingComposite != null
+                ? existingComposite.GetComponent<BroadcastUiAudioController>() : null;
             GameObject root = new GameObject("Shared Broadcast System", typeof(RectTransform), typeof(Canvas),
-                typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(SharedBroadcastSystemRoot));
+                typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(SharedBroadcastSystemRoot),
+                typeof(BroadcastUiAudioController));
+            if (existingAudio != null)
+                EditorUtility.CopySerialized(existingAudio, root.GetComponent<BroadcastUiAudioController>());
             Canvas canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 20000;

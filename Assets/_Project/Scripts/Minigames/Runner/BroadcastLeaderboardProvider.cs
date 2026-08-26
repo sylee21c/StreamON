@@ -22,11 +22,19 @@ namespace StreamOn.Minigames.Runner
 
         private Task<bool> _readyTask;
         private string _synchronizedStreamerName;
+        private bool _initializationStarted;
 
         private void Awake()
         {
-            if (settings != null && settings.useOnlineLeaderboard)
-                StartCoroutine(InitializeAndFlush());
+            Configure(settings);
+        }
+
+        public void Configure(RunnerCampaignSettings campaignSettings)
+        {
+            if (campaignSettings != null) settings = campaignSettings;
+            if (_initializationStarted || settings == null || !settings.useOnlineLeaderboard) return;
+            _initializationStarted = true;
+            StartCoroutine(InitializeAndFlush());
         }
 
         public IEnumerator Submit(BroadcastLeaderboardEntry entry, bool followerBoard, Action<bool> completed = null)
@@ -61,7 +69,8 @@ namespace StreamOn.Minigames.Runner
             return new BroadcastLeaderboardEntry
             {
                 playerId = save.playerId,
-                displayName = string.IsNullOrWhiteSpace(save.streamerName) ? settings.defaultStreamerName : save.streamerName,
+                displayName = RunnerUserSettingsStore.LeaderboardDisplayName(
+                    string.IsNullOrWhiteSpace(save.streamerName) ? settings.defaultStreamerName : save.streamerName),
                 gameId = gameId,
                 score = gameId == BroadcastGameId.Runner ? save.bestRunnerGameScore
                     : gameId == BroadcastGameId.TileArena ? save.bestTileArenaGameScore : save.bestPlasticGameScoreAtNight,
@@ -73,6 +82,16 @@ namespace StreamOn.Minigames.Runner
 
         private IEnumerator InitializeAndFlush()
         {
+            Task<bool> ready = EnsureReadyAsync();
+            yield return new WaitUntil(() => ready.IsCompleted);
+            if (ready.Status != TaskStatus.RanToCompletion || !ready.Result) yield break;
+
+            yield return FlushPending();
+        }
+
+        public IEnumerator FlushPending()
+        {
+            if (settings == null || !settings.useOnlineLeaderboard) yield break;
             Task<bool> ready = EnsureReadyAsync();
             yield return new WaitUntil(() => ready.IsCompleted);
             if (ready.Status != TaskStatus.RanToCompletion || !ready.Result) yield break;
@@ -235,7 +254,8 @@ namespace StreamOn.Minigames.Runner
 
         private async Task SynchronizePlayerNameAsync(string streamerName)
         {
-            string sanitized = SanitizePlayerName(streamerName);
+            string fixedName = RunnerUserSettingsStore.LeaderboardDisplayName(streamerName);
+            string sanitized = SanitizePlayerName(fixedName);
             if (sanitized == _synchronizedStreamerName) return;
             await AuthenticationService.Instance.UpdatePlayerNameAsync(sanitized);
             _synchronizedStreamerName = sanitized;
@@ -264,6 +284,60 @@ namespace StreamOn.Minigames.Runner
                 || message.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "Unity Dashboard의 리더보드 ID를 확인하세요.";
             return "온라인 연결 실패 / 기록은 재전송 대기 중";
+        }
+    }
+
+    /// <summary>
+    /// Keeps online score submission alive across scene changes. This is intentionally
+    /// independent from the dashboard UI, so records upload even if that panel is never opened.
+    /// </summary>
+    public static class BroadcastLeaderboardRuntime
+    {
+        private static BroadcastLeaderboardAutoUploader _uploader;
+
+        public static void EnsureRunning(RunnerCampaignSettings settings)
+        {
+            if (settings == null || !settings.useOnlineLeaderboard) return;
+            if (_uploader != null)
+            {
+                _uploader.Configure(settings);
+                return;
+            }
+
+            GameObject root = new GameObject("Stream ON Online Leaderboard");
+            UnityEngine.Object.DontDestroyOnLoad(root);
+            _uploader = root.AddComponent<BroadcastLeaderboardAutoUploader>();
+            _uploader.Configure(settings);
+        }
+    }
+
+    public sealed class BroadcastLeaderboardAutoUploader : MonoBehaviour
+    {
+        private const float UploadIntervalSeconds = 5f;
+        private RunnerCampaignSettings _settings;
+        private BroadcastLeaderboardProvider _provider;
+        private Coroutine _loop;
+
+        public void Configure(RunnerCampaignSettings settings)
+        {
+            if (settings == null) return;
+            _settings = settings;
+            if (_provider == null) _provider = gameObject.AddComponent<BroadcastLeaderboardProvider>();
+            _provider.Configure(_settings);
+            if (_loop == null) _loop = StartCoroutine(UploadLoop());
+        }
+
+        private IEnumerator UploadLoop()
+        {
+            // Configure() already performs the initial flush. Delay the polling loop so
+            // an existing pending record cannot be submitted twice during startup.
+            yield return new WaitForSecondsRealtime(UploadIntervalSeconds);
+            while (true)
+            {
+                if (_provider != null && _settings != null && _settings.useOnlineLeaderboard)
+                    yield return _provider.FlushPending();
+                yield return new WaitForSecondsRealtime(UploadIntervalSeconds);
+            }
         }
     }
 }

@@ -154,6 +154,7 @@ namespace StreamOn.Minigames.Runner
             if (ignoreButton != null) ignoreButton.gameObject.SetActive(true);
             if (ignoreLabel != null) ignoreLabel.text = "4. 무반응";
             SetPromptVisible(Time.timeScale > 0f, true);
+            BroadcastUiAudioController.Play(BroadcastUiSound.EventPrompt);
             _answered = false;
             _chat?.React(RunnerChatEvent.WitPrompt);
 
@@ -282,6 +283,8 @@ namespace StreamOn.Minigames.Runner
 
         private void ApplyWitQuality(int quality, string feedback)
         {
+            BroadcastUiAudioController.Play(quality >= 2 ? BroadcastUiSound.Success
+                : quality == 1 ? BroadcastUiSound.Neutral : BroadcastUiSound.Failure);
             WitRankRule rule = campaignSettings != null ? campaignSettings.WitRule(WitRank) : null;
             if (quality >= 2)
             {

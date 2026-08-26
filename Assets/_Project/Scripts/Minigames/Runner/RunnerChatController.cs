@@ -21,6 +21,8 @@ namespace StreamOn.Minigames.Runner
         MissionStarted, MissionSuccess, MissionNearMiss, MissionFailed, MissionFailedBadly,
         TileArenaStarted, TileArenaJumped, TileArenaPickup,
         TileArenaStageCleared, TileArenaPlayerHit, TileArenaLowLives, TileArenaGameOver,
+        PlasticPreparationStarted, PlasticPreparationIdle, PlasticNightStarted,
+        PlasticStrongGhostDefeated, PlasticBedDamaged, PlasticPlayerStunned, PlasticDefenseDestroyed,
         ChatConflict, ChatFraternization
     }
 
@@ -572,6 +574,7 @@ namespace StreamOn.Minigames.Runner
                         RunnerViewerData viewer = _activeViewers.FirstOrDefault(item => item.viewerId == message.speakerId);
                         if (viewer == null || _bannedViewers.Contains(viewer.viewerId)
                             || !TrySanitize(message.message, out string safeMessage)) continue;
+                        if (!IsAllowedPlasticMessage(safeMessage, snapshot)) continue;
                         if (EnqueueRendered(viewer, safeMessage)) accepted++;
                     }
                     if (accepted > 0)
@@ -968,6 +971,7 @@ namespace StreamOn.Minigames.Runner
             bool fraternizationCorrect = _fraternizationActive && _fraternizationOffenders.Contains(viewerId);
             bool correct = conflictCorrect || fraternizationCorrect;
             _bannedViewers.Add(viewerId);
+            BroadcastUiAudioController.Play(BroadcastUiSound.ViewerBan);
             RemoveViewerChatHistory(viewerId);
             EnqueueSystemMessage($"{clickedViewer.nickname} 님이 강제 퇴장되었습니다.");
 
@@ -1282,6 +1286,13 @@ namespace StreamOn.Minigames.Runner
                 RunnerChatEvent.TileArenaPlayerHit => new[] { "아니", "?", "???", "ㅋㅋㅋㅋㅋㅋ", "아니 이걸?", "뭐함?", "에반데", "개못하네..." },
                 RunnerChatEvent.TileArenaLowLives => new[] { "아 제발", "?", "좀만 더", "에반데", "제발...", "ㄱㄱ" },
                 RunnerChatEvent.TileArenaGameOver => new[] { "아니 뭐하냐", "?", "ㅋㅋㅋㅋㅋㅋㅋㅋ", "아니 이걸?", "예?", "...", "뭐함?" },
+                RunnerChatEvent.PlasticPreparationStarted => BuildLocalPlasticPreparationPool(false),
+                RunnerChatEvent.PlasticPreparationIdle => BuildLocalPlasticPreparationPool(true),
+                RunnerChatEvent.PlasticNightStarted => new[] { "온다", "밤 시작", "침대 잘 봐", "이번엔 버티자", "어어 온다", "배치값 하자", "센 애 잘 봐", "뒤 뚫리지 마라", "가보자", "시작됐다" },
+                RunnerChatEvent.PlasticStrongGhostDefeated => new[] { "센 거 잡았다", "큰 놈 컷", "오", "나이스", "저런 애부터 잡자", "처치 속도 좋고", "강한 거 잘 녹네", "깔끔", "이건 좋았다", "점수 잘 오른다" },
+                RunnerChatEvent.PlasticBedDamaged => new[] { "침대 맞는다", "뒤 봐", "어어 침대", "본체부터", "침대 위험", "뭐함?", "막아 막아", "저거 침대 간다", "라인 뚫림", "아 제발" },
+                RunnerChatEvent.PlasticPlayerStunned => new[] { "누웠네", "아 눕는다", "너무 들어갔다", "일어나라", "침대 누가 지킴", "?", "아니", "잠깐 버텨", "또 누움?", "앞에 너무 갔어" },
+                RunnerChatEvent.PlasticDefenseDestroyed => new[] { "벽 터졌다", "동료 하나 갔다", "그쪽 뚫림", "라인 무너진다", "다음 낮에 채워", "아이고", "저기 비었다", "침대 쪽 위험", "하나 날아갔네", "수리각" },
                 _ => new[] { "아깝네", "다시 ㄱ", "뭐 예상했음", "끝?" }
             };
             for (int attempt = 0; attempt < Mathf.Min(8, pool.Length * 2); attempt++)
@@ -1300,6 +1311,72 @@ namespace StreamOn.Minigames.Runner
             int score = gameManager != null ? gameManager.Score : Mathf.Max(0, _externalSnapshot?.score ?? 0);
             int nextThousand = (score / 1000 + 1) * 1000;
             return new[] { "ㅅㅅ", "나이스", "오", "가보자", "가즈아", $"{nextThousand}점 가자" };
+        }
+
+        private string[] BuildLocalPlasticPreparationPool(bool idle)
+        {
+            List<string> pool = idle
+                ? new List<string> { "노잼", "ㄴㅈ", "빨리해라", "뭐함?", "시간 간다", "자냐", "아직도?", "상점 구경만 하네", "배치 안함?", "언제 시작함", "손 멈췄는데", "정비 끝나겠다" }
+                : new List<string> { "정비 시작", "벽 상태 보자", "돈부터 보자", "배치 체크", "이번엔 어디 막음", "침대 앞 확인", "왼쪽 비었는데", "시간 잘 써라", "일단 둘러봐", "라인 정리하자", "다음 밤 준비 ㄱ", "부서진 데부터 보자" };
+            RunnerChatSnapshot snapshot = _externalSnapshot;
+            foreach (string name in SplitPlasticContext(snapshot?.plasticAffordableCompanionNames))
+            {
+                pool.Add(name + " 하나 늘리자");
+                pool.Add(name + " 더 살 수 있네");
+                pool.Add(name + " 추가 괜찮은데");
+            }
+            foreach (string name in SplitPlasticContext(snapshot?.plasticAffordableBrickNames))
+            {
+                pool.Add(name + " 더 사자");
+                pool.Add(name + " 살 돈 되네");
+            }
+            foreach (string name in SplitPlasticContext(snapshot?.plasticAffordableUpgradeNames))
+            {
+                pool.Add(name + " 가능함");
+                pool.Add(name + " 찍을 수 있네");
+            }
+            return pool.Distinct().ToArray();
+        }
+
+        private static IEnumerable<string> SplitPlasticContext(string value) =>
+            string.IsNullOrWhiteSpace(value)
+                ? Enumerable.Empty<string>()
+                : value.Split('|').Select(item => item.Trim()).Where(item => item.Length > 0);
+
+        private static bool IsAllowedPlasticMessage(string message, RunnerChatSnapshot snapshot)
+        {
+            if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.gameTitle)
+                || snapshot.gameTitle.IndexOf("Plastic Knightmare", StringComparison.OrdinalIgnoreCase) < 0)
+                return true;
+            bool preparation = snapshot.plasticPhase != null && snapshot.plasticPhase.Contains("정비");
+            if (!preparation)
+            {
+                string[] forbiddenNightWords = { "보스", "보스전", "콤보", "궁" };
+                return !forbiddenNightWords.Any(message.Contains);
+            }
+
+            string[] companionNames = SplitPlasticContext(snapshot.plasticCompanionNames).ToArray();
+            if (message.Contains("동료 강화")
+                || companionNames.Any(name => message.Contains(name) && message.Contains("강화"))) return false;
+
+            bool purchaseIntent = new[] { "사자", "사라", "사야", "살까", "살 수", "구매", "늘리", "추가하", "더 사", "뽑자", "강화", "찍을 수", "찍자", "공격력 올리", "체력 올리" }
+                .Any(message.Contains);
+            string affordable = snapshot.plasticAffordablePurchases ?? string.Empty;
+            foreach (string name in companionNames)
+            {
+                bool companionPurchaseIntent = message.Contains(name) && (purchaseIntent
+                    || message.Contains(" 하나") || message.Contains(" 더") || message.Contains("가자"));
+                if (companionPurchaseIntent && !affordable.Contains(name)) return false;
+                purchaseIntent |= companionPurchaseIntent;
+            }
+            if (!purchaseIntent) return true;
+            if (!snapshot.plasticHasAffordablePurchase) return false;
+            if (message.Contains("방벽") || message.Contains("벽 ") || message.StartsWith("벽"))
+                if (string.IsNullOrWhiteSpace(snapshot.plasticAffordableBrickNames)) return false;
+            if (message.Contains("강화") || message.Contains("찍을 수") || message.Contains("찍자")
+                || message.Contains("공격력 올리") || message.Contains("체력 올리"))
+                if (string.IsNullOrWhiteSpace(snapshot.plasticAffordableUpgradeNames)) return false;
+            return true;
         }
 
         private RunnerViewerData PickLocalPersona(RunnerChatEvent chatEvent)
@@ -1485,6 +1562,13 @@ namespace StreamOn.Minigames.Runner
             RunnerChatEvent.TileArenaPlayerHit => "빨간 위험 타일에 닿아 목숨을 잃음",
             RunnerChatEvent.TileArenaLowLives => "타일 아레나에서 남은 목숨이 얼마 없음",
             RunnerChatEvent.TileArenaGameOver => "타일 아레나 게임 오버",
+            RunnerChatEvent.PlasticPreparationStarted => "Plastic Knightmare 낮 정비가 시작됨",
+            RunnerChatEvent.PlasticPreparationIdle => "Plastic Knightmare 낮 정비 중 장시간 무행동",
+            RunnerChatEvent.PlasticNightStarted => "Plastic Knightmare 밤 전투가 시작됨",
+            RunnerChatEvent.PlasticStrongGhostDefeated => "Plastic Knightmare에서 강한 유형의 유령을 처치함",
+            RunnerChatEvent.PlasticBedDamaged => "Plastic Knightmare에서 침대가 공격받음",
+            RunnerChatEvent.PlasticPlayerStunned => "Plastic Knightmare에서 플레이어 HP가 0이 되어 잠시 무력화됨",
+            RunnerChatEvent.PlasticDefenseDestroyed => "Plastic Knightmare에서 방벽 또는 동료가 파괴됨",
             RunnerChatEvent.ChatConflict => "분탕 유저가 스트리머나 다른 시청자에게 근거 없는 도발을 던져 실제 채팅 분쟁이 시작됨",
             RunnerChatEvent.ChatFraternization => "일부 시청자들이 서로 닉네임을 부르며 방송과 무관한 친분 대화를 시작함",
             _ => "특별한 사건 없이 게임 플레이 중"
@@ -1550,6 +1634,8 @@ namespace StreamOn.Minigames.Runner
         IPointerExitHandler, IPointerMoveHandler
     {
         private TMP_Text _text;
+        private TMP_Text _banLabel;
+        private RectTransform _banLabelRect;
         private string _viewerId;
         private Action<string> _onClick;
         private FontStyles _baseStyle;
@@ -1557,6 +1643,7 @@ namespace StreamOn.Minigames.Runner
         public void Bind(string viewerId, Action<string> onClick)
         {
             if (_text == null) _text = GetComponent<TMP_Text>();
+            EnsureBanLabel();
             _viewerId = viewerId;
             _onClick = onClick;
             if (_text != null)
@@ -1564,11 +1651,13 @@ namespace StreamOn.Minigames.Runner
                 _baseStyle = _text.fontStyle & ~FontStyles.Underline;
                 _text.fontStyle = _baseStyle;
             }
+            SetBanLabelVisible(false);
         }
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            if (eventData.button == PointerEventData.InputButton.Left && IsOverNickname(eventData)
+            if (eventData.button == PointerEventData.InputButton.Left
+                && (IsOverNickname(eventData) || IsOverBanLabel(eventData))
                 && !string.IsNullOrWhiteSpace(_viewerId))
             {
                 RunnerChatBanTooltip.Hide();
@@ -1586,19 +1675,76 @@ namespace StreamOn.Minigames.Runner
         public void OnPointerExit(PointerEventData eventData)
         {
             if (_text != null) _text.fontStyle = _baseStyle;
+            SetBanLabelVisible(false);
             RunnerChatBanTooltip.Hide();
         }
 
         private void UpdateHover(PointerEventData eventData)
         {
-            bool overNickname = IsOverNickname(eventData) && !string.IsNullOrWhiteSpace(_viewerId);
+            bool canBan = !string.IsNullOrWhiteSpace(_viewerId);
             if (_text != null) _text.fontStyle = _baseStyle;
-            if (overNickname) RunnerChatBanTooltip.Show(eventData.position);
-            else RunnerChatBanTooltip.Hide();
+            if (canBan) UpdateBanLabelPosition(eventData.position, eventData.enterEventCamera);
+            SetBanLabelVisible(canBan);
+            RunnerChatBanTooltip.Hide();
+        }
+
+        private void UpdateBanLabelPosition(Vector2 pointerScreenPosition, Camera eventCamera)
+        {
+            if (_banLabelRect == null) return;
+            RectTransform parentRect = transform as RectTransform;
+            if (parentRect == null) return;
+
+            const float rightOffset = 14f;
+            const float upperOffset = 18f;
+            const float screenPadding = 8f;
+            Vector2 labelScreenPosition = pointerScreenPosition + new Vector2(rightOffset, upperOffset);
+            labelScreenPosition.x = Mathf.Clamp(labelScreenPosition.x, screenPadding,
+                Mathf.Max(screenPadding, Screen.width - 92f));
+            labelScreenPosition.y = Mathf.Clamp(labelScreenPosition.y, screenPadding,
+                Mathf.Max(screenPadding, Screen.height - 32f));
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, labelScreenPosition,
+                    eventCamera, out Vector2 localPosition))
+                _banLabelRect.anchoredPosition = localPosition;
         }
 
         private bool IsOverNickname(PointerEventData eventData) => _text != null
             && TMP_TextUtilities.FindIntersectingLink(_text, eventData.position, eventData.enterEventCamera) >= 0;
+
+        private bool IsOverBanLabel(PointerEventData eventData) => _banLabelRect != null
+            && RectTransformUtility.RectangleContainsScreenPoint(_banLabelRect, eventData.position,
+                eventData.pressEventCamera != null ? eventData.pressEventCamera : eventData.enterEventCamera);
+
+        private void EnsureBanLabel()
+        {
+            if (_banLabel != null || _text == null) return;
+            GameObject labelObject = new GameObject("Ban Label", typeof(RectTransform), typeof(CanvasRenderer),
+                typeof(TextMeshProUGUI));
+            labelObject.transform.SetParent(transform, false);
+            _banLabelRect = labelObject.GetComponent<RectTransform>();
+            RectTransform parentRect = transform as RectTransform;
+            Vector2 parentPivot = parentRect != null ? parentRect.pivot : new Vector2(.5f, .5f);
+            _banLabelRect.anchorMin = parentPivot;
+            _banLabelRect.anchorMax = parentPivot;
+            _banLabelRect.pivot = Vector2.zero;
+            _banLabelRect.anchoredPosition = Vector2.zero;
+            _banLabelRect.sizeDelta = new Vector2(76f, 24f);
+            _banLabel = labelObject.GetComponent<TextMeshProUGUI>();
+            _banLabel.text = "차단하기";
+            _banLabel.font = _text.font;
+            _banLabel.fontSize = Mathf.Clamp(_text.fontSize * .82f, 11f, 16f);
+            _banLabel.fontStyle = FontStyles.Bold;
+            _banLabel.color = new Color(1f, .48f, .48f, 1f);
+            _banLabel.alignment = TextAlignmentOptions.BottomLeft;
+            _banLabel.textWrappingMode = TextWrappingModes.NoWrap;
+            _banLabel.raycastTarget = false;
+            labelObject.SetActive(false);
+        }
+
+        private void SetBanLabelVisible(bool visible)
+        {
+            if (_banLabel != null && _banLabel.gameObject.activeSelf != visible)
+                _banLabel.gameObject.SetActive(visible);
+        }
     }
 
     public sealed class RunnerChatBanTooltip : MonoBehaviour

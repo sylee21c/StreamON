@@ -19,7 +19,9 @@ namespace StreamOn.Minigames.Runner
         [SerializeField, Range(0f, 1f)] private float backgroundMusicVolume = 0.7f;
         [SerializeField, Range(0f, 1f)] private float jumpVolume = 1f;
         [SerializeField, Range(0f, 1f)] private float landingVolume = 1f;
-        [SerializeField, Range(0f, 1f)] private float rollVolume = 1f;
+        [Tooltip("구르기 효과음 전용 증폭값입니다. 원본 음량의 최대 2배까지 조절할 수 있습니다.")]
+        [InspectorName("Roll Volume Multiplier (Max 2x)")]
+        [SerializeField, Range(0f, 2f)] private float rollVolume = 2f;
         [SerializeField, Range(0f, 1f)] private float attackVolume = 1f;
         [SerializeField, Range(0f, 1f)] private float enemyDefeatedVolume = 1f;
         [SerializeField, Range(0f, 1f)] private float playerHitVolume = 1f;
@@ -48,6 +50,7 @@ namespace StreamOn.Minigames.Runner
             _bgmLevel = settings.bgmVolume;
             _sfxLevel = settings.sfxVolume;
             ConfigureSources();
+            PrepareEffects();
         }
 
         private void OnEnable()
@@ -122,8 +125,25 @@ namespace StreamOn.Minigames.Runner
 
         private void Play(AudioClip clip, float volume)
         {
-            if (clip != null && effectsSource != null)
-                effectsSource.PlayOneShot(clip, volume * _sfxLevel);
+            if (clip == null || effectsSource == null || volume <= 0f || _sfxLevel <= 0f) return;
+            if (clip.loadState == AudioDataLoadState.Unloaded) clip.LoadAudioData();
+            effectsSource.PlayOneShot(clip, volume * _sfxLevel);
+        }
+
+        private void PrepareEffects()
+        {
+            PrepareClip(jumpSound);
+            PrepareClip(landingSound);
+            PrepareClip(rollSound);
+            PrepareClip(attackSound);
+            PrepareClip(enemyDefeatedSound);
+            PrepareClip(playerHitSound);
+            PrepareClip(gameOverSound);
+        }
+
+        private static void PrepareClip(AudioClip clip)
+        {
+            if (clip != null && clip.loadState == AudioDataLoadState.Unloaded) clip.LoadAudioData();
         }
 
         private IEnumerator FadeOutMusicRoutine()

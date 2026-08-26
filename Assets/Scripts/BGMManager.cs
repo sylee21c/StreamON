@@ -2,7 +2,7 @@ using System.Collections;
 using UnityEngine;
 
 // 낮/밤 배경음악을 반복 재생. 페이즈 전환 시 크로스페이드.
-// 게임오버 시에는 현재 배경음악을 서서히 0으로 줄인다.
+// 게임오버 시에는 전용 음악으로 전환한다.
 public sealed class BGMManager : MonoBehaviour
 {
     public static BGMManager Instance { get; private set; }
@@ -96,12 +96,17 @@ public sealed class BGMManager : MonoBehaviour
         }
     }
 
-    // 게임오버 진입: 재생 중인 모든 배경음악을 0까지 줄인다.
+    // 게임오버 진입: 전용 음악으로 전환하고 페이즈 자동 감지를 잠근다.
     public void EnterGameOverMusic()
     {
         overrideActive = true;
-        if (activeFade != null) StopCoroutine(activeFade);
-        activeFade = StartCoroutine(FadeOutAllRoutine(gameOverFadeDuration));
+        if (gameOverMusic != null)
+            Crossfade(gameOverMusic, false, gameOverVolume, gameOverFadeDuration);
+        else
+        {
+            if (activeFade != null) StopCoroutine(activeFade);
+            activeFade = StartCoroutine(FadeOutAllRoutine(gameOverFadeDuration));
+        }
     }
 
     // ── Retry: gameOverMusic → 낮 음악 (반복) ─────────────────────

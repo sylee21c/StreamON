@@ -30,6 +30,7 @@ public sealed class BrickShopItem : MonoBehaviour
     public int UnitPrice { get => unitPrice; set { unitPrice = Mathf.Max(0, value); RefreshDisplay(); } }
     public int Quantity => quantity;
     public int TotalPrice => unitPrice * quantity;
+    public string DisplayName => itemName;
 
     private void OnEnable()
     {

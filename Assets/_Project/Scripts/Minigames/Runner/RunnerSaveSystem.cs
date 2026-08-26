@@ -26,8 +26,9 @@ namespace StreamOn.Minigames.Runner
     [Serializable]
     public sealed class RunnerUserSettingsData
     {
-        public int version = 2;
+        public int version = 3;
         public int activeSaveSlot = 1;
+        public string leaderboardDisplayName;
         public float masterVolume = 1f;
         public float bgmVolume = 1f;
         public float sfxVolume = 1f;
@@ -90,12 +91,44 @@ namespace StreamOn.Minigames.Runner
             _cached.masterVolume = Mathf.Clamp01(_cached.masterVolume);
             _cached.bgmVolume = Mathf.Clamp01(_cached.bgmVolume);
             _cached.sfxVolume = Mathf.Clamp01(_cached.sfxVolume);
-            _cached.version = Mathf.Max(2, _cached.version);
+            _cached.version = Mathf.Max(3, _cached.version);
             if (_cached.pendingLeaderboardSubmissions == null)
                 _cached.pendingLeaderboardSubmissions = new List<BroadcastPendingLeaderboardSubmission>();
             if (_cached.leaderboardUploadStates == null)
                 _cached.leaderboardUploadStates = new List<BroadcastLeaderboardUploadState>();
             return _cached;
+        }
+
+        /// <summary>
+        /// The first name entered on the title screen becomes the public leaderboard name.
+        /// Keeping it outside individual save slots makes every game board use one identity.
+        /// </summary>
+        public static string LockLeaderboardDisplayName(string requestedName, int maximumLength = 16)
+        {
+            RunnerUserSettingsData data = Load();
+            if (!string.IsNullOrWhiteSpace(data.leaderboardDisplayName))
+                return data.leaderboardDisplayName;
+
+            string sanitized = SanitizeLeaderboardDisplayName(requestedName, maximumLength);
+            if (string.IsNullOrWhiteSpace(sanitized)) return string.Empty;
+            data.leaderboardDisplayName = sanitized;
+            Save(data);
+            return sanitized;
+        }
+
+        public static string LeaderboardDisplayName(string fallbackName, int maximumLength = 16)
+        {
+            RunnerUserSettingsData data = Load();
+            return !string.IsNullOrWhiteSpace(data.leaderboardDisplayName)
+                ? data.leaderboardDisplayName
+                : SanitizeLeaderboardDisplayName(fallbackName, maximumLength);
+        }
+
+        private static string SanitizeLeaderboardDisplayName(string value, int maximumLength)
+        {
+            string trimmed = (value ?? string.Empty).Trim();
+            int limit = Mathf.Clamp(maximumLength, 1, 32);
+            return trimmed.Length <= limit ? trimmed : trimmed.Substring(0, limit);
         }
 
         public static void Save(RunnerUserSettingsData data)
@@ -199,7 +232,8 @@ namespace StreamOn.Minigames.Runner
             RunnerUserSettingsData data = RunnerUserSettingsStore.Load();
             data.pendingLeaderboardSubmissions ??= new List<BroadcastPendingLeaderboardSubmission>();
             data.leaderboardUploadStates ??= new List<BroadcastLeaderboardUploadState>();
-            string displayName = string.IsNullOrWhiteSpace(save.streamerName) ? settings.defaultStreamerName : save.streamerName;
+            string fallbackName = string.IsNullOrWhiteSpace(save.streamerName) ? settings.defaultStreamerName : save.streamerName;
+            string displayName = RunnerUserSettingsStore.LockLeaderboardDisplayName(fallbackName);
             BroadcastLeaderboardUploadState uploaded = data.leaderboardUploadStates.Find(item => item != null && item.boardId == boardId);
             if (uploaded != null && uploaded.hasUploadedValue && uploaded.score == score && uploaded.displayName == displayName) return;
 

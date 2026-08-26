@@ -56,13 +56,18 @@ namespace StreamOn.Minigames.Runner
             }
 
             bool enteredDeathState = false;
-            float timeoutAt = Time.realtimeSinceStartup + Mathf.Max(2f, fallbackSeconds + 1f);
-            while (Time.realtimeSinceStartup < timeoutAt)
+            float enterTimeoutAt = Time.realtimeSinceStartup + 1f;
+            float completionTimeoutAt = float.PositiveInfinity;
+            while (true)
             {
                 AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
                 if (state.fullPathHash == DeathStateHash)
                 {
-                    enteredDeathState = true;
+                    if (!enteredDeathState)
+                    {
+                        enteredDeathState = true;
+                        completionTimeoutAt = Time.realtimeSinceStartup + Mathf.Max(5f, state.length + 2f);
+                    }
                     if (!animator.IsInTransition(0) && state.normalizedTime >= 1f)
                     {
                         // Let the final death sprite render for one full frame before UI covers it.
@@ -72,6 +77,18 @@ namespace StreamOn.Minigames.Runner
                 }
                 else if (enteredDeathState && !animator.IsInTransition(0))
                 {
+                    yield break;
+                }
+
+                if (!enteredDeathState && Time.realtimeSinceStartup >= enterTimeoutAt)
+                {
+                    if (fallbackSeconds > 0f) yield return new WaitForSecondsRealtime(fallbackSeconds);
+                    yield break;
+                }
+                if (enteredDeathState && Time.realtimeSinceStartup >= completionTimeoutAt)
+                {
+                    // A disabled or externally frozen Animator must not block settlement forever.
+                    yield return new WaitForEndOfFrame();
                     yield break;
                 }
 
@@ -97,6 +114,7 @@ namespace StreamOn.Minigames.Runner
         private int _runtimeMaxHealth;
         private float _runtimeAttackCooldown;
         private float _runtimeAttackMaximumRange;
+        private AnimatorUpdateMode _defaultAnimatorUpdateMode;
         private Vector2 _baseAttackHitboxSize;
         private Vector2 _baseAttackHitboxOffset;
         private readonly ContactPoint2D[] _groundContacts = new ContactPoint2D[8];
@@ -121,6 +139,7 @@ namespace StreamOn.Minigames.Runner
 
             _body = GetComponent<Rigidbody2D>();
             _collider = GetComponent<Collider2D>();
+            _defaultAnimatorUpdateMode = animator.updateMode;
             BoxCollider2D box = (BoxCollider2D)_collider;
             _standingColliderSize = box.size;
             _standingColliderOffset = box.offset;
@@ -227,6 +246,7 @@ namespace StreamOn.Minigames.Runner
             if (attackHitbox != null) attackHitbox.enabled = false;
             StopRoll();
             animator.Rebind();
+            animator.updateMode = _defaultAnimatorUpdateMode;
             animator.Update(0f);
             animator.SetBool(DeadHash, false);
             animator.SetBool(GroundedHash, true);
@@ -276,6 +296,9 @@ namespace StreamOn.Minigames.Runner
                 animator.ResetTrigger(HurtHash);
                 animator.ResetTrigger(AttackHash);
                 animator.ResetTrigger(RollHash);
+                // The death presentation must finish in real time even if TAB slow motion
+                // was active on the fatal frame. Settlement waits for this state to end.
+                animator.updateMode = AnimatorUpdateMode.UnscaledTime;
                 animator.SetBool(DeadHash, true);
                 animator.Play(DeathStateHash, 0, 0f);
             }

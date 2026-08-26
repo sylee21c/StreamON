@@ -278,6 +278,7 @@ namespace StreamOn.Minigames.Runner
         private void Continue()
         {
             canvasGroup.interactable = false;
+            BroadcastUiAudioController.Play(BroadcastUiSound.SettlementClose);
             Action callback = _onContinue;
             _onContinue = null;
             callback?.Invoke();

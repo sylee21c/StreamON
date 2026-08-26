@@ -194,7 +194,7 @@ namespace StreamOn.Minigames.Runner
         [Min(0f)] public float sessionAutosaveIntervalSeconds = 5f;
         [Header("Leaderboard")]
         [Min(1)] public int leaderboardMaximumRows = 50;
-        public bool useOnlineLeaderboard;
+        public bool useOnlineLeaderboard = true;
         [Tooltip("Unity Dashboard에서 만든 UGS Environment 이름입니다.")]
         public string leaderboardEnvironmentName = "production";
         [Tooltip("러너 게임 최고점수 UGS Leaderboard ID")]
@@ -251,7 +251,7 @@ namespace StreamOn.Minigames.Runner
         };
 
         [Header("Plastic Knightmare Broadcast")]
-        [Min(1f)] public float plasticDayPreparationSeconds = 60f;
+        [Min(1f)] public float plasticDayPreparationSeconds = 120f;
         [Range(0f, 100f)] public float plasticNightStartingHeatMinimum = 40f;
         [Range(0f, 100f)] public float plasticNightStartingHeatMaximum = 60f;
         [Min(0)] public int plasticBedHealthScore = 200;

@@ -14,6 +14,15 @@ namespace StreamOn.Minigames.Runner
         public string gameTitle;
         public string gameState;
         public string plasticPhase;
+        public int plasticCoins;
+        public float plasticPreparationIdleSeconds;
+        public bool plasticHasAffordablePurchase;
+        public string plasticAffordablePurchases;
+        public string plasticAffordableCompanionNames;
+        public string plasticAffordableBrickNames;
+        public string plasticAffordableUpgradeNames;
+        public string plasticCompanionNames;
+        public string plasticCompanionRoster;
         public int campaignDay;
         public int campaignMaximumDays;
         public bool campaignEndless;
@@ -180,6 +189,13 @@ BengolCAT | ?
 일반 도네: 도네 문구의 단어 하나에 짧게 반응. 내용을 다시 요약하거나 감사 인사를 대신 하지 않음.
 큰 도네: 실제 금액원 ㄷㄷㄷㄷ / 와 / ??? / 미친 / ㅁㅊ / 와 실제 금액원....
 플레이나 스트리머 반응이 너무 없을 때: ㄴㅈ / 왤케 조용함 / ... / 뭐함? / 자나
+Plastic Knightmare 낮 정비 시작: 벽 상태 보자 / 돈부터 보자 / 배치 체크 / 이번엔 어디 막음 / 살 수 있는 거 있나
+Plastic Knightmare 낮 무행동: 노잼 / ㄴㅈ / 빨리해라 / 뭐함? / 시간 간다 / 자냐 / 상점 구경만 하네
+Plastic Knightmare 밤 시작: 온다 / 침대 잘 봐 / 이번엔 얼마나 버팀 / 슬슬 몰려온다 / 준비됐냐
+Plastic Knightmare 강한 유령: 센 애부터 / 큰 놈 먼저 / 저거 침대 간다 / 강한 거 붙었다 / 저거부터 녹여
+Plastic Knightmare 침대 피격: 침대 맞는다 / 뒤 봐 / 침대부터 / 본체 위험 / 어어 침대
+Plastic Knightmare 플레이어 무력화: 누웠네 / 아 눕는다 / 너무 들어갔다 / 침대 누가 지킴 / 일어나라
+Plastic Knightmare 방어물 손실: 벽 터졌다 / 동료 하나 갔다 / 그쪽 뚫림 / 라인 무너진다 / 다음 낮에 채워
 === 기준 끝 ===";
 
         private readonly string _endpoint;
@@ -369,8 +385,16 @@ BengolCAT | ?
             builder.AppendLine("현재 상황 JSON의 conflictActive가 false면 시청자끼리 싸운다거나 채팅창이 싸운다는 말을 절대 만들지 않는다.");
             builder.AppendLine("fraternizationActive가 false면 서로 오늘도 왔냐고 알아보거나 방송 밖 친분을 과시하는 친목 대화를 만들지 않는다.");
             builder.AppendLine("타일 아레나의 패턴은 매번 무작위로 교체된다. 패턴 번호는 진행도/난이도/도달 단계가 아니며 채팅에서 숫자, '벌써', '몇 스테이지', 기록 진척으로 절대 언급하지 않는다.");
-            builder.AppendLine("Plastic Knightmare는 낮 정비와 밤 공세가 반복되며 낮이 돌아올 때 Day가 증가한다. plasticPhase가 밤 전투면 '슬슬 빡세지는데', '이제 많이 나오네', 낮 정비면 '벽부터 고쳐', '정비 시간 짧다'처럼 짧게 반응한다.");
-            builder.AppendLine("시청자별 수치는 발화자 선택의 약한 확률일 뿐이며 고정 역할을 연기하지 않는다.");
+            builder.AppendLine("Plastic Knightmare는 낮 정비와 밤 공세가 반복되며 낮이 돌아올 때 Day가 증가한다.");
+            builder.AppendLine("Plastic Knightmare 낮에는 plasticAffordablePurchases에 적힌 현재 재화로 실제 구매 가능한 것만 구매 권유한다. 목록에 없거나 돈이 부족한 항목을 사라/늘려라/강화하라고 절대 말하지 않는다.");
+            builder.AppendLine("동료를 말할 때는 plasticCompanionNames의 정확한 이름을 쓴다. '그 동료', '딜러', '탱커'처럼 뭉뚱그리지 않는다.");
+            builder.AppendLine("동료는 강화 시스템이 없다. 동료 이름과 강화라는 말을 함께 쓰지 말고, 구매 가능한 동료는 '꼬꼬닭 하나 늘리자', '스타캣 더 살 수 있네'처럼 수를 늘린다고만 말한다.");
+            builder.AppendLine("plasticCompanionRoster는 현재 보유·배치된 동료 수다. 특정 동료가 많다는 평가는 가능하지만, 추가 구매 권유는 반드시 plasticAffordableCompanionNames에 있을 때만 한다.");
+            builder.AppendLine("낮에 plasticPreparationIdleSeconds가 길면 ㄴㅈ/노잼/빨리해라/뭐함?/시간 다 간다처럼 짧게 재촉한다. 짧으면 무조건 재촉하지 않는다.");
+            builder.AppendLine("Plastic Knightmare 밤에는 '궁', '궁극기', '보스', '보스전', '콤보'라는 단어를 절대 쓰지 않는다. 가장 위험한 적도 보스가 아니라 '센 유령', '강한 거', '큰 놈'으로 부른다.");
+            builder.AppendLine("밤 처치 흐름은 내부 점수 규칙을 해설하지 말고 '연속으로 잘 잡네', '처치 속도 좋다', '점수 잘 오른다'처럼만 반응한다.");
+            builder.AppendLine("각 시청자의 성격과 말투를 실제 문장 길이, 축약, 어미, ㅋㅋ/물음표 사용량에 반영한다. 같은 사건에도 서로 다른 어휘와 온도로 말하게 하며 최근 메시지와 똑같은 표현은 피한다.");
+            builder.AppendLine("시청자별 수치는 발화자 선택의 약한 확률일 뿐이며 고정 역할을 과장해서 연기하지 않는다.");
             builder.AppendLine("message에는 닉네임 없이 한 줄 35자 이내 한국어 채팅만 쓴다. 이모지와 이모티콘 문자는 절대 쓰지 않는다. 설명, 따옴표, 괄호 연기, 마크업은 금지한다.");
             builder.AppendLine("혐오, 차별, 협박, 심한 욕설, 성적 표현, 현실 인신공격은 금지한다. 가벼운 놀림과 의견 충돌까지만 허용한다.");
             builder.AppendLine(EventReactionGuide);
@@ -384,6 +408,9 @@ BengolCAT | ?
             foreach (RunnerViewerData viewer in viewers)
             {
                 builder.Append("- ID=").Append(viewer.viewerId).Append(", 닉네임=").Append(viewer.nickname)
+                    .Append(", 성격=").Append(viewer.personality)
+                    .Append(", 말투=").Append(viewer.speakingStyle)
+                    .Append(", 관심=").Append(viewer.triggerInterests)
                     .Append(", 말많음=").Append(viewer.talkativeness.ToString("0.00"))
                     .Append(", 게임이해도=").Append(viewer.expertise.ToString("0.00"))
                     .Append(", 놀림강도=").Append(viewer.teasing.ToString("0.00"))
@@ -425,6 +452,22 @@ BengolCAT | ?
             }
             if (events.Contains("게임 오버") || events.Contains("피격") || events.Contains("목숨을 잃음") || events.Contains("저체력") || events.Contains("남은 목숨"))
                 return "피격/죽음 반응형. 아니 뭐하냐/?/???/ㅋㅋㅋㅋㅋㅋ/개못하네.../아니 이걸?/예?/.../에반데/아니/뭐함?과 아주 가까운 반응을 과반으로 쓴다. 맞았다거나 죽었다는 사실을 서술하지 않는다.";
+            bool plasticKnightmare = snapshot != null && snapshot.gameTitle != null
+                && snapshot.gameTitle.IndexOf("Plastic Knightmare", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool plasticPreparation = plasticKnightmare && snapshot.plasticPhase != null
+                && snapshot.plasticPhase.Contains("정비");
+            if (plasticPreparation)
+            {
+                string affordable = string.IsNullOrWhiteSpace(snapshot.plasticAffordablePurchases)
+                    ? "없음" : snapshot.plasticAffordablePurchases;
+                if (events.Contains("정비 중 장시간 무행동") || snapshot.plasticPreparationIdleSeconds >= 20f)
+                    return $"낮 정비 재촉형. 현재 {snapshot.plasticPreparationIdleSeconds:0}초 동안 구매/배치/수리/강화 변화가 없다. ㄴㅈ/노잼/빨리해라/뭐함?/시간 다 간다/자냐처럼 서로 다른 짧은 재촉을 쓴다. 구매를 권한다면 반드시 구매 가능 목록 [{affordable}] 안에서만 고르고 정확한 이름을 쓴다. 동료 강화라는 표현은 금지하며 동료는 하나 더 사거나 수를 늘린다고만 말한다.";
+                return snapshot.plasticHasAffordablePurchase
+                    ? $"낮 정비 반응형. 현재 재화 {snapshot.plasticCoins:N0}, 실제 구매 가능 목록은 [{affordable}]다. 구매 훈수를 한다면 이 목록 안의 정확한 이름 하나만 사용한다. 동료는 강화하지 않으며 '하나 더', '늘리자', '추가하자'라고 표현한다. 구매 얘기 없이 배치/벽 상태/시간을 짧게 말해도 된다."
+                    : $"낮 정비 반응형. 현재 재화 {snapshot.plasticCoins:N0}으로 살 수 있는 항목이 없다. 어떤 물건·동료·강화도 사거나 늘리라고 권하지 않는다. 배치 확인/벽 상태/짧은 원초 반응만 쓴다.";
+            }
+            if (plasticKnightmare)
+                return "밤 전투 반응형. 궁/궁극기/보스/보스전/콤보라는 단어를 절대 쓰지 않는다. 위험한 적은 센 유령/강한 거/큰 놈이라고 한다. 온다/침대 잘 봐/센 애부터/뒤 봐/연속으로 잘 잡네/처치 속도 좋다처럼 짧게 반응하며 내부 점수 규칙을 설명하지 않는다.";
             if (events.Contains("특별한 사건 없이 게임 플레이") || events.Contains("특별한 사건 없이"))
                 return UnityEngine.Random.value < 0.72f
                     ? "안정 플레이 응원형. 오/가자/좋은데?/ㄱㄱ/ㄱㄱㄱ/좀만 더/이대로만과 가까운 1~10자 반응을 쓴다. 오래 버텼다고 설명하지 않는다."

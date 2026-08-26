@@ -46,6 +46,7 @@ namespace StreamOn.MainMenu
         private void Awake()
         {
             Time.timeScale = 1f;
+            BroadcastLeaderboardRuntime.EnsureRunning(settings);
             if (mainCameraTransform != null) mainCameraTransform.position = cameraStartPosition;
             if (playerAnimator != null)
             {
@@ -92,10 +93,13 @@ namespace StreamOn.MainMenu
             if (streamerName.Length > maximumNameLength)
                 streamerName = streamerName.Substring(0, maximumNameLength);
 
+            string leaderboardName = RunnerUserSettingsStore.LockLeaderboardDisplayName(streamerName, maximumNameLength);
+            if (string.IsNullOrWhiteSpace(leaderboardName)) return;
+
             RunnerCampaignSaveData save = RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData loaded)
                 ? loaded
                 : RunnerCampaignSaveStore.CreateNew(settings);
-            save.streamerName = streamerName;
+            save.streamerName = leaderboardName;
             if (!RunnerCampaignSaveStore.Save(settings, save, true))
             {
                 Debug.LogError("STREAM ON main menu: 스트리머 이름을 저장하지 못했습니다.", this);

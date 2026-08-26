@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Tank
   m_EditorClassIdentifier: 
   companionId: Tank
-  displayName: Tank
+  displayName: "\uD0F1\uD06C"
   icon: {fileID: 21300000, guid: 9f206594a6e0924488715be01444d272, type: 3}
   preferredSlot: 2
   prefab: {fileID: 9160278748733586292, guid: ab147c57f1500814cbafd324733d5e88, type: 3}

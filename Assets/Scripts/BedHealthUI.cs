@@ -32,6 +32,7 @@ public sealed class BedHealthUI : MonoBehaviour
         if (displayRoot == null || fillImage == null || valueText == null)
             Debug.LogError("BedHealthUI의 씬 UI 참조가 비어 있습니다. MainScene의 Bed Health Scene UI를 연결하세요.", this);
         if (damageable == null) return;
+        ConfigureFillImage();
         damageable.OnHealthChanged += UpdateBar;
         _displayedFill = _targetFill = damageable.MaxHealth > 0f
             ? Mathf.Clamp01(damageable.CurrentHealth / damageable.MaxHealth) : 0f;
@@ -73,8 +74,20 @@ public sealed class BedHealthUI : MonoBehaviour
         if (fillImage != null)
         {
             fillImage.fillAmount = _displayedFill;
+            RectTransform fillRect = fillImage.rectTransform;
+            fillRect.pivot = new Vector2(0f, .5f);
+            fillRect.localScale = new Vector3(_displayedFill, 1f, 1f);
             fillImage.color = _displayedFill > .6f ? fillColor : _displayedFill > .3f ? midColor : lowColor;
         }
         if (valueText != null) valueText.text = $"{Mathf.CeilToInt(_displayedFill * 100f)}%";
+    }
+
+    private void ConfigureFillImage()
+    {
+        if (fillImage == null) return;
+        fillImage.type = Image.Type.Filled;
+        fillImage.fillMethod = Image.FillMethod.Horizontal;
+        fillImage.fillOrigin = (int)Image.OriginHorizontal.Left;
+        fillImage.fillClockwise = true;
     }
 }

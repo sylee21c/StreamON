@@ -206,6 +206,14 @@ public sealed class GameOverUIController : MonoBehaviour
         if (instance.rewardCoinImage != null) instance.rewardCoinImage.gameObject.SetActive(false);
     }
 
+    public static void PrepareForBroadcastSettlement()
+    {
+        if (instance == null) return;
+        instance.suppressNextPresentation = false;
+        if (instance.retryButton != null)
+            instance.retryButton.interactable = false;
+    }
+
     public static void SuppressRetryForBroadcastEnd()
     {
         if (instance == null) return;

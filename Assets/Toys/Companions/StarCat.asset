@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: StarCat
   m_EditorClassIdentifier: 
   companionId: StarCat
-  displayName: Star Cat
+  displayName: "\uC2A4\uD0C0\uCEA3"
   icon: {fileID: 21300000, guid: d1980f5e907048e4583d7bf75dfaf7b1, type: 3}
   preferredSlot: 3
   prefab: {fileID: 9156349005631067565, guid: 21fba75f0de7eab4eb4271c7196739f1, type: 3}

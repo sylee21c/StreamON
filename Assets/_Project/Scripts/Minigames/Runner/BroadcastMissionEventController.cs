@@ -55,12 +55,11 @@ namespace StreamOn.Minigames.Runner
         public List<BroadcastMissionRule> missions = new List<BroadcastMissionRule>();
 
         [Header("Occurrence")]
-        [Min(0f)] public float firstMissionDelayMinimum = 25f;
-        [Min(0f)] public float firstMissionDelayMaximum = 45f;
+        [Min(0f)] public float firstMissionDelayMinimum = 8f;
+        [Min(0f)] public float firstMissionDelayMaximum = 8f;
         [Min(0.1f)] public float chanceCheckInterval = 8f;
         [Range(0f, 1f)] public float chancePerCheck = 0.20f;
         [Min(0f)] public float missionCooldown = 45f;
-        [Min(0)] public int maximumMissionsPerBroadcast = 3;
 
         [Header("Reward / failure")]
         [Min(0)] public int estimatedAverageDonation = 3000;
@@ -95,7 +94,6 @@ namespace StreamOn.Minigames.Runner
         private Coroutine _presentation;
         private float _nextCheckAt;
         private float _startedAt;
-        private int _missionsStarted;
         private bool _sawGameplay;
         private Snapshot _start;
 
@@ -116,7 +114,6 @@ namespace StreamOn.Minigames.Runner
             if (gameplay && !_sawGameplay)
             {
                 _sawGameplay = true;
-                _missionsStarted = 0;
                 ScheduleFirstCheck();
             }
 
@@ -126,8 +123,7 @@ namespace StreamOn.Minigames.Runner
                 return;
             }
             if (!gameplay) return;
-            if (_presentation != null || _missionsStarted >= maximumMissionsPerBroadcast
-                || Time.unscaledTime < _nextCheckAt) return;
+            if (_presentation != null || Time.unscaledTime < _nextCheckAt) return;
 
             _nextCheckAt = Time.unscaledTime + Mathf.Max(0.1f, chanceCheckInterval);
             if ((_donation != null && _donation.IsShowing) || (_wit != null && _wit.IsShowing)) return;
@@ -175,7 +171,6 @@ namespace StreamOn.Minigames.Runner
             _active = candidates[UnityEngine.Random.Range(0, candidates.Count)];
             _startedAt = Time.unscaledTime;
             _start = Capture();
-            _missionsStarted++;
             transform.SetAsLastSibling();
             SetTimerVisible(_active.durationSeconds > 0f);
             SetColor(activeColor);
@@ -186,6 +181,7 @@ namespace StreamOn.Minigames.Runner
             RefreshProgress(0f);
             if (_presentation != null) StopCoroutine(_presentation);
             _presentation = StartCoroutine(FadeTo(1f));
+            BroadcastUiAudioController.Play(BroadcastUiSound.EventPrompt);
             _chat?.ReactMissionEvent(RunnerChatEvent.MissionStarted, 1, 2);
             return true;
         }
@@ -246,8 +242,11 @@ namespace StreamOn.Minigames.Runner
                 case BroadcastMissionType.RunnerNoDamageScore:
                 case BroadcastMissionType.RunnerNoDamageTime:
                 case BroadcastMissionType.RunnerClearObstaclesNoDamage:
-                case BroadcastMissionType.RunnerAvoidRobots:
                     return now.hits > _start.hits;
+                case BroadcastMissionType.RunnerAvoidRobots:
+                    // This mission specifically asks the player to jump over robots.
+                    // Destroying one with an attack must not be accepted as avoidance.
+                    return now.hits > _start.hits || now.attacks > _start.attacks;
                 case BroadcastMissionType.RunnerNoAttackScore:
                     return now.attacks > _start.attacks;
                 case BroadcastMissionType.TileNoDamageTime:
@@ -332,6 +331,7 @@ namespace StreamOn.Minigames.Runner
             _nextCheckAt = Time.unscaledTime + Mathf.Max(0f, missionCooldown);
             if (success)
             {
+                BroadcastUiAudioController.Play(BroadcastUiSound.Success);
                 int reward = RewardAmount(completed);
                 ApplyOutcome(completed.successHeat, reward);
                 if (headerText != null) headerText.text = "미션 성공";
@@ -341,6 +341,7 @@ namespace StreamOn.Minigames.Runner
             }
             else
             {
+                BroadcastUiAudioController.Play(BroadcastUiSound.Failure);
                 float penalty = FailurePenalty(completed, progress);
                 ApplyOutcome(-penalty, 0);
                 if (headerText != null) headerText.text = progress >= nearMissThreshold ? "아쉽게 실패" : "미션 실패";

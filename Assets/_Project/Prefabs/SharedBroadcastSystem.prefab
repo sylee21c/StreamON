@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 4174796690454432963}
   - component: {fileID: 5032758372980580963}
   - component: {fileID: 1338210914620241017}
+  - component: {fileID: 7444444400000000001}
   m_Layer: 0
   m_Name: SharedBroadcastSystem
   m_TagString: Untagged
@@ -126,6 +127,34 @@ MonoBehaviour:
   witInteraction: {fileID: 5558269070315244614}
   heatAndFocusGauge: {fileID: 6256437617079229447}
   settlementView: {fileID: 5268136052260168282}
+--- !u!114 &7444444400000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8460190196571026406}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8fc05d3fe41479eaf352808e0659680, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::StreamOn.Minigames.Runner.BroadcastUiAudioController
+  donationSound: {fileID: 0}
+  donationVolume: 0.8
+  largeDonationSound: {fileID: 0}
+  largeDonationVolume: 0.9
+  eventPromptSound: {fileID: 0}
+  eventPromptVolume: 0.8
+  viewerBanSound: {fileID: 0}
+  viewerBanVolume: 0.8
+  successSound: {fileID: 0}
+  successVolume: 0.9
+  neutralSound: {fileID: 0}
+  neutralVolume: 0.75
+  failureSound: {fileID: 0}
+  failureVolume: 0.85
+  settlementCloseSound: {fileID: 0}
+  settlementCloseVolume: 0.8
 --- !u!1001 &1218528365695696804
 PrefabInstance:
   m_ObjectHideFlags: 0

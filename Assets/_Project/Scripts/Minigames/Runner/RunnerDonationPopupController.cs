@@ -32,10 +32,16 @@ namespace StreamOn.Minigames.Runner
             }
         }
 
-        public void ShowDonation(string donor, int amount, string message)
+        public void ShowDonation(string donor, int amount, string message, bool isLargeDonation = false)
         {
             transform.SetAsLastSibling();
-            _pending.Enqueue(new DonationNotice { donor = donor, amount = amount, message = message });
+            _pending.Enqueue(new DonationNotice
+            {
+                donor = donor,
+                amount = amount,
+                message = message,
+                isLargeDonation = isLargeDonation
+            });
             if (_pump == null) _pump = StartCoroutine(Pump());
         }
 
@@ -43,7 +49,11 @@ namespace StreamOn.Minigames.Runner
         {
             while (_pending.Count > 0)
             {
+                while (Time.timeScale <= 0f) yield return null;
                 DonationNotice notice = _pending.Dequeue();
+                BroadcastUiAudioController.Play(notice.isLargeDonation
+                    ? BroadcastUiSound.LargeDonation
+                    : BroadcastUiSound.Donation);
                 if (donorText != null) donorText.text = $"{notice.donor}님이";
                 if (amountText != null) amountText.text = $"{notice.amount:N0}원을 후원해 주셨어요!";
                 if (messageText != null) messageText.text = notice.message;
@@ -92,6 +102,7 @@ namespace StreamOn.Minigames.Runner
             public string donor;
             public int amount;
             public string message;
+            public bool isLargeDonation;
         }
     }
 }

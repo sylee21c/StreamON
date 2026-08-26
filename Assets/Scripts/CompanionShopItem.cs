@@ -28,6 +28,8 @@ public sealed class CompanionShopItem : MonoBehaviour
     public int UnitPrice { get => unitPrice; set { unitPrice = Mathf.Max(0, value); RefreshDisplay(); } }
     public int Quantity => quantity;
     public int TotalPrice => unitPrice * quantity;
+    public CompanionDefinition Definition => definition;
+    public string DisplayName => definition != null ? definition.displayName : string.Empty;
 
     private void OnEnable()
     {

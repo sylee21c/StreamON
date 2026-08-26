@@ -399,8 +399,9 @@ namespace StreamOn.Minigames.TileArena
             int amount = RunnerBroadcastAudienceController.RollDonationAmount(growthSettings, _hype);
             string donor = chatController.PickDonationViewerNickname();
             _liveDonationWon += amount;
-            donationPopup?.ShowDonation(donor, amount, message);
-            chatController.OnDonationReceived(donor, amount, message, amount == growthSettings.largeDonationWon);
+            bool isLargeDonation = amount == growthSettings.largeDonationWon;
+            donationPopup?.ShowDonation(donor, amount, message, isLargeDonation);
+            chatController.OnDonationReceived(donor, amount, message, isLargeDonation);
         }
 
         private void ScheduleNextAmbientDonation()

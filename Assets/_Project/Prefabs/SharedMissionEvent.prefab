@@ -875,12 +875,11 @@ MonoBehaviour:
     donationMultiplier: 2.5
     minimumActiveGhosts: 5
     minimumDamagedFacilities: 0
-  firstMissionDelayMinimum: 25
-  firstMissionDelayMaximum: 45
+  firstMissionDelayMinimum: 8
+  firstMissionDelayMaximum: 8
   chanceCheckInterval: 8
   chancePerCheck: 0.2
   missionCooldown: 45
-  maximumMissionsPerBroadcast: 3
   estimatedAverageDonation: 3000
   wrongWitHeatPenalty: 8
   easyPenaltyMultiplier: 0.5

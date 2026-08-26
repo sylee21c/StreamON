@@ -4,6 +4,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using StreamOn.Minigames.Runner;
+using StreamOn.Broadcast;
 
 public sealed class MainMenuController : MonoBehaviour
 {
@@ -16,10 +17,35 @@ public sealed class MainMenuController : MonoBehaviour
     [SerializeField] private RectTransform exitButtonRect;
     [SerializeField] private Image fadeImage;
 
+    [Header("Scene-authored Tutorial")]
+    [SerializeField] private Button tutorialButton;
+    [SerializeField] private GameObject tutorialPanel;
+
+    [Header("Title Audio")]
+    [SerializeField] private AudioClip backgroundMusic;
+    [SerializeField] private AudioClip uiButtonSound;
+    [SerializeField, Range(0f, 1f)] private float backgroundMusicVolume = .7f;
+    [SerializeField, Range(0f, 1f)] private float uiButtonVolume = .8f;
+
     private bool isTransitioning;
+    private BroadcastTitleScreenPresentation presentation;
+
+    private void Awake()
+    {
+        Canvas canvas = startButtonRect != null ? startButtonRect.GetComponentInParent<Canvas>()
+            : FindFirstObjectByType<Canvas>();
+        presentation = GetComponent<BroadcastTitleScreenPresentation>();
+        if (presentation == null) presentation = gameObject.AddComponent<BroadcastTitleScreenPresentation>();
+        presentation.Configure(canvas, tutorialButton, tutorialPanel, backgroundMusic, uiButtonSound,
+            backgroundMusicVolume, uiButtonVolume);
+    }
 
     private void Update()
     {
+        if (!isTransitioning && presentation != null && presentation.TutorialOpen)
+        {
+            return;
+        }
         if (isTransitioning || Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame)
         {
             return;
@@ -42,6 +68,16 @@ public sealed class MainMenuController : MonoBehaviour
         StartCoroutine(StartGameRoutine());
     }
 
+    public void OpenTutorial()
+    {
+        if (!isTransitioning) presentation?.OpenTutorial();
+    }
+
+    public void CloseTutorial()
+    {
+        presentation?.CloseTutorial();
+    }
+
     public void ExitGame()
     {
         if (isTransitioning) return;
@@ -61,7 +97,7 @@ public sealed class MainMenuController : MonoBehaviour
         DontDestroyOnLoad(gameObject);
         PrepareFade();
 
-        SFXManager.PlayGlobal(buttonSfx);
+        PlayButtonSound();
         if (actionDelay > 0f)
         {
             yield return new WaitForSecondsRealtime(actionDelay);
@@ -82,7 +118,7 @@ public sealed class MainMenuController : MonoBehaviour
         isTransitioning = true;
         PrepareFade();
 
-        SFXManager.PlayGlobal(buttonSfx);
+        PlayButtonSound();
         if (actionDelay > 0f)
         {
             yield return new WaitForSecondsRealtime(actionDelay);
@@ -136,5 +172,11 @@ public sealed class MainMenuController : MonoBehaviour
     private static void QuitApplication()
     {
         StreamOn.Platform.WebGLPlatformBridge.QuitOrShowBrowserMessage();
+    }
+
+    private void PlayButtonSound()
+    {
+        if (uiButtonSound != null) presentation?.PlayButtonSound();
+        else SFXManager.PlayGlobal(buttonSfx);
     }
 }

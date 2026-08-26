@@ -443,8 +443,9 @@ namespace StreamOn.Minigames.Runner
             int amount = RollDonationAmount(_settings, Hype);
             string donor = _chat != null ? _chat.PickDonationViewerNickname() : "익명의 시청자";
             LiveDonationWon += amount;
-            _donationPopup?.ShowDonation(donor, amount, message);
-            _chat?.OnDonationReceived(donor, amount, message, amount == _settings.largeDonationWon);
+            bool isLargeDonation = amount == _settings.largeDonationWon;
+            _donationPopup?.ShowDonation(donor, amount, message, isLargeDonation);
+            _chat?.OnDonationReceived(donor, amount, message, isLargeDonation);
         }
 
         private void ScheduleNextAmbientDonation()

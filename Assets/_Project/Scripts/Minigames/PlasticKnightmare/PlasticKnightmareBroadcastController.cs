@@ -5,6 +5,7 @@ using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace StreamOn.Minigames.Runner
@@ -20,13 +21,16 @@ namespace StreamOn.Minigames.Runner
         public RunnerBroadcastSettlementView settlementView;
         public TMP_Text phaseTimeText;
         public TMP_Text scoreText;
+        public TMP_Text bestScoreText;
         public TMP_Text nightText;
         public Button startNightButton;
         public TMP_Text maintenanceButtonText;
 
         [Header("Inspector balance")]
         [Min(0f)] public float heatGainPerGhost = 0.25f;
-        public float heatLossPerProtectedObjectHit = -0.8f;
+        [FormerlySerializedAs("heatLossPerProtectedObjectHit")]
+        [Tooltip("침대 피격 또는 플레이어/방벽/동료 등의 체력이 0이 될 때 적용되는 열기 변화")]
+        public float heatLossPerProtectedObjectLoss = -0.8f;
         public float correctModerationHeat = 7f;
         public float wrongModerationHeat = -14f;
         public float fraternizationHeatPerTick = -1.4f;
@@ -40,6 +44,13 @@ namespace StreamOn.Minigames.Runner
         [Min(1f)] public float maximumComboMultiplier = 2.5f;
         [Min(0.1f)] public float fastKillThresholdSeconds = 4f;
         [Min(1f)] public float fastKillScoreMultiplier = 1.2f;
+        [Header("Game over flow")]
+        [Min(0f)] public float settlementDelayAfterGameOver = 2f;
+        [Header("Preparation chat")]
+        [Min(1f)] public float preparationIdleFirstReactionSeconds = 25f;
+        [Min(1f)] public float preparationIdleRepeatSeconds = 18f;
+        [Min(0.1f)] public float preparationActivitySampleInterval = 0.5f;
+        [Min(0.1f)] public float bedDamageChatCooldown = 3f;
 
         public float Heat => _heat;
         public int RawGameScore => _rawScore;
@@ -74,9 +85,12 @@ namespace StreamOn.Minigames.Runner
         private GhostSpawner _spawner;
         private Damageable _bed;
         private readonly List<Damageable> _protectedObjects = new List<Damageable>();
+        private readonly Dictionary<Damageable, Action> _protectedDeathHandlers = new Dictionary<Damageable, Action>();
+        private float _lastBedHealth;
         private bool _initialized;
         private bool _nightStarted;
         private bool _finishing;
+        private bool _gameOverPending;
         private int _night;
         private int _rawScore;
         private float _broadcastScore;
@@ -105,6 +119,17 @@ namespace StreamOn.Minigames.Runner
         private float _nextMistakeClearAt;
         private int _combo;
         private float _lastKillAt = float.NegativeInfinity;
+        private float _lastPreparationActivityAt;
+        private float _nextPreparationIdleReactionAt;
+        private float _nextPreparationActivitySampleAt;
+        private float _nextBedDamageChatAt;
+        private string _preparationActivityFingerprint = string.Empty;
+        private string _cachedAffordablePurchases = string.Empty;
+        private string _cachedAffordableCompanionNames = string.Empty;
+        private string _cachedAffordableBrickNames = string.Empty;
+        private string _cachedAffordableUpgradeNames = string.Empty;
+        private string _cachedCompanionNames = string.Empty;
+        private string _cachedCompanionRoster = string.Empty;
 
         private void Awake() => startNightButton?.onClick.AddListener(BeginNightEarly);
 
@@ -154,11 +179,13 @@ namespace StreamOn.Minigames.Runner
             if (witInteraction == null) witInteraction = FindFirstObjectByType<RunnerWitInteractionController>();
             chat?.ConfigureCampaignSettings(settings);
             chat?.BindExternalGame("Plastic Knightmare");
-            PushChatSnapshot(SharedChatGameState.Ready);
             RunnerBroadcastHeatGauge.Show(_heat);
             _initialized = true;
-            if (maintenanceButtonText != null) maintenanceButtonText.text = "준비 완료!";
+            ResetPreparationActivityTracking();
+            if (maintenanceButtonText != null) maintenanceButtonText.text = "스킵";
             RefreshHud();
+            PushChatSnapshot(SharedChatGameState.Ready);
+            chat?.React(RunnerChatEvent.PlasticPreparationStarted);
         }
 
         private void OnDestroy()
@@ -176,7 +203,8 @@ namespace StreamOn.Minigames.Runner
 
         private void Update()
         {
-            if (!_initialized || _finishing || Time.timeScale <= 0f) return;
+            if (!_initialized || _finishing || _gameOverPending || Time.timeScale <= 0f) return;
+            UpdatePreparationChat();
             if (!_nightStarted)
             {
                 _daySecondsRemaining = Mathf.Max(0f, _daySecondsRemaining - Time.unscaledDeltaTime);
@@ -200,9 +228,9 @@ namespace StreamOn.Minigames.Runner
                     _heatSampleSeconds += sample;
                     _nextHeatSampleAt = Time.unscaledTime + sample;
                 }
-                PushChatSnapshot(SharedChatGameState.Playing);
                 TryAmbientDonation();
             }
+            PushChatSnapshot(_nightStarted ? SharedChatGameState.Playing : SharedChatGameState.Ready);
             if (Time.unscaledTime >= _nextViewerUpdateAt) UpdateAudience();
             RunnerBroadcastHeatGauge.SetValue(_heat);
             RefreshHud();
@@ -223,7 +251,15 @@ namespace StreamOn.Minigames.Runner
 
         private void HandleNightBegin()
         {
-            if (_nightStarted || _finishing) return;
+            if (_finishing) return;
+            if (_nightStarted)
+            {
+                if (startNightButton != null) startNightButton.gameObject.SetActive(false);
+                SubscribeNewProtectedObjects();
+                PushChatSnapshot(SharedChatGameState.Playing);
+                chat?.React(RunnerChatEvent.PlasticNightStarted);
+                return;
+            }
             _nightStarted = true;
             if (startNightButton != null) startNightButton.gameObject.SetActive(false);
             _nightStartedAt = Time.unscaledTime;
@@ -234,18 +270,34 @@ namespace StreamOn.Minigames.Runner
             SubscribeProtectedObjects();
             UpdateAudience();
             chat?.ResumeExternalGame();
-            chat?.React(RunnerChatEvent.RunStarted);
+            chat?.React(RunnerChatEvent.PlasticNightStarted);
             PushChatSnapshot(SharedChatGameState.Playing);
         }
 
-        private void HandleDayBegin() { }
+        private void HandleDayBegin()
+        {
+            ResetPreparationActivityTracking();
+            PushChatSnapshot(SharedChatGameState.Playing);
+            chat?.React(RunnerChatEvent.PlasticPreparationStarted);
+        }
 
         private void HandleNightFailed()
         {
-            if (!_initialized || _finishing) return;
+            if (!_initialized || _finishing || _gameOverPending) return;
+            _gameOverPending = true;
             _spawner?.NotifyGameOver();
-            GameOverUIController.SuppressRetryForBroadcastEnd();
+            int previousBest = _save != null ? _save.bestPlasticGameScoreAtNight : 0;
+            GameOverUIController.ConfigureFinalResult(_rawScore, previousBest,
+                _spawner != null ? _spawner.CurrentAssault : _night, _ghostsDefeated,
+                _nightStarted ? Time.unscaledTime - _nightStartedAt : 0f);
+            GameOverUIController.PrepareForBroadcastSettlement();
             chat?.React(RunnerChatEvent.GameOver);
+            StartCoroutine(ShowSettlementAfterGameOver());
+        }
+
+        private IEnumerator ShowSettlementAfterGameOver()
+        {
+            yield return new WaitForSecondsRealtime(Mathf.Max(0f, settlementDelayAfterGameOver));
             FinishBroadcast(false, _spawner != null ? _spawner.CurrentAssault : _night);
         }
 
@@ -264,7 +316,9 @@ namespace StreamOn.Minigames.Runner
             AddHeat(heatGainPerGhost, false);
             TryLiveDonation(settings.plasticGhostDonationChance, "방금 유령 잡는 거 좋았다");
             witInteraction?.NotifySafeMoment("Plastic Knightmare에서 방금 유령을 처치함", 3f);
-            chat?.React(RunnerChatEvent.EnemyDefeated);
+            chat?.React(defeat.TierIndex > 0
+                ? RunnerChatEvent.PlasticStrongGhostDefeated
+                : RunnerChatEvent.EnemyDefeated);
         }
 
         private void HandleAssaultStateChanged(GhostSpawner.AssaultState state, int assault)
@@ -272,7 +326,9 @@ namespace StreamOn.Minigames.Runner
             _night = Mathf.Max(1, assault);
             bool maintenance = state == GhostSpawner.AssaultState.Maintenance;
             if (startNightButton != null) startNightButton.gameObject.SetActive(maintenance);
-            if (maintenanceButtonText != null) maintenanceButtonText.text = maintenance ? "정비 조기 종료" : "준비 완료!";
+            if (maintenanceButtonText != null) maintenanceButtonText.text = "스킵";
+            if (state == GhostSpawner.AssaultState.Combat)
+                SubscribeNewProtectedObjects();
             if (state == GhostSpawner.AssaultState.Combat && assault > 1)
                 witInteraction?.NotifySafeMoment("다음 공세가 감지됨", 2f);
         }
@@ -395,26 +451,66 @@ namespace StreamOn.Minigames.Runner
         private void SubscribeProtectedObjects()
         {
             UnsubscribeProtectedObjects();
+            SubscribeNewProtectedObjects();
+        }
+
+        private void SubscribeNewProtectedObjects()
+        {
             foreach (Damageable damageable in FindObjectsByType<Damageable>(FindObjectsSortMode.None))
             {
-                if (damageable == null || damageable.GetComponent<GhostAI>() != null) continue;
+                if (damageable == null || damageable.GetComponent<GhostAI>() != null
+                    || _protectedObjects.Contains(damageable)) continue;
                 _protectedObjects.Add(damageable);
-                damageable.OnHealthChanged += HandleProtectedHealthChanged;
-                if (damageable.CompareTag("Bed") || damageable.name == "Bed") _bed = damageable;
+                if (damageable.CompareTag("Bed") || damageable.name == "Bed")
+                {
+                    _bed = damageable;
+                    _lastBedHealth = damageable.CurrentHealth;
+                    damageable.OnHealthChanged += HandleBedHealthChanged;
+                    continue;
+                }
+
+                Damageable captured = damageable;
+                Action deathHandler = () => HandleProtectedObjectDestroyed(captured);
+                _protectedDeathHandlers[damageable] = deathHandler;
+                damageable.OnDeath += deathHandler;
             }
         }
 
         private void UnsubscribeProtectedObjects()
         {
-            foreach (Damageable damageable in _protectedObjects)
-                if (damageable != null) damageable.OnHealthChanged -= HandleProtectedHealthChanged;
+            if (_bed != null) _bed.OnHealthChanged -= HandleBedHealthChanged;
+            foreach (KeyValuePair<Damageable, Action> pair in _protectedDeathHandlers)
+                if (pair.Key != null) pair.Key.OnDeath -= pair.Value;
+            _protectedDeathHandlers.Clear();
             _protectedObjects.Clear();
             _bed = null;
+            _lastBedHealth = 0f;
         }
 
-        private void HandleProtectedHealthChanged(float current, float maximum)
+        private void HandleBedHealthChanged(float current, float maximum)
         {
-            if (!_nightStarted || current >= maximum) return;
+            bool tookDamage = current < _lastBedHealth - 0.01f;
+            _lastBedHealth = current;
+            if (!_nightStarted || !tookDamage) return;
+            RegisterProtectedObjectFailure();
+            if (Time.unscaledTime >= _nextBedDamageChatAt)
+            {
+                _nextBedDamageChatAt = Time.unscaledTime + Mathf.Max(0.1f, bedDamageChatCooldown);
+                chat?.React(RunnerChatEvent.PlasticBedDamaged);
+            }
+        }
+
+        private void HandleProtectedObjectDestroyed(Damageable damageable)
+        {
+            if (!_nightStarted || damageable == null || damageable == _bed) return;
+            RegisterProtectedObjectFailure();
+            chat?.React(damageable.GetComponent<PlayerController>() != null
+                ? RunnerChatEvent.PlasticPlayerStunned
+                : RunnerChatEvent.PlasticDefenseDestroyed);
+        }
+
+        private void RegisterProtectedObjectFailure()
+        {
             ComposureRankRule mental = CurrentComposureRule();
             if (mental != null && mental.protectsFirstMistakeAfterGoodPlay
                 && _performanceMeter.State == BroadcastPerformanceState.Good && !_cleanMistakeProtectionUsed)
@@ -423,7 +519,7 @@ namespace StreamOn.Minigames.Runner
                 return;
             }
             _performanceMeter.RecordMistake(Time.unscaledTime, growthSettings);
-            AddHeat(heatLossPerProtectedObjectHit);
+            AddHeat(heatLossPerProtectedObjectLoss);
         }
 
         private ComposureRankRule CurrentComposureRule()
@@ -508,8 +604,9 @@ namespace StreamOn.Minigames.Runner
             _nextDonationAt = Time.time + growthSettings.liveDonationCooldown;
             ScheduleNextAmbientDonation();
             string donor = chat != null ? chat.PickDonationViewerNickname() : "익명의 시청자";
-            donationPopup?.ShowDonation(donor, amount, message);
-            chat?.OnDonationReceived(donor, amount, message, amount >= growthSettings.largeDonationWon);
+            bool isLargeDonation = amount >= growthSettings.largeDonationWon;
+            donationPopup?.ShowDonation(donor, amount, message, isLargeDonation);
+            chat?.OnDonationReceived(donor, amount, message, isLargeDonation);
         }
 
         private void ScheduleNextAmbientDonation()
@@ -633,6 +730,134 @@ namespace StreamOn.Minigames.Runner
 
         public bool TrySuspendForGameSwitch() => !_initialized || _finishing;
 
+        private void ResetPreparationActivityTracking()
+        {
+            float now = Time.unscaledTime;
+            _lastPreparationActivityAt = now;
+            _nextPreparationIdleReactionAt = now + Mathf.Max(1f, preparationIdleFirstReactionSeconds);
+            _nextPreparationActivitySampleAt = now;
+            _preparationActivityFingerprint = CapturePreparationActivityFingerprint();
+            RefreshPreparationChatContext();
+        }
+
+        private void UpdatePreparationChat()
+        {
+            if (_dayNight == null || _dayNight.CurrentPhase != DayNightManager.Phase.Day) return;
+            float now = Time.unscaledTime;
+            if (now >= _nextPreparationActivitySampleAt)
+            {
+                _nextPreparationActivitySampleAt = now + Mathf.Max(0.1f, preparationActivitySampleInterval);
+                string fingerprint = CapturePreparationActivityFingerprint();
+                RefreshPreparationChatContext();
+                if (!string.Equals(fingerprint, _preparationActivityFingerprint, StringComparison.Ordinal))
+                {
+                    _preparationActivityFingerprint = fingerprint;
+                    _lastPreparationActivityAt = now;
+                    _nextPreparationIdleReactionAt = now + Mathf.Max(1f, preparationIdleFirstReactionSeconds);
+                }
+            }
+
+            if (now < _nextPreparationIdleReactionAt
+                || now - _lastPreparationActivityAt < preparationIdleFirstReactionSeconds) return;
+            PushChatSnapshot(_nightStarted ? SharedChatGameState.Playing : SharedChatGameState.Ready);
+            chat?.React(RunnerChatEvent.PlasticPreparationIdle);
+            _nextPreparationIdleReactionAt = now + Mathf.Max(1f, preparationIdleRepeatSeconds);
+        }
+
+        private string CapturePreparationActivityFingerprint()
+        {
+            int coins = CoinWallet.Instance != null ? CoinWallet.Instance.Coins : 0;
+            string bricks = BrickInventory.Instance != null
+                ? string.Join(",", BrickInventory.Instance.CaptureCounts().OrderBy(pair => pair.Key)
+                    .Select(pair => pair.Key + ":" + pair.Value)) : string.Empty;
+            string companions = CompanionInventory.Instance != null
+                ? string.Join(",", CompanionInventory.Instance.CaptureCounts().OrderBy(pair => pair.Key)
+                    .Select(pair => pair.Key + ":" + pair.Value)) : string.Empty;
+            string upgrades = string.Join(",", FindObjectsByType<UpgradeShopItem>(FindObjectsInactive.Include,
+                FindObjectsSortMode.None).OrderBy(item => item.Type)
+                .Select(item => item.Type + ":" + item.CurrentLevelIndex));
+            BuildingModeController building = FindFirstObjectByType<BuildingModeController>();
+            int placedBricks = building != null ? building.CapturePlacedBricks().Count : 0;
+            int placedCompanions = building != null ? building.CapturePlacedCompanions().Count : 0;
+            float totalFriendlyHealth = FindObjectsByType<Damageable>(FindObjectsSortMode.None)
+                .Where(item => item != null && item.GetComponent<GhostAI>() == null)
+                .Sum(item => item.CurrentHealth);
+            return $"{coins}|{bricks}|{companions}|{upgrades}|{placedBricks}|{placedCompanions}|{totalFriendlyHealth:0.0}";
+        }
+
+        private void BuildPreparationChatContext(out string affordablePurchases,
+            out string affordableCompanionNames, out string affordableBrickNames,
+            out string affordableUpgradeNames, out string companionNames, out string companionRoster)
+        {
+            int coins = CoinWallet.Instance != null ? CoinWallet.Instance.Coins : 0;
+            List<string> affordable = new List<string>();
+            List<string> affordableCompanions = new List<string>();
+            List<string> affordableBricks = new List<string>();
+            List<string> affordableUpgrades = new List<string>();
+            Dictionary<string, CompanionDefinition> definitions = new Dictionary<string, CompanionDefinition>();
+            CompanionInventory inventory = CompanionInventory.Instance;
+
+            foreach (CompanionShopItem item in FindObjectsByType<CompanionShopItem>(FindObjectsInactive.Include,
+                FindObjectsSortMode.None))
+            {
+                CompanionDefinition definition = item.Definition;
+                if (definition == null || string.IsNullOrWhiteSpace(definition.companionId)
+                    || string.IsNullOrWhiteSpace(definition.displayName)) continue;
+                definitions[definition.companionId] = definition;
+                bool hasSlot = inventory == null || inventory.GetSlotOfId(definition.companionId) >= 0
+                    || inventory.FindFirstEmptySlot() >= 0;
+                if (hasSlot && item.UnitPrice <= coins)
+                {
+                    affordableCompanions.Add(definition.displayName);
+                    affordable.Add($"{definition.displayName} 1기 추가 구매({item.UnitPrice:N0})");
+                }
+            }
+
+            foreach (BrickShopItem item in FindObjectsByType<BrickShopItem>(FindObjectsInactive.Include,
+                FindObjectsSortMode.None))
+            {
+                if (string.IsNullOrWhiteSpace(item.DisplayName) || item.UnitPrice > coins) continue;
+                affordableBricks.Add(item.DisplayName);
+                affordable.Add($"{item.DisplayName} 방벽 1개 구매({item.UnitPrice:N0})");
+            }
+
+            foreach (UpgradeShopItem item in FindObjectsByType<UpgradeShopItem>(FindObjectsInactive.Include,
+                FindObjectsSortMode.None))
+            {
+                if (item.IsMaxed || item.CurrentCost > coins) continue;
+                affordableUpgrades.Add(item.DisplayName);
+                affordable.Add($"{item.DisplayName}({item.CurrentCost:N0})");
+            }
+
+            Dictionary<string, int> roster = definitions.Values.ToDictionary(item => item.companionId,
+                item => inventory != null ? inventory.GetCount(item.companionId) : 0);
+            foreach (CompanionToy toy in FindObjectsByType<CompanionToy>(FindObjectsSortMode.None))
+            {
+                CompanionDefinition definition = toy != null ? toy.Definition : null;
+                Damageable health = toy != null ? toy.GetComponent<Damageable>() : null;
+                if (definition == null || health != null && health.IsDead) continue;
+                definitions[definition.companionId] = definition;
+                roster.TryGetValue(definition.companionId, out int count);
+                roster[definition.companionId] = count + 1;
+            }
+
+            affordablePurchases = string.Join(" | ", affordable.Distinct());
+            affordableCompanionNames = string.Join(" | ", affordableCompanions.Distinct());
+            affordableBrickNames = string.Join(" | ", affordableBricks.Distinct());
+            affordableUpgradeNames = string.Join(" | ", affordableUpgrades.Distinct());
+            companionNames = string.Join(" | ", definitions.Values.Select(item => item.displayName).Distinct());
+            companionRoster = string.Join(" | ", roster.Where(pair => pair.Value > 0)
+                .Select(pair => definitions.TryGetValue(pair.Key, out CompanionDefinition definition)
+                    ? $"{definition.displayName} {pair.Value}기" : $"{pair.Key} {pair.Value}기"));
+        }
+
+        private void RefreshPreparationChatContext()
+        {
+            BuildPreparationChatContext(out _cachedAffordablePurchases, out _cachedAffordableCompanionNames,
+                out _cachedAffordableBrickNames, out _cachedAffordableUpgradeNames,
+                out _cachedCompanionNames, out _cachedCompanionRoster);
+        }
+
         private void PushChatSnapshot(SharedChatGameState state)
         {
             chat?.UpdateExternalGame(state, new RunnerChatSnapshot
@@ -645,6 +870,17 @@ namespace StreamOn.Minigames.Runner
                     : _spawner.CurrentState == GhostSpawner.AssaultState.Maintenance ? "짧은 정비"
                     : _spawner.CurrentState == GhostSpawner.AssaultState.ClearingRemaining ? "남은 유령 처리"
                     : "전투",
+                plasticCoins = CoinWallet.Instance != null ? CoinWallet.Instance.Coins : 0,
+                plasticPreparationIdleSeconds = _dayNight != null
+                    && _dayNight.CurrentPhase == DayNightManager.Phase.Day
+                    ? Mathf.Max(0f, Time.unscaledTime - _lastPreparationActivityAt) : 0f,
+                plasticHasAffordablePurchase = !string.IsNullOrEmpty(_cachedAffordablePurchases),
+                plasticAffordablePurchases = _cachedAffordablePurchases,
+                plasticAffordableCompanionNames = _cachedAffordableCompanionNames,
+                plasticAffordableBrickNames = _cachedAffordableBrickNames,
+                plasticAffordableUpgradeNames = _cachedAffordableUpgradeNames,
+                plasticCompanionNames = _cachedCompanionNames,
+                plasticCompanionRoster = _cachedCompanionRoster,
                 subscribers = _save != null ? _save.subscribers : 0,
                 enemiesDefeated = _ghostsDefeated,
                 elapsedSeconds = _nightStarted ? Time.unscaledTime - _nightStartedAt : 0f,
@@ -690,7 +926,12 @@ namespace StreamOn.Minigames.Runner
 
         private void RefreshHud()
         {
-            if (scoreText != null) scoreText.text = $"점수 {_rawScore:N0}";
+            if (scoreText != null) scoreText.text = $"현재 점수  {_rawScore:N0}";
+            if (bestScoreText != null)
+            {
+                int savedBest = _save != null ? _save.bestPlasticGameScoreAtNight : 0;
+                bestScoreText.text = $"최고 점수  {Mathf.Max(savedBest, _rawScore):N0}";
+            }
         }
 
         private void ReturnToRoom() => SceneManager.LoadScene(settings.roomSceneName);

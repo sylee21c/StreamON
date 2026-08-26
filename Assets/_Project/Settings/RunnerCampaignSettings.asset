@@ -155,7 +155,7 @@ MonoBehaviour:
     m_RotationOrder: 4
   sessionAutosaveIntervalSeconds: 5
   leaderboardMaximumRows: 50
-  useOnlineLeaderboard: 0
+  useOnlineLeaderboard: 1
   leaderboardEnvironmentName: production
   runnerLeaderboardId: stream-on-runner
   tileArenaLeaderboardId: stream-on-tile-arena
@@ -432,7 +432,7 @@ MonoBehaviour:
     usesPerBroadcast: 3
     handlingDelaySeconds: 5
     handlesFraternization: 1
-  plasticDayPreparationSeconds: 60
+  plasticDayPreparationSeconds: 120
   plasticNightStartingHeatMinimum: 40
   plasticNightStartingHeatMaximum: 60
   plasticBedHealthScore: 200

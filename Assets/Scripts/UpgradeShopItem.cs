@@ -48,6 +48,7 @@ public sealed class UpgradeShopItem : MonoBehaviour
     public int CurrentCost => IsMaxed ? 0 : levels[currentLevelIndex].cost;
     public UpgradeType Type => upgradeType;
     public int CurrentLevelIndex => currentLevelIndex;
+    public string DisplayName => upgradeType == UpgradeType.AttackDamage ? "공격력 강화" : "최대 체력 강화";
 
     private void OnEnable()
     {

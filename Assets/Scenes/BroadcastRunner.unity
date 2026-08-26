@@ -2308,8 +2308,8 @@ Transform:
   m_GameObject: {fileID: 283859332}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 19.686, y: -1.65, z: 0}
-  m_LocalScale: {x: 0.7735406, y: 0.7735406, z: 0.24173145}
+  m_LocalPosition: {x: 19.881, y: -1.358, z: 0}
+  m_LocalScale: {x: 0.7527974, y: 0.7527974, z: 0.23524922}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1151117897}
@@ -2348,17 +2348,17 @@ BoxCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0.12402144, y: -0.044020534}
+  m_Offset: {x: -0.11898118, y: -0.581074}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 2.9375, y: 2.6875}
+    oldSize: {x: 4, y: 4}
     newSize: {x: 0.16, y: 0.16}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 1.8482387, y: 2.9163806}
+  m_Size: {x: 1.6158029, y: 2.3935442}
   m_EdgeRadius: 0
 --- !u!212 &283859335
 SpriteRenderer:
@@ -4902,20 +4902,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StreamOn.Minigames.Runner.RunnerGameAudioController
   backgroundMusic: {fileID: 8300000, guid: 4ce1bfcbba4e5ad4fab046e2775580b0, type: 3}
-  jumpSound: {fileID: 8300000, guid: a83c5a7fe0be6754d8425718ace02c81, type: 3}
+  jumpSound: {fileID: 8300000, guid: 1b9618b770d12914fac422b019d93231, type: 3}
   landingSound: {fileID: 8300000, guid: 4eb1a0ea262041345be060a7056d3097, type: 3}
-  rollSound: {fileID: 8300000, guid: 4eb1a0ea262041345be060a7056d3097, type: 3}
+  rollSound: {fileID: 8300000, guid: 483df1386e7817e4296a80ec96dcc76c, type: 3}
   attackSound: {fileID: 8300000, guid: af00fa99bb0401b46950a8fb788ac6d2, type: 3}
   enemyDefeatedSound: {fileID: 8300000, guid: 092a84203cbe90e4c8b60cd6d9530aa2, type: 3}
   playerHitSound: {fileID: 8300000, guid: c16bad0eb5c5daa439a66d6f7d543d0e, type: 3}
   gameOverSound: {fileID: 8300000, guid: a8f51ad92b132a949a465ae82260fda1, type: 3}
   backgroundMusicVolume: 0.7
-  jumpVolume: 0
-  landingVolume: 1
-  rollVolume: 1
-  attackVolume: 1
-  enemyDefeatedVolume: 1
-  playerHitVolume: 0.568
+  jumpVolume: 0.675
+  landingVolume: 0.687
+  rollVolume: 2
+  attackVolume: 0.699
+  enemyDefeatedVolume: 0.707
+  playerHitVolume: 0.301
   gameOverVolume: 1
   musicLoopGapSeconds: 3
   gameOverMusicFadeSeconds: 2
@@ -14025,6 +14025,10 @@ PrefabInstance:
       propertyPath: m_sharedMaterial
       value: 
       objectReference: {fileID: -1984865612611170719, guid: b66e46f0a2f777e4b9490294fc66fd53, type: 2}
+    - target: {fileID: 3865520376469841907, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 1.7999268
+      objectReference: {fileID: 0}
     - target: {fileID: 4261879869235443616, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
       propertyPath: m_fontAsset
       value: 
@@ -14137,6 +14141,38 @@ PrefabInstance:
       propertyPath: m_sharedMaterial
       value: 
       objectReference: {fileID: -1984865612611170719, guid: b66e46f0a2f777e4b9490294fc66fd53, type: 2}
+    - target: {fileID: 7444444400000000001, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
+      propertyPath: failureSound
+      value: 
+      objectReference: {fileID: 8300000, guid: c9fe3990bf4d0f0429478b9b0fb5ed72, type: 3}
+    - target: {fileID: 7444444400000000001, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
+      propertyPath: successSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 8771c5420326a41458e7682e30793ad3, type: 3}
+    - target: {fileID: 7444444400000000001, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
+      propertyPath: donationSound
+      value: 
+      objectReference: {fileID: 8300000, guid: f0c716762bbc84d4db779750726ba248, type: 3}
+    - target: {fileID: 7444444400000000001, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
+      propertyPath: viewerBanSound
+      value: 
+      objectReference: {fileID: 8300000, guid: c18dcba6507ab644abcfca03fad160ae, type: 3}
+    - target: {fileID: 7444444400000000001, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
+      propertyPath: eventPromptSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 26445381f5a575a47bd0705cea7289c5, type: 3}
+    - target: {fileID: 7444444400000000001, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
+      propertyPath: eventPromptVolume
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7444444400000000001, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
+      propertyPath: largeDonationSound
+      value: 
+      objectReference: {fileID: 8300000, guid: ddea204dfe1a37642af6badac986b382, type: 3}
+    - target: {fileID: 7444444400000000001, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
+      propertyPath: settlementCloseSound
+      value: 
+      objectReference: {fileID: 8300000, guid: c18dcba6507ab644abcfca03fad160ae, type: 3}
     - target: {fileID: 7469149165944921557, guid: 3bdd37c649745a340bc426f8182dfb1e, type: 3}
       propertyPath: m_fontAsset
       value: 

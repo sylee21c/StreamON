@@ -57,7 +57,7 @@ public sealed class GhostSpawner : MonoBehaviour
     [Header("Endless Night Timing")]
     [SerializeField, Min(1f)] private float baseCombatDuration = 45f;
     [SerializeField, Min(0f)] private float combatDurationPerAssault = 2f;
-    [SerializeField, Min(1f)] private float maintenanceDuration = 12f;
+    [SerializeField, Min(1f)] private float maintenanceDuration = 120f;
     [SerializeField, Min(0)] private int earlyMaintenanceCoinReward;
 
     [Header("Spawn Scaling")]
