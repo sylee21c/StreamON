@@ -20,6 +20,7 @@ public sealed class MainMenuController : MonoBehaviour
     [Header("Scene-authored Tutorial")]
     [SerializeField] private Button tutorialButton;
     [SerializeField] private GameObject tutorialPanel;
+    [SerializeField] private Button tutorialCloseButton;
 
     [Header("Title Audio")]
     [SerializeField] private AudioClip backgroundMusic;
@@ -37,13 +38,23 @@ public sealed class MainMenuController : MonoBehaviour
         presentation = GetComponent<BroadcastTitleScreenPresentation>();
         if (presentation == null) presentation = gameObject.AddComponent<BroadcastTitleScreenPresentation>();
         presentation.Configure(canvas, tutorialButton, tutorialPanel, backgroundMusic, uiButtonSound,
-            backgroundMusicVolume, uiButtonVolume);
+            backgroundMusicVolume, uiButtonVolume, tutorialCloseButton);
     }
 
     private void Update()
     {
         if (!isTransitioning && presentation != null && presentation.TutorialOpen)
         {
+            if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+            {
+                RectTransform closeButtonRect = tutorialCloseButton != null
+                    ? tutorialCloseButton.transform as RectTransform
+                    : null;
+                if (IsPointerInside(closeButtonRect, Mouse.current.position.ReadValue()))
+                {
+                    CloseTutorial();
+                }
+            }
             return;
         }
         if (isTransitioning || Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame)
@@ -52,7 +63,14 @@ public sealed class MainMenuController : MonoBehaviour
         }
 
         Vector2 screenPosition = Mouse.current.position.ReadValue();
-        if (IsPointerInside(startButtonRect, screenPosition))
+        RectTransform tutorialButtonRect = tutorialButton != null
+            ? tutorialButton.transform as RectTransform
+            : null;
+        if (IsPointerInside(tutorialButtonRect, screenPosition))
+        {
+            OpenTutorial();
+        }
+        else if (IsPointerInside(startButtonRect, screenPosition))
         {
             StartGame();
         }
@@ -70,12 +88,28 @@ public sealed class MainMenuController : MonoBehaviour
 
     public void OpenTutorial()
     {
-        if (!isTransitioning) presentation?.OpenTutorial();
+        if (isTransitioning) return;
+
+        if (presentation != null)
+        {
+            presentation.OpenTutorial();
+            return;
+        }
+
+        if (tutorialPanel == null) return;
+        tutorialPanel.transform.SetAsLastSibling();
+        tutorialPanel.SetActive(true);
     }
 
     public void CloseTutorial()
     {
-        presentation?.CloseTutorial();
+        if (presentation != null)
+        {
+            presentation.CloseTutorial();
+            return;
+        }
+
+        if (tutorialPanel != null) tutorialPanel.SetActive(false);
     }
 
     public void ExitGame()

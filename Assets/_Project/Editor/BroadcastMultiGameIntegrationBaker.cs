@@ -503,6 +503,13 @@ namespace StreamOn.EditorTools
             GameObject root = new GameObject("Shared Broadcast HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             SceneManager.MoveGameObjectToScene(root, scene);
             Canvas canvas = root.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay; canvas.sortingOrder = 25000;
+            // An unconfigured CanvasScaler defaults to Constant Pixel Size, which makes the
+            // canvas as wide as the raw screen. Anything authored against the right edge then
+            // slides with that edge whenever the resolution differs from the editing view.
+            CanvasScaler scaler = root.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
             TMP_Text text = CreateText(root.transform, "Shared Broadcast Time", "방송 00:00", 32);
             RectTransform rect = text.rectTransform; rect.anchorMin = rect.anchorMax = new Vector2(.5f, 1f);
             rect.pivot = new Vector2(.5f, 1f); rect.anchoredPosition = new Vector2(0, -25); rect.sizeDelta = new Vector2(500, 60);

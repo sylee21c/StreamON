@@ -1,3 +1,4 @@
+using StreamOn.Minigames.Runner;
 using UnityEngine;
 using UnityEngine.Audio;
 
@@ -5,7 +6,7 @@ using UnityEngine.Audio;
 // 클립별로 개별 볼륨/피치를 인스펙터에서 조절 가능.
 // 팝업 Canvas 가 꺼져도 소리가 잘리지 않도록 별도 GameObject 로 존재.
 // 루프 사운드 (걷기/움직임) 는 외부 AudioSource 가 TryGetClipData 로 데이터만 가져가서 로컬 재생.
-public sealed class SFXManager : MonoBehaviour
+public sealed class SFXManager : MonoBehaviour, IBroadcastVolumeTarget
 {
     public enum Sfx
     {
@@ -162,6 +163,13 @@ public sealed class SFXManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    // 공용 일시정지 메뉴의 SFX 슬라이더 값. 클립별 볼륨에 곱해 적용한다.
+    private float sfxScale = 1f;
+
+    public void ApplySfxVolume(float value) => sfxScale = Mathf.Clamp01(value);
+
+    public void ApplyBgmVolume(float value) { }
+
     public void Play(Sfx sfx)
     {
         if (audioSource == null) return;
@@ -173,7 +181,7 @@ public sealed class SFXManager : MonoBehaviour
             if (picked == null) return;
             float origPitch = audioSource.pitch;
             audioSource.pitch = GetRandomPitch(chickenTrap.pitchRange);
-            audioSource.PlayOneShot(picked, chickenTrap.volume);
+            audioSource.PlayOneShot(picked, chickenTrap.volume * sfxScale);
             audioSource.pitch = origPitch;
             return;
         }
@@ -183,7 +191,7 @@ public sealed class SFXManager : MonoBehaviour
 
         float originalPitch = audioSource.pitch;
         audioSource.pitch = GetRandomPitch(slot.pitchRange);
-        audioSource.PlayOneShot(slot.clip, slot.volume);
+        audioSource.PlayOneShot(slot.clip, slot.volume * sfxScale);
         audioSource.pitch = originalPitch;
     }
 
@@ -197,7 +205,8 @@ public sealed class SFXManager : MonoBehaviour
             return false;
         }
         clip = slot.clip;
-        volume = slot.volume;
+        // 걷기 등 루프 사운드는 외부 AudioSource 가 이 값을 그대로 쓰므로 여기서 함께 스케일한다.
+        volume = slot.volume * sfxScale;
         pitchRange = slot.pitchRange;
         return true;
     }

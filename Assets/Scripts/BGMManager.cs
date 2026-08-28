@@ -1,9 +1,10 @@
 using System.Collections;
+using StreamOn.Minigames.Runner;
 using UnityEngine;
 
 // 낮/밤 배경음악을 반복 재생. 페이즈 전환 시 크로스페이드.
 // 게임오버 시에는 전용 음악으로 전환한다.
-public sealed class BGMManager : MonoBehaviour
+public sealed class BGMManager : MonoBehaviour, IBroadcastVolumeTarget
 {
     public static BGMManager Instance { get; private set; }
 
@@ -29,6 +30,9 @@ public sealed class BGMManager : MonoBehaviour
     private DayNightManager.Phase lastPhase = DayNightManager.Phase.Day;
     private Coroutine activeFade;
     private bool overrideActive; // true 면 페이즈 자동 감지 무시 (게임오버 중)
+    // 일시정지 메뉴의 BGM 슬라이더 값. 클립별 목표 볼륨에 곱해 적용한다.
+    private float bgmScale = 1f;
+    private float currentTargetVolume;
 
     private void Awake()
     {
@@ -51,6 +55,16 @@ public sealed class BGMManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    // 공용 일시정지 메뉴가 이 씬에 열렸을 때 호출된다. SFX 는 SFXManager 소관.
+    public void ApplyBgmVolume(float value)
+    {
+        bgmScale = Mathf.Clamp01(value);
+        if (activeFade == null && currentSource != null)
+            currentSource.volume = currentTargetVolume * bgmScale;
+    }
+
+    public void ApplySfxVolume(float value) { }
+
     private static void SetupSource(AudioSource s)
     {
         s.loop = true;
@@ -69,7 +83,8 @@ public sealed class BGMManager : MonoBehaviour
         {
             currentSource.clip = startClip;
             currentSource.loop = true;
-            currentSource.volume = maxVolume;
+            currentTargetVolume = maxVolume;
+            currentSource.volume = maxVolume * bgmScale;
             currentSource.Play();
         }
     }
@@ -139,6 +154,7 @@ public sealed class BGMManager : MonoBehaviour
             newSource.Play();
         }
         currentSource = newSource;
+        currentTargetVolume = targetVolume;
 
         activeFade = StartCoroutine(FadeRoutine(oldSource, newSource, targetVolume, duration));
     }
@@ -153,11 +169,12 @@ public sealed class BGMManager : MonoBehaviour
             elapsed += Time.unscaledDeltaTime;
             float t = elapsed / duration;
             oldS.volume = Mathf.Lerp(startOldVol, 0f, t);
-            newS.volume = Mathf.Lerp(0f, targetVolume, t);
+            // bgmScale 을 매 프레임 다시 곱해, 페이드 도중 슬라이더를 움직여도 즉시 반영된다.
+            newS.volume = Mathf.Lerp(0f, targetVolume * bgmScale, t);
             yield return null;
         }
         oldS.volume = 0f;
-        newS.volume = targetVolume;
+        newS.volume = targetVolume * bgmScale;
         oldS.Stop();
         activeFade = null;
     }

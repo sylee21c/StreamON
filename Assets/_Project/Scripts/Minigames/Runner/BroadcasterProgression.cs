@@ -119,7 +119,7 @@ namespace StreamOn.Minigames.Runner
             ManagerTierRule rule = settings?.managerTiers?.Find(candidate => candidate != null && candidate.tier == tier);
             if (rule == null || save == null || tier > save.unlockedManagerTier || save.hiredManagerTier == tier) return false;
             save.hiredManagerTier = tier;
-            save.managerUsesRemaining = Mathf.Max(0, rule.usesPerBroadcast);
+            save.managerUsesRemaining = 0;
             RunnerCampaignSaveStore.Save(settings, save, true);
             return true;
         }
@@ -127,8 +127,8 @@ namespace StreamOn.Minigames.Runner
         public static void PrepareManagerForBroadcast(RunnerCampaignSettings settings, RunnerCampaignSaveData save)
         {
             if (save == null) return;
-            ManagerTierRule manager = HiredManager(settings, save);
-            save.managerUsesRemaining = manager != null ? Mathf.Max(0, manager.usesPerBroadcast) : 0;
+            // 매니저는 방송당 횟수를 소비하지 않고 모든 분탕/친목 이벤트마다 확률 판정한다.
+            save.managerUsesRemaining = 0;
         }
 
         public static long ApplyManagerSalary(RunnerCampaignSettings settings, RunnerCampaignSaveData save)

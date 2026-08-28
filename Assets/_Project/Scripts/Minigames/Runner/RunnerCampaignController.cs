@@ -455,10 +455,10 @@ namespace StreamOn.Minigames.Runner
                 _bestBroadcastScore = data.bestBroadcastScore;
                 _lifetimeDonations = data.lifetimeDonations;
                 _cash = data.cash;
-                _pcLevel = Mathf.Clamp(data.pcLevel, 1, 3);
-                _microphoneLevel = Mathf.Clamp(data.microphoneLevel, 1, 3);
-                _fitnessLevel = Mathf.Clamp(data.fitnessLevel, 1, 3);
-                _interiorLevel = Mathf.Clamp(data.interiorLevel, 1, 3);
+                _pcLevel = Mathf.Clamp(data.pcLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+                _microphoneLevel = Mathf.Clamp(data.microphoneLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+                _fitnessLevel = Mathf.Clamp(data.fitnessLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+                _interiorLevel = Mathf.Clamp(data.interiorLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
                 _broadcastPending = data.broadcastPending;
                 _selectedActionName = data.selectedAction ?? string.Empty;
                 _selectedBroadcastGame = data.selectedBroadcastGame ?? string.Empty;

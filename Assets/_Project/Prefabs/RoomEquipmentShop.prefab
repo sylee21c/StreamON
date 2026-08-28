@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 8219027402650863139}
   - component: {fileID: 1945575114845918614}
   m_Layer: 0
-  m_Name: "\uCCB4\uB825 \uC7A5\uBE44"
+  m_Name: "\uC548\uACBD"
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -34,7 +34,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -80, y: -51}
+  m_AnchoredPosition: {x: -80, y: -129}
   m_SizeDelta: {x: 390, y: 60}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8219027402650863139
@@ -65,7 +65,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uCCB4\uB825 \uC7A5\uBE44  Lv.1"
+  m_text: "\uC548\uACBD  Lv.1"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 5e11e008a2c3ce94894340d39a7b5d88, type: 2}
   m_sharedMaterial: {fileID: 5064063392872720861, guid: 5e11e008a2c3ce94894340d39a7b5d88, type: 2}
@@ -1077,7 +1077,7 @@ GameObject:
   - component: {fileID: 4089993529539318683}
   - component: {fileID: 5751572747578818681}
   m_Layer: 0
-  m_Name: "\uBC29 \uC778\uD14C\uB9AC\uC5B4 Upgrade"
+  m_Name: "\uC6F9\uCEA0 Upgrade"
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1100,7 +1100,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 220, y: -129}
+  m_AnchoredPosition: {x: 220, y: -51}
   m_SizeDelta: {x: 150, y: 48}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &4106815017214109699
@@ -1422,7 +1422,7 @@ GameObject:
   - component: {fileID: 1207609359224324414}
   - component: {fileID: 6054169035509625508}
   m_Layer: 0
-  m_Name: "\uCCB4\uB825 \uC7A5\uBE44 Upgrade"
+  m_Name: "\uC548\uACBD Upgrade"
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1445,7 +1445,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 220, y: -51}
+  m_AnchoredPosition: {x: 220, y: -129}
   m_SizeDelta: {x: 150, y: 48}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &5129286978247121396
@@ -2275,7 +2275,7 @@ GameObject:
   - component: {fileID: 8049495562217589679}
   - component: {fileID: 5472416418193516452}
   m_Layer: 0
-  m_Name: "\uBC29 \uC778\uD14C\uB9AC\uC5B4"
+  m_Name: "\uC6F9\uCEA0"
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2297,7 +2297,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -80, y: -129}
+  m_AnchoredPosition: {x: -80, y: -51}
   m_SizeDelta: {x: 390, y: 60}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8049495562217589679
@@ -2328,7 +2328,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uBC29 \uC778\uD14C\uB9AC\uC5B4  Lv.1"
+  m_text: "\uC6F9\uCEA0  Lv.1"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 5e11e008a2c3ce94894340d39a7b5d88, type: 2}
   m_sharedMaterial: {fileID: 5064063392872720861, guid: 5e11e008a2c3ce94894340d39a7b5d88, type: 2}

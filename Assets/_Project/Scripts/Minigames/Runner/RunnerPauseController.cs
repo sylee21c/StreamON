@@ -67,6 +67,8 @@ namespace StreamOn.Minigames.Runner
             BindSceneUi();
         }
 
+        private void Start() => PushSavedVolumesToScene();
+
         private void Update()
         {
             if (Keyboard.current == null || !Keyboard.current.escapeKey.wasPressedThisFrame) return;
@@ -214,8 +216,44 @@ namespace StreamOn.Minigames.Runner
 
         private void OpenSettings() { pausePanel.SetActive(false); settingsPanel.SetActive(true); RefreshSettingsLabels(); }
         private void CloseSettings() { settingsPanel.SetActive(false); pausePanel.SetActive(true); }
-        private void SetBgmVolume(float value) { RunnerRoomAudioController.SetGlobalBgmVolume(value); RunnerGameAudioController.SetGlobalBgmVolume(value); RefreshSettingsLabels(); }
-        private void SetSfxVolume(float value) { RunnerRoomAudioController.SetGlobalSfxVolume(value); RunnerGameAudioController.SetGlobalSfxVolume(value); RefreshSettingsLabels(); }
+        private void SetBgmVolume(float value)
+        {
+            RunnerRoomAudioController.SetGlobalBgmVolume(value);
+            RunnerGameAudioController.SetGlobalBgmVolume(value);
+            ApplyToSceneVolumeTargets(target => target.ApplyBgmVolume(value));
+            RefreshSettingsLabels();
+        }
+
+        private void SetSfxVolume(float value)
+        {
+            RunnerRoomAudioController.SetGlobalSfxVolume(value);
+            RunnerGameAudioController.SetGlobalSfxVolume(value);
+            ApplyToSceneVolumeTargets(target => target.ApplySfxVolume(value));
+            RefreshSettingsLabels();
+        }
+
+        // This pause menu is baked into every broadcast scene, but the two controllers
+        // above only exist in the StreamerRoom and Runner scenes. TileArena and
+        // PlasticKnightmare own their audio through their own components, so the sliders
+        // have to reach whichever target the currently loaded scene provides.
+        private static void ApplyToSceneVolumeTargets(System.Action<IBroadcastVolumeTarget> apply)
+        {
+            MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int index = 0; index < behaviours.Length; index++)
+                if (behaviours[index] is IBroadcastVolumeTarget target) apply(target);
+        }
+
+        // Entering a scene must honour the saved levels, not whatever the prefab shipped with.
+        private static void PushSavedVolumesToScene()
+        {
+            RunnerUserSettingsData data = RunnerUserSettingsStore.Load();
+            ApplyToSceneVolumeTargets(target =>
+            {
+                target.ApplyBgmVolume(data.bgmVolume);
+                target.ApplySfxVolume(data.sfxVolume);
+            });
+        }
         private void SetVolume(float value) { AudioListener.volume = value; RunnerUserSettingsData data = RunnerUserSettingsStore.Load(); data.masterVolume = value; RunnerUserSettingsStore.Save(data); RefreshSettingsLabels(); }
         private void ToggleAi() { if (chat != null) chat.SetAiEnabled(!chat.AiEnabled); RefreshSettingsLabels(); }
         private void RefreshSettingsLabels()

@@ -60,7 +60,10 @@ namespace StreamOn.Minigames.Runner
                     bool selected = tier == _save.hiredManagerTier;
                     string name = selected ? $"<color=#FFF23D>{rule.displayName}</color>" : rule.displayName;
                     tierDescriptions[index].richText = true;
-                    tierDescriptions[index].text = $"{name}\n방송당 {rule.usesPerBroadcast}회 / {rule.handlingDelaySeconds:0.#}초 후 처리\n해금 {rule.unlockCost:N0}원 / 일급 {rule.hireCostPerBroadcast:N0}원";
+                    tierDescriptions[index].text =
+                        $"<size=18><b>{name}</b></size>\n" +
+                        $"<size=12>분탕 {rule.conflictResolveChance * 100f:0}% / 친목 {rule.fraternizationResolveChance * 100f:0}%</size>\n" +
+                        $"<size=12>해금 {rule.unlockCost:N0}원 / 일급 {rule.hireCostPerBroadcast:N0}원</size>";
                 }
                 if (unlockButtons != null && index < unlockButtons.Length && unlockButtons[index] != null)
                     SetButtonState(unlockButtons[index], tier == _save.unlockedManagerTier + 1 && _save.cash >= rule.unlockCost);

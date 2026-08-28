@@ -8,6 +8,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using StreamOn.Minigames.TileArena;
 
 namespace StreamOn.Minigames.Runner
 {
@@ -159,7 +160,6 @@ namespace StreamOn.Minigames.Runner
         private RunnerViewerData _pendingFraternizer;
         private Coroutine _fraternizationPump;
         private float _socialEventStartedAt;
-        private Coroutine _managerRoutine;
 
         private void Awake()
         {
@@ -657,7 +657,9 @@ namespace StreamOn.Minigames.Runner
         private void RefreshTitle()
         {
             if (_titleText == null) return;
-            _titleText.text = $"채팅  /  {_connectionMode}\n현재 시청자 {_audienceViewerCount:N0}명";
+            // AI / LOCAL / CONNECTING 은 개발용 접속 상태라 플레이어에게 노출하지 않는다.
+            // _connectionMode 자체는 내부 로직이 참조하므로 값은 계속 갱신된다.
+            _titleText.text = $"채팅\n현재 시청자 {_audienceViewerCount:N0}명";
         }
 
         private bool IsSocialEventActive() => _conflictActive || _fraternizationActive;
@@ -711,7 +713,7 @@ namespace StreamOn.Minigames.Runner
             React(RunnerChatEvent.ChatConflict);
             if (_conflictPump != null) StopCoroutine(_conflictPump);
             _conflictPump = StartCoroutine(PumpConflictFollowups(_runGeneration));
-            TryScheduleManager(false);
+            TryManagerHandleEvent(false);
             return true;
         }
 
@@ -737,38 +739,31 @@ namespace StreamOn.Minigames.Runner
             React(RunnerChatEvent.ChatFraternization);
             if (_fraternizationPump != null) StopCoroutine(_fraternizationPump);
             _fraternizationPump = StartCoroutine(PumpFraternizationFollowups(_runGeneration));
-            TryScheduleManager(true);
+            TryManagerHandleEvent(true);
             return true;
         }
 
-        private void TryScheduleManager(bool fraternization)
+        private void TryManagerHandleEvent(bool fraternization)
         {
             if (campaignSettings == null || !RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save)) return;
             ManagerTierRule manager = BroadcasterProgression.HiredManager(campaignSettings, save);
-            if (manager == null || save.managerUsesRemaining <= 0 || (fraternization && !manager.handlesFraternization)) return;
-            if (_managerRoutine != null) StopCoroutine(_managerRoutine);
-            float delayMultiplier = 1f - Mathf.Max(0, save.pcLevel - 1) * campaignSettings.managerDelayReductionPerPcUpgrade;
-            _managerRoutine = StartCoroutine(ManagerHandleRoutine(manager, fraternization, Mathf.Max(0f, delayMultiplier)));
-            RefreshManagerStatus(save, manager);
-        }
+            if (manager == null) return;
+            float chance = fraternization ? manager.fraternizationResolveChance : manager.conflictResolveChance;
+            if (UnityEngine.Random.value > Mathf.Clamp01(chance)) return;
 
-        private IEnumerator ManagerHandleRoutine(ManagerTierRule manager, bool fraternization, float delayMultiplier)
-        {
-            yield return PauseAwareDelay(Mathf.Max(0f, manager.handlingDelaySeconds * delayMultiplier));
-            _managerRoutine = null;
-            if (fraternization ? !_fraternizationActive : !_conflictActive) yield break;
-            if (!RunnerCampaignSaveStore.TryLoad(campaignSettings, out RunnerCampaignSaveData save) || save.managerUsesRemaining <= 0) yield break;
-            save.managerUsesRemaining--;
-            RunnerCampaignSaveStore.Save(campaignSettings, save, true);
             if (fraternization)
             {
-                string[] offenders = _fraternizationOffenders.Take(Mathf.Max(0, _fraternizationOffenders.Count - 1)).ToArray();
+                int banCount = _fraternizationOffenders.Count <= 1
+                    ? _fraternizationOffenders.Count
+                    : _fraternizationOffenders.Count - 1;
+                string[] offenders = _fraternizationOffenders.Take(banCount).ToArray();
                 foreach (string viewerId in offenders) ManagerBan(viewerId);
                 _fraternizationActive = false;
                 _fraternizationOffenders.Clear();
                 _fraternizers.Clear();
                 if (_fraternizationPump != null) StopCoroutine(_fraternizationPump);
                 _fraternizationPump = null;
+                ApplyFraternizationResolved(Time.time - _socialEventStartedAt);
             }
             else
             {
@@ -776,6 +771,7 @@ namespace StreamOn.Minigames.Runner
                 _conflictActive = false;
                 if (_conflictPump != null) StopCoroutine(_conflictPump);
                 _conflictPump = null;
+                ApplyModerationResult(true);
             }
             EnqueueSystemMessage($"{manager.displayName}가 채팅을 정리했습니다.");
             RefreshTitle();
@@ -787,6 +783,7 @@ namespace StreamOn.Minigames.Runner
             if (string.IsNullOrWhiteSpace(viewerId) || _bannedViewers.Contains(viewerId)) return;
             RunnerViewerData viewer = _activeViewers.FirstOrDefault(item => item.viewerId == viewerId);
             _bannedViewers.Add(viewerId);
+            RemoveBannedViewerFromAudience();
             RemoveViewerChatHistory(viewerId);
             if (viewer != null) EnqueueSystemMessage($"{viewer.nickname} 님이 강제 퇴장되었습니다.");
         }
@@ -794,7 +791,9 @@ namespace StreamOn.Minigames.Runner
         private void RefreshManagerStatus(RunnerCampaignSaveData save, ManagerTierRule manager)
         {
             if (managerStatusText == null) return;
-            managerStatusText.text = manager == null ? "매니저 없음" : $"{manager.displayName} / 남은 처리 {save.managerUsesRemaining}회";
+            managerStatusText.text = manager == null
+                ? "매니저 없음"
+                : $"{manager.displayName} / 분탕 {manager.conflictResolveChance * 100f:0}% / 친목 {manager.fraternizationResolveChance * 100f:0}%";
         }
 
         private static bool IsConflictViewer(RunnerViewerData viewer) => viewer != null
@@ -971,6 +970,7 @@ namespace StreamOn.Minigames.Runner
             bool fraternizationCorrect = _fraternizationActive && _fraternizationOffenders.Contains(viewerId);
             bool correct = conflictCorrect || fraternizationCorrect;
             _bannedViewers.Add(viewerId);
+            RemoveBannedViewerFromAudience();
             BroadcastUiAudioController.Play(BroadcastUiSound.ViewerBan);
             RemoveViewerChatHistory(viewerId);
             EnqueueSystemMessage($"{clickedViewer.nickname} 님이 강제 퇴장되었습니다.");
@@ -1019,6 +1019,15 @@ namespace StreamOn.Minigames.Runner
             EnqueueConflictBystander("밴 굿", false);
             EnqueueConflictBystander("드디어 조용해지겠네", false);
             RefreshTitle();
+        }
+
+        private static void RemoveBannedViewerFromAudience()
+        {
+            RunnerBroadcastAudienceController runner = FindFirstObjectByType<RunnerBroadcastAudienceController>();
+            if (runner != null) { runner.RemoveBannedViewer(); return; }
+            TileArenaChatAdapter tile = FindFirstObjectByType<TileArenaChatAdapter>();
+            if (tile != null) { tile.RemoveBannedViewer(); return; }
+            FindFirstObjectByType<PlasticKnightmareBroadcastController>()?.RemoveBannedViewer();
         }
 
         private IEnumerator PumpWrongBanReactions(int generation)

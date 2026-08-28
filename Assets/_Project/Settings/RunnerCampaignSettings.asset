@@ -413,25 +413,22 @@ MonoBehaviour:
   managerTiers:
   - tier: 1
     displayName: "\uC5F0\uC2B5\uC0DD \uB9E4\uB2C8\uC800"
-    unlockCost: 2500
-    hireCostPerBroadcast: 500
-    usesPerBroadcast: 1
-    handlingDelaySeconds: 12
-    handlesFraternization: 0
+    unlockCost: 50000
+    hireCostPerBroadcast: 8000
+    conflictResolveChance: 0.35
+    fraternizationResolveChance: 0.2
   - tier: 2
     displayName: "\uC77C\uBC18 \uB9E4\uB2C8\uC800"
-    unlockCost: 8000
-    hireCostPerBroadcast: 1200
-    usesPerBroadcast: 2
-    handlingDelaySeconds: 8
-    handlesFraternization: 0
+    unlockCost: 180000
+    hireCostPerBroadcast: 20000
+    conflictResolveChance: 0.65
+    fraternizationResolveChance: 0.5
   - tier: 3
     displayName: "\uD504\uB85C \uB9E4\uB2C8\uC800"
-    unlockCost: 20000
-    hireCostPerBroadcast: 2500
-    usesPerBroadcast: 3
-    handlingDelaySeconds: 5
-    handlesFraternization: 1
+    unlockCost: 500000
+    hireCostPerBroadcast: 45000
+    conflictResolveChance: 0.9
+    fraternizationResolveChance: 0.8
   plasticDayPreparationSeconds: 120
   plasticNightStartingHeatMinimum: 40
   plasticNightStartingHeatMaximum: 60
@@ -462,14 +459,16 @@ MonoBehaviour:
     clearBonus: 1100
   gameOverTimePenaltySeconds: 8
   broadcastGrowthSettings: {fileID: 11400000, guid: af962f6fba2d418eaa50113295cd3263, type: 2}
-  pcUpgradeCosts: 0000000088130000983a0000
-  microphoneUpgradeCosts: 00000000a00f0000e02e0000
-  fitnessUpgradeCosts: 00000000ac0d000010270000
-  interiorUpgradeCosts: 00000000b80b000028230000
+  pcUpgradeCosts: 0000000010270000204e0000409c000080380100
+  microphoneUpgradeCosts: 00000000401f0000803e0000007d000000fa0000
+  fitnessUpgradeCosts: 00000000581b0000b0360000606d0000c0da0000
+  interiorUpgradeCosts: 0000000070170000e02e0000c05d000080bb0000
   scoreBonusPerPcUpgrade: 0.06
   followerConversionBonusPerMicrophoneUpgrade: 0.008
   donationBonusPerMicrophoneUpgrade: 0.08
   broadcastSecondsPerFitnessUpgrade: 30
+  baseViewerRatio: 0.4
+  viewerRatioBonusPerWebcamUpgrade: 0.05
   startingViewersPerInteriorUpgrade: 2
   managerDelayReductionPerPcUpgrade: 0.08
   focusCapacityPerFitnessUpgrade: 15

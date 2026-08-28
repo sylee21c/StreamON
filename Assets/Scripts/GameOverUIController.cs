@@ -89,9 +89,20 @@ public sealed class GameOverUIController : MonoBehaviour
         }
 
         instance = this;
+        // IsGameOver is static and survives scene changes. A previous Plastic Knightmare
+        // run must never leave the newly loaded player's movement locked.
+        IsGameOver = false;
+        showing = false;
         LoadDefaultSprites();
         ConfigureForSceneEditing();
         HideInstant();
+    }
+
+    private void OnDestroy()
+    {
+        if (instance != this) return;
+        instance = null;
+        IsGameOver = false;
     }
 
     private void OnEnable()
@@ -276,8 +287,14 @@ public sealed class GameOverUIController : MonoBehaviour
         AutoAssignMissingReferences();
         ApplyDefaultSprites();
 
-        if (rootGroup == null || iconGroup == null || retryGroup == null || retryButton == null)
-            Debug.LogError("GameOverUIController의 씬 UI 참조가 비어 있습니다.", this);
+        // Plastic Knightmare's broadcast flow intentionally has no retry UI: after the
+        // game-over presentation it proceeds to settlement. Only the presentation
+        // elements are mandatory; retryGroup/retryButton remain optional for standalone use.
+        if (rootGroup == null || backgroundGroup == null || backgroundImage == null
+            || iconGroup == null || gameOverIconImage == null)
+        {
+            Debug.LogError("GameOverUIController의 필수 게임오버 표시 UI 참조가 비어 있습니다.", this);
+        }
 
         if (retryButtonText != null)
             retryButtonText.text = "Retry";

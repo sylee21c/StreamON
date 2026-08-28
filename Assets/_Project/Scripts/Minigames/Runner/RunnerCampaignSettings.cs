@@ -87,9 +87,10 @@ namespace StreamOn.Minigames.Runner
         public string displayName = "매니저";
         [Min(0)] public long unlockCost;
         [Min(0)] public long hireCostPerBroadcast;
-        [Min(0)] public int usesPerBroadcast = 1;
-        [Min(0f)] public float handlingDelaySeconds = 12f;
-        public bool handlesFraternization;
+        [Tooltip("분탕 이벤트가 발생할 때 매니저가 즉시 해결할 확률입니다.")]
+        [Range(0f, 1f)] public float conflictResolveChance = .35f;
+        [Tooltip("친목 이벤트가 발생할 때 매니저가 즉시 해결할 확률입니다.")]
+        [Range(0f, 1f)] public float fraternizationResolveChance = .20f;
     }
 
     [Serializable]
@@ -124,6 +125,7 @@ namespace StreamOn.Minigames.Runner
     [CreateAssetMenu(fileName = "Runner Campaign Settings", menuName = "STREAM ON/Runner/Campaign Settings")]
     public sealed class RunnerCampaignSettings : ScriptableObject
     {
+        public const int MaximumEquipmentLevel = 5;
         [Header("Campaign Length")]
         public RunnerCampaignLengthMode lengthMode = RunnerCampaignLengthMode.Endless;
         [Min(1)] public int fixedMaximumDays = 7;
@@ -245,9 +247,9 @@ namespace StreamOn.Minigames.Runner
         [Header("Manager")]
         public List<ManagerTierRule> managerTiers = new List<ManagerTierRule>
         {
-            new ManagerTierRule { tier = 1, displayName = "연습생 매니저", unlockCost = 2500, hireCostPerBroadcast = 500, usesPerBroadcast = 1, handlingDelaySeconds = 12f },
-            new ManagerTierRule { tier = 2, displayName = "일반 매니저", unlockCost = 8000, hireCostPerBroadcast = 1200, usesPerBroadcast = 2, handlingDelaySeconds = 8f },
-            new ManagerTierRule { tier = 3, displayName = "프로 매니저", unlockCost = 20000, hireCostPerBroadcast = 2500, usesPerBroadcast = 3, handlingDelaySeconds = 5f, handlesFraternization = true }
+            new ManagerTierRule { tier = 1, displayName = "연습생 매니저", unlockCost = 50000, hireCostPerBroadcast = 8000, conflictResolveChance = .35f, fraternizationResolveChance = .20f },
+            new ManagerTierRule { tier = 2, displayName = "일반 매니저", unlockCost = 180000, hireCostPerBroadcast = 20000, conflictResolveChance = .65f, fraternizationResolveChance = .50f },
+            new ManagerTierRule { tier = 3, displayName = "프로 매니저", unlockCost = 500000, hireCostPerBroadcast = 45000, conflictResolveChance = .90f, fraternizationResolveChance = .80f }
         };
 
         [Header("Plastic Knightmare Broadcast")]
@@ -284,17 +286,21 @@ namespace StreamOn.Minigames.Runner
         public RunnerBroadcastGrowthSettings broadcastGrowthSettings;
 
         [Header("Equipment Upgrade Economy")]
-        [Tooltip("0번은 미사용, 1번은 Lv.2, 2번은 Lv.3 구매 가격입니다.")]
-        public int[] pcUpgradeCosts = { 0, 5000, 15000 };
-        public int[] microphoneUpgradeCosts = { 0, 4000, 12000 };
-        public int[] fitnessUpgradeCosts = { 0, 3500, 10000 };
-        public int[] interiorUpgradeCosts = { 0, 3000, 9000 };
+        [Tooltip("0번은 미사용, 이후 항목은 Lv.2~Lv.5 구매 가격입니다.")]
+        public int[] pcUpgradeCosts = { 0, 10000, 20000, 40000, 80000 };
+        public int[] microphoneUpgradeCosts = { 0, 8000, 16000, 32000, 64000 };
+        public int[] fitnessUpgradeCosts = { 0, 7000, 14000, 28000, 56000 };
+        public int[] interiorUpgradeCosts = { 0, 6000, 12000, 24000, 48000 };
         [Min(0f)] public float scoreBonusPerPcUpgrade = 0.06f;
         [Min(0f)] public float followerConversionBonusPerMicrophoneUpgrade = 0.008f;
         [Min(0f)] public float donationBonusPerMicrophoneUpgrade = 0.08f;
         [Min(0f)] public float broadcastSecondsPerFitnessUpgrade = 30f;
-        [Min(0f)] public float startingViewersPerInteriorUpgrade = 2f;
-        [Min(0f)] public float managerDelayReductionPerPcUpgrade = 0.08f;
+        [Tooltip("팔로워 중 방송을 시청하는 기본 비율입니다. Lv.1 웹캠 기준입니다.")]
+        [Range(0f, 1f)] public float baseViewerRatio = 0.40f;
+        [Tooltip("웹캠 레벨이 하나 오를 때 추가되는 팔로워 대비 시청자 비율입니다.")]
+        [Range(0f, .25f)] public float viewerRatioBonusPerWebcamUpgrade = 0.05f;
+        [HideInInspector] [Min(0f)] public float startingViewersPerInteriorUpgrade = 2f;
+        [HideInInspector] [Min(0f)] public float managerDelayReductionPerPcUpgrade = 0.08f;
         [Min(0f)] public float focusCapacityPerFitnessUpgrade = 15f;
         [Min(0f)] public float focusRecoveryPerFitnessUpgrade = 0.10f;
 
@@ -343,8 +349,12 @@ namespace StreamOn.Minigames.Runner
         {
             float duration = baseBroadcastSeconds + Mathf.Max(0, healthStat - startingHealthStat) * secondsPerHealthStatLevel
                 + Mathf.Max(0, fitnessLevel - 1) * broadcastSecondsPerFitnessUpgrade;
-            return Mathf.Clamp(duration, minimumBroadcastSeconds, maximumBroadcastSeconds + broadcastSecondsPerFitnessUpgrade * 2f);
+            return Mathf.Clamp(duration, minimumBroadcastSeconds,
+                maximumBroadcastSeconds + broadcastSecondsPerFitnessUpgrade * (MaximumEquipmentLevel - 1));
         }
+
+        public float ViewerRatioForWebcamLevel(int webcamLevel) => Mathf.Clamp01(baseViewerRatio
+            + Mathf.Max(0, Mathf.Clamp(webcamLevel, 1, MaximumEquipmentLevel) - 1) * viewerRatioBonusPerWebcamUpgrade);
 
         public BroadcastGameRule GameRule(BroadcastGameId gameId)
         {
@@ -382,8 +392,7 @@ namespace StreamOn.Minigames.Runner
                 RunnerEquipmentType.Fitness => fitnessUpgradeCosts,
                 _ => interiorUpgradeCosts
             };
-            // Cost arrays expose the two actual purchases in the Inspector:
-            // element 1 is Lv.1 -> Lv.2 and element 2 is Lv.2 -> Lv.3.
+            // Element 1 is Lv.1 -> Lv.2, through element 4 for Lv.4 -> Lv.5.
             return costs != null && targetLevel >= 2 && targetLevel - 1 < costs.Length
                 ? Mathf.Max(0, costs[targetLevel - 1])
                 : int.MaxValue;
@@ -427,10 +436,10 @@ namespace StreamOn.Minigames.Runner
             experienceForLevel3 = Mathf.Max(1, experienceForLevel3);
             saveSlotCount = Mathf.Clamp(saveSlotCount, 1, 8);
             if (dayActions == null) dayActions = new List<RunnerCampaignActionDefinition>();
-            EnsureUpgradeCosts(ref pcUpgradeCosts, 5000, 15000);
-            EnsureUpgradeCosts(ref microphoneUpgradeCosts, 4000, 12000);
-            EnsureUpgradeCosts(ref fitnessUpgradeCosts, 3500, 10000);
-            EnsureUpgradeCosts(ref interiorUpgradeCosts, 3000, 9000);
+            EnsureUpgradeCosts(ref pcUpgradeCosts, 10000, 20000, 40000, 80000);
+            EnsureUpgradeCosts(ref microphoneUpgradeCosts, 8000, 16000, 32000, 64000);
+            EnsureUpgradeCosts(ref fitnessUpgradeCosts, 7000, 14000, 28000, 56000);
+            EnsureUpgradeCosts(ref interiorUpgradeCosts, 6000, 12000, 24000, 48000);
         }
 
         private void EnsureNewProgressionRules()
@@ -533,12 +542,16 @@ namespace StreamOn.Minigames.Runner
                 };
         }
 
-        private static void EnsureUpgradeCosts(ref int[] values, int level2, int level3)
+        private static void EnsureUpgradeCosts(ref int[] values, params int[] defaults)
         {
-            if (values == null || values.Length < 3) values = new[] { 0, level2, level3 };
+            int[] expanded = new int[MaximumEquipmentLevel];
+            expanded[0] = 0;
+            for (int index = 1; index < expanded.Length; index++)
+                expanded[index] = values != null && index < values.Length
+                    ? Mathf.Max(0, values[index])
+                    : Mathf.Max(0, defaults[Mathf.Min(index - 1, defaults.Length - 1)]);
+            values = expanded;
             values[0] = 0;
-            values[1] = Mathf.Max(0, values[1]);
-            values[2] = Mathf.Max(0, values[2]);
         }
     }
 

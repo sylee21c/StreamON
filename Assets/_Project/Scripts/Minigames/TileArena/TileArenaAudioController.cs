@@ -1,9 +1,10 @@
 using System.Collections;
+using StreamOn.Minigames.Runner;
 using UnityEngine;
 
 namespace StreamOn.Minigames.TileArena
 {
-    public sealed class TileArenaAudioController : MonoBehaviour
+    public sealed class TileArenaAudioController : MonoBehaviour, IBroadcastVolumeTarget
     {
         [Header("Scene Audio Sources")]
         [SerializeField] private AudioSource musicSource;
@@ -141,6 +142,10 @@ namespace StreamOn.Minigames.TileArena
             PlayerPrefs.SetFloat("tileArenaSfxVolume", _effectsLevel);
             PlayerPrefs.Save();
         }
+
+        // Lets the shared pause menu drive this scene's audio while it is the open scene.
+        void IBroadcastVolumeTarget.ApplyBgmVolume(float value) => SetMusicVolume(value);
+        void IBroadcastVolumeTarget.ApplySfxVolume(float value) => SetEffectsVolume(value);
 
         private void Play(AudioClip clip, float clipVolume)
         {

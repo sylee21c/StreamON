@@ -152,6 +152,14 @@ namespace StreamOn.Minigames.TileArena
         public void OnModerationResult(bool correct) => AddHype(growthSettings == null ? 0f
             : correct ? growthSettings.correctModerationHype : growthSettings.wrongModerationHype, correct ? 1f : 0f);
 
+        public void RemoveBannedViewer()
+        {
+            if (_currentViewers <= 0) return;
+            _currentViewers--;
+            RefreshChatScale();
+            PushSnapshot();
+        }
+
         public void OnFraternizationTick()
         {
             AddHype(growthSettings != null ? growthSettings.fraternizationOngoingHype : 0f, .5f);
@@ -196,11 +204,13 @@ namespace StreamOn.Minigames.TileArena
                 _gameSkill = 0;
                 _mentalLevel = 1;
                 _followers = Mathf.Max(0, save.subscribers);
-                _microphoneLevel = Mathf.Clamp(save.microphoneLevel, 1, 3);
-                _interiorLevel = Mathf.Clamp(save.interiorLevel, 1, 3);
+                _microphoneLevel = Mathf.Clamp(save.microphoneLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+                _interiorLevel = Mathf.Clamp(save.interiorLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
             }
-            float initial = startingViewers + (growthSettings != null ? _followers * growthSettings.followerNotificationRate : 0f)
-                + (campaignSettings != null ? Mathf.Max(0, _interiorLevel - 1) * campaignSettings.startingViewersPerInteriorUpgrade : 0f);
+            float followerAudience = campaignSettings != null
+                ? _followers * campaignSettings.ViewerRatioForWebcamLevel(_interiorLevel)
+                : growthSettings != null ? _followers * growthSettings.followerNotificationRate : 0f;
+            float initial = startingViewers + followerAudience;
             _currentViewers = Mathf.Clamp(Mathf.RoundToInt(initial), 0, maximumViewers);
             _peakViewers = _currentViewers;
             _totalVisitors = _currentViewers;
@@ -335,11 +345,13 @@ namespace StreamOn.Minigames.TileArena
 
         private void UpdateAudience()
         {
+            float followerAudience = campaignSettings != null
+                ? _followers * campaignSettings.ViewerRatioForWebcamLevel(_interiorLevel)
+                : _followers * (growthSettings != null ? growthSettings.followerNotificationRate : 0f);
             float target = startingViewers + gameController.Score * viewersPerScore + _hype * viewersPerHypePoint
-                + _followers * (growthSettings != null ? growthSettings.followerNotificationRate : 0f)
+                + followerAudience
                 + _gameSkill * (growthSettings != null ? growthSettings.viewersPerGameSkill : 0f)
-                + _talkingSkill * (growthSettings != null ? growthSettings.viewersPerTalkingSkill : 0f)
-                + Mathf.Max(0, _interiorLevel - 1) * (campaignSettings != null ? campaignSettings.startingViewersPerInteriorUpgrade : 0f);
+                + _talkingSkill * (growthSettings != null ? growthSettings.viewersPerTalkingSkill : 0f);
             float heat01 = _hype / 100f;
             target *= Mathf.Lerp(growthSettings.viewerTargetMultiplierAtZeroHeat,
                 growthSettings.viewerTargetMultiplierAtFullHeat, heat01);

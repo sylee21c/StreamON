@@ -378,6 +378,9 @@ public sealed class PlayerController : MonoBehaviour
 
     private static bool WasLeftClickPressed()
     {
+        // 채팅창 위에서의 좌클릭은 시청자 차단 전용이다. 여기서 걸러내지 않으면
+        // 차단과 동시에 공격까지 나간다.
+        if (StreamOn.Minigames.Runner.BroadcastChatPointer.IsPointerOverChat()) return false;
 #if ENABLE_INPUT_SYSTEM
         Mouse m = Mouse.current;
         if (m != null) return m.leftButton.wasPressedThisFrame;

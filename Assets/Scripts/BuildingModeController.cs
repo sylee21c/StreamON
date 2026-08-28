@@ -1719,6 +1719,8 @@ public sealed class BuildingModeController : MonoBehaviour
 
     private bool IsLeftMouseHeld()
     {
+        // 채팅창 위에서의 좌클릭은 시청자 차단 전용 — 장난감 배치로 넘기지 않는다.
+        if (StreamOn.Minigames.Runner.BroadcastChatPointer.IsPointerOverChat()) return false;
 #if ENABLE_INPUT_SYSTEM
         Mouse mouse = Mouse.current;
         if (mouse != null)
@@ -1733,6 +1735,9 @@ public sealed class BuildingModeController : MonoBehaviour
 
     private bool WasLeftMousePressed()
     {
+        // 눌림 상태 추적은 그대로 두고 결과만 억제한다. 여기서 일찍 return 하면
+        // previousLeftMousePressed 가 갱신되지 않아, 채팅에서 뗀 뒤 첫 클릭을 놓친다.
+        bool overChat = StreamOn.Minigames.Runner.BroadcastChatPointer.IsPointerOverChat();
         bool pressed = false;
 #if ENABLE_INPUT_SYSTEM
         Mouse mouse = Mouse.current;
@@ -1746,13 +1751,13 @@ public sealed class BuildingModeController : MonoBehaviour
         if (Input.GetMouseButtonDown(0))
         {
             previousLeftMousePressed = true;
-            return true;
+            return !overChat;
         }
 #endif
 
         bool wasPressedThisFrame = pressed && !previousLeftMousePressed;
         previousLeftMousePressed = pressed;
-        return wasPressedThisFrame;
+        return wasPressedThisFrame && !overChat;
     }
 
     private bool WasRightMousePressed()

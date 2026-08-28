@@ -63,7 +63,7 @@ namespace StreamOn.Minigames.Runner
         {
             if (_save == null || settings == null) return;
             int level = GetLevel(type);
-            if (level >= 3) { SetNotice("이미 최고 레벨입니다."); return; }
+            if (level >= RunnerCampaignSettings.MaximumEquipmentLevel) { SetNotice("이미 최고 레벨입니다."); return; }
             int target = level + 1;
             int cost = settings.UpgradeCost(type, target);
             if (_save.cash < cost) { SetNotice($"보유금이 {cost - _save.cash:N0}원 부족합니다."); return; }
@@ -79,21 +79,24 @@ namespace StreamOn.Minigames.Runner
         {
             if (_save == null) return;
             if (cashText != null) cashText.text = $"보유금  {_save.cash:N0}원";
-            SetEquipmentText(pcText, RunnerEquipmentType.Pc, _save.pcLevel, $"매니저 처리속도 +{settings.managerDelayReductionPerPcUpgrade * 100f:0}%/Lv");
+            SetEquipmentText(pcText, RunnerEquipmentType.Pc, _save.pcLevel, $"방송 점수 +{settings.scoreBonusPerPcUpgrade * 100f:0}%/Lv");
             SetEquipmentText(microphoneText, RunnerEquipmentType.Microphone, _save.microphoneLevel, "팔로워/후원 보너스");
             SetEquipmentText(fitnessText, RunnerEquipmentType.Fitness, _save.fitnessLevel, $"집중력 +{settings.focusCapacityPerFitnessUpgrade:0}/Lv");
-            SetEquipmentText(interiorText, RunnerEquipmentType.Interior, _save.interiorLevel, $"초기 시청자 +{settings.startingViewersPerInteriorUpgrade:0}/Lv");
-            if (pcButton != null) pcButton.interactable = _save.pcLevel < 3;
-            if (microphoneButton != null) microphoneButton.interactable = _save.microphoneLevel < 3;
-            if (fitnessButton != null) fitnessButton.interactable = _save.fitnessLevel < 3;
-            if (interiorButton != null) interiorButton.interactable = _save.interiorLevel < 3;
+            SetEquipmentText(interiorText, RunnerEquipmentType.Interior, _save.interiorLevel,
+                $"팔로워 대비 시청자 +{settings.viewerRatioBonusPerWebcamUpgrade * 100f:0}%p/Lv");
+            int max = RunnerCampaignSettings.MaximumEquipmentLevel;
+            if (pcButton != null) pcButton.interactable = _save.pcLevel < max;
+            if (microphoneButton != null) microphoneButton.interactable = _save.microphoneLevel < max;
+            if (fitnessButton != null) fitnessButton.interactable = _save.fitnessLevel < max;
+            if (interiorButton != null) interiorButton.interactable = _save.interiorLevel < max;
         }
 
         private void SetEquipmentText(TMP_Text label, RunnerEquipmentType type, int level, string effect)
         {
             if (label == null) return;
-            string price = level >= 3 ? "MAX" : $"다음 {settings.UpgradeCost(type, level + 1):N0}원";
-            label.text = $"{DisplayName(type)}  Lv.{level}\n{effect}    {price}";
+            string price = level >= RunnerCampaignSettings.MaximumEquipmentLevel
+                ? "MAX" : $"다음 {settings.UpgradeCost(type, level + 1):N0}원";
+            label.text = $"<size=22><b>{DisplayName(type)}  Lv.{level}</b></size>\n<size=15>{effect}    {price}</size>";
         }
 
         private int GetLevel(RunnerEquipmentType type) => type switch
@@ -119,8 +122,8 @@ namespace StreamOn.Minigames.Runner
         {
             RunnerEquipmentType.Pc => "PC",
             RunnerEquipmentType.Microphone => "마이크",
-            RunnerEquipmentType.Fitness => "집중 장비",
-            _ => "방 인테리어"
+            RunnerEquipmentType.Fitness => "안경",
+            _ => "웹캠"
         };
 
         private void SetNotice(string value) { if (noticeText != null) noticeText.text = value; }

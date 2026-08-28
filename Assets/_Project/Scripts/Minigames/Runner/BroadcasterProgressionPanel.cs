@@ -1,3 +1,4 @@
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -30,7 +31,14 @@ namespace StreamOn.Minigames.Runner
         public Image composureProgressFill;
         public Image controlProgressFill;
         public TMP_Text respecButtonLabel;
+        [Header("Scene-authored stat tooltip")]
+        [SerializeField] private TMP_Text statTooltipText;
+        [SerializeField] private Image statTooltipBackground;
         [SerializeField, Min(0.1f)] private float gaugeAnimationSpeed = 5f;
+
+        private TMP_Text _witHoverTarget;
+        private TMP_Text _composureHoverTarget;
+        private TMP_Text _controlHoverTarget;
 
         private RunnerCampaignSaveData _save;
         private float _witDisplayed;
@@ -52,6 +60,16 @@ namespace StreamOn.Minigames.Runner
             composureButton?.onClick.AddListener(UpgradeComposure);
             controlButton?.onClick.AddListener(UpgradeControl);
             respecButton?.onClick.AddListener(Respec);
+            Canvas dashboardCanvas = GetComponentInParent<Canvas>();
+            Transform dashboardRoot = dashboardCanvas != null ? dashboardCanvas.transform : transform.root;
+            TMP_Text[] labels = dashboardRoot.GetComponentsInChildren<TMP_Text>(true);
+            _witHoverTarget = labels.FirstOrDefault(label => label.name == "Wit Text");
+            _composureHoverTarget = labels.FirstOrDefault(label => label.name == "Composure Text");
+            _controlHoverTarget = labels.FirstOrDefault(label => label.name == "Control Text");
+            SetDashboardStatLabel(_witHoverTarget, "재치");
+            SetDashboardStatLabel(_composureHoverTarget, "평정심");
+            SetDashboardStatLabel(_controlHoverTarget, "통제력");
+            ConfigureTooltip();
         }
 
         private void OnEnable() => Refresh(true);
@@ -63,6 +81,7 @@ namespace StreamOn.Minigames.Runner
                 _composureResetTarget, composureProgressFill);
             AnimateGauge(ref _controlDisplayed, ref _controlTarget, ref _controlCompleting,
                 _controlResetTarget, controlProgressFill);
+            UpdateStatTooltip();
         }
 
         public void UpgradeWit() => InvestPoint(BroadcasterStatType.Wit);
@@ -191,6 +210,73 @@ namespace StreamOn.Minigames.Runner
         private static void SetLevelText(TMP_Text label, int rank, int maximum)
         {
             if (label != null) label.text = rank >= maximum ? "Lvl. MAX" : $"Lvl. {rank + 1}";
+        }
+
+        private void ConfigureTooltip()
+        {
+            if (statTooltipText == null || statTooltipBackground == null) return;
+            Canvas dashboardCanvas = GetComponentInParent<Canvas>();
+            statTooltipBackground.transform.SetParent(
+                dashboardCanvas != null ? dashboardCanvas.transform : transform.root, false);
+            statTooltipBackground.transform.SetAsLastSibling();
+            statTooltipText.transform.SetParent(statTooltipBackground.transform, false);
+            statTooltipText.fontSize = 15f;
+            statTooltipText.alignment = TextAlignmentOptions.MidlineLeft;
+            statTooltipText.raycastTarget = false;
+            RectTransform rect = statTooltipText.rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = new Vector2(14f, 8f);
+            rect.offsetMax = new Vector2(-14f, -8f);
+            RectTransform backgroundRect = statTooltipBackground.rectTransform;
+            backgroundRect.anchorMin = backgroundRect.anchorMax = Vector2.zero;
+            backgroundRect.pivot = Vector2.zero;
+            backgroundRect.sizeDelta = new Vector2(390f, 76f);
+            statTooltipBackground.color = new Color(0.015f, 0.02f, 0.03f, .94f);
+            statTooltipBackground.raycastTarget = false;
+            statTooltipBackground.gameObject.SetActive(false);
+        }
+
+        private static void SetDashboardStatLabel(TMP_Text label, string title)
+        {
+            if (label == null) return;
+            label.text = $"<size=21><b>{title}</b></size>";
+            label.alignment = TextAlignmentOptions.MidlineLeft;
+            label.lineSpacing = 0f;
+        }
+
+        private void UpdateStatTooltip()
+        {
+            if (statTooltipText == null || statTooltipBackground == null
+                || UnityEngine.InputSystem.Mouse.current == null) return;
+            Vector2 pointer = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
+            string description = IsPointerOverStat(_witHoverTarget, pointer)
+                ? "재치\n돌발 상황에 재치 있게 대응해 방송 반응과 보상을 높입니다."
+                : IsPointerOverStat(_composureHoverTarget, pointer)
+                    ? "평정심\n실수로 받는 불이익을 줄이고 무너진 방송 흐름을 회복합니다."
+                    : IsPointerOverStat(_controlHoverTarget, pointer)
+                        ? "통제력\n집중력 최대치와 회복력을 높이고 집중력 소모를 줄입니다."
+                        : null;
+            bool visible = !string.IsNullOrEmpty(description);
+            statTooltipBackground.gameObject.SetActive(visible);
+            if (!visible) return;
+            statTooltipText.text = description;
+            statTooltipBackground.rectTransform.position = pointer + new Vector2(18f, 18f);
+        }
+
+        private static bool IsPointerOverStat(TMP_Text label, Vector2 pointer)
+        {
+            if (label == null || !label.gameObject.activeInHierarchy) return false;
+            Camera eventCamera = label.canvas != null && label.canvas.renderMode != RenderMode.ScreenSpaceOverlay
+                ? label.canvas.worldCamera : null;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    label.rectTransform, pointer, eventCamera, out Vector2 local)) return false;
+            Rect area = label.rectTransform.rect;
+            area.xMin -= 12f;
+            area.xMax += 410f;
+            area.yMin -= 8f;
+            area.yMax += 8f;
+            return area.Contains(local);
         }
     }
 }

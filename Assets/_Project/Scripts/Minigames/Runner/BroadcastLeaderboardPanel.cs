@@ -17,11 +17,16 @@ namespace StreamOn.Minigames.Runner
         public TMP_Text statusText;
         public UnityEngine.UI.Button submitButton;
 
-        private void Awake() => submitButton?.onClick.AddListener(SubmitMyRecord);
+        private void Awake()
+        {
+            ResolveSceneReferences();
+            submitButton?.onClick.AddListener(SubmitMyRecord);
+        }
         private void OnEnable() => Refresh();
 
         public void Refresh()
         {
+            ResolveSceneReferences();
             if (settings == null || !RunnerCampaignSaveStore.TryLoad(settings, out RunnerCampaignSaveData save)) return;
             if (provider == null) provider = FindFirstObjectByType<BroadcastLeaderboardProvider>();
             if (titleText != null) titleText.text = followerLeaderboard ? "스트리머 팔로워 순위" : $"{settings.GameRule(gameId).displayName} 리더보드";
@@ -32,13 +37,47 @@ namespace StreamOn.Minigames.Runner
             if (provider != null && settings.useOnlineLeaderboard)
                 StartCoroutine(provider.Fetch(gameId, followerLeaderboard, entries =>
                 {
-                    if (provider.LastOperationSucceeded) Render(entries, false);
+                    if (provider.LastOperationSucceeded) Render(MergeWithLocal(entries, local), false);
                     else
                     {
                         Render(localEntries, true);
                         if (statusText != null) statusText.text = provider.LastError;
                     }
                 }));
+        }
+
+        private void ResolveSceneReferences()
+        {
+            BroadcastLeaderboardPanel[] panels = transform.root.GetComponentsInChildren<BroadcastLeaderboardPanel>(true);
+            if (settings == null)
+                settings = panels.Select(panel => panel.settings).FirstOrDefault(candidate => candidate != null);
+            if (provider == null)
+                provider = transform.root.GetComponentInChildren<BroadcastLeaderboardProvider>(true)
+                    ?? FindFirstObjectByType<BroadcastLeaderboardProvider>();
+            provider?.Configure(settings);
+
+            if (name.EndsWith(" 3")) followerLeaderboard = true;
+            else if (name.EndsWith(" 0")) gameId = BroadcastGameId.Runner;
+            else if (name.EndsWith(" 1")) gameId = BroadcastGameId.TileArena;
+            else if (name.EndsWith(" 2")) gameId = BroadcastGameId.PlasticKnightmare;
+
+            TMP_Text[] labels = GetComponentsInChildren<TMP_Text>(true);
+            titleText ??= labels.FirstOrDefault(label => label.name == "Title");
+            if (rowTexts == null || rowTexts.Length == 0)
+                rowTexts = labels.Where(label => label.name.StartsWith("Row "))
+                    .OrderByDescending(label => label.rectTransform.anchoredPosition.y).ToArray();
+            submitButton ??= GetComponentsInChildren<UnityEngine.UI.Button>(true)
+                .FirstOrDefault(button => button.name == "Submit");
+        }
+
+        private static IEnumerable<BroadcastLeaderboardEntry> MergeWithLocal(
+            IReadOnlyList<BroadcastLeaderboardEntry> onlineEntries, BroadcastLeaderboardEntry local)
+        {
+            List<BroadcastLeaderboardEntry> merged = onlineEntries != null
+                ? onlineEntries.Where(entry => entry != null).ToList()
+                : new List<BroadcastLeaderboardEntry>();
+            if (local != null && !merged.Any(entry => entry.playerId == local.playerId)) merged.Add(local);
+            return merged;
         }
 
         public void SubmitMyRecord()

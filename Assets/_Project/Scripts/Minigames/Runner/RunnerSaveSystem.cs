@@ -496,10 +496,10 @@ namespace StreamOn.Minigames.Runner
             data.hiredManagerTier = Mathf.Clamp(data.hiredManagerTier, 0, data.unlockedManagerTier);
             data.managerUsesRemaining = Mathf.Max(0, data.managerUsesRemaining);
             if (data.leaderboardRecords == null) data.leaderboardRecords = new List<BroadcastLeaderboardRecord>();
-            data.pcLevel = Mathf.Clamp(data.pcLevel, 1, 3);
-            data.microphoneLevel = Mathf.Clamp(data.microphoneLevel, 1, 3);
-            data.fitnessLevel = Mathf.Clamp(data.fitnessLevel, 1, 3);
-            data.interiorLevel = Mathf.Clamp(data.interiorLevel, 1, 3);
+            data.pcLevel = Mathf.Clamp(data.pcLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+            data.microphoneLevel = Mathf.Clamp(data.microphoneLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+            data.fitnessLevel = Mathf.Clamp(data.fitnessLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+            data.interiorLevel = Mathf.Clamp(data.interiorLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
             if (data.gameSkill >= settings.maximumGameSkill) data.gameSkillExperience = 0;
             if (data.talkingSkill >= settings.maximumTalkingSkill) data.talkingSkillExperience = 0;
             if (data.healthStat >= settings.maximumHealthStat) data.healthStatExperience = 0;

@@ -1193,7 +1193,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a427e17363ab4377af37d343546ba408, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StreamOn.Minigames.Runner.BroadcastLeaderboardProvider
-  settings: {fileID: 0}
+  settings: {fileID: 11400000, guid: 59be096373b140e79a9144aec542c1c6, type: 2}
   notificationPresenter: {fileID: 0}
 --- !u!1 &1379388870570744164
 GameObject:
@@ -1207,12 +1207,12 @@ GameObject:
   - component: {fileID: 2187340695189282899}
   - component: {fileID: 5372059356002538685}
   m_Layer: 0
-  m_Name: Legacy Leaderboard Status (Removed)
+  m_Name: Stat Tooltip Text
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &2549963782027688770
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1225,7 +1225,7 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 7496705062134959027}
+  m_Father: {fileID: 9100000000000000002}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
@@ -5075,7 +5075,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &6587397915749642730
 RectTransform:
   m_ObjectHideFlags: 0
@@ -8097,6 +8097,7 @@ RectTransform:
   - {fileID: 7911292901672547090}
   - {fileID: 6793835414398082762}
   - {fileID: 6806451019762900110}
+  - {fileID: 9100000000000000002}
   m_Father: {fileID: 7702493061161667724}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -8174,6 +8175,8 @@ MonoBehaviour:
   composureProgressFill: {fileID: 1918479466975968861}
   controlProgressFill: {fileID: 5648405354790086479}
   respecButtonLabel: {fileID: 8924851286800140214}
+  statTooltipText: {fileID: 5372059356002538685}
+  statTooltipBackground: {fileID: 9100000000000000004}
   gaugeAnimationSpeed: 5
 --- !u!1 &6408464418550401750
 GameObject:
@@ -8893,7 +8896,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uB9E4\uB2C8\uC800 Lv.3"
+  m_text: "<size=18><b>\uD504\uB85C \uB9E4\uB2C8\uC800</b></size>\n<size=12>\uBD84\uD0D5 90% / \uCE5C\uBAA9 80%</size>\n<size=12>\uD574\uAE08 500,000\uC6D0 / \uC77C\uAE09 45,000\uC6D0</size>"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 5e11e008a2c3ce94894340d39a7b5d88, type: 2}
   m_sharedMaterial: {fileID: 5064063392872720861, guid: 5e11e008a2c3ce94894340d39a7b5d88, type: 2}
@@ -9030,7 +9033,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uB9E4\uB2C8\uC800 Lv.1"
+  m_text: "<size=18><b>\uC5F0\uC2B5\uC0DD \uB9E4\uB2C8\uC800</b></size>\n<size=12>\uBD84\uD0D5 35% / \uCE5C\uBAA9 20%</size>\n<size=12>\uD574\uAE08 50,000\uC6D0 / \uC77C\uAE09 8,000\uC6D0</size>"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 5e11e008a2c3ce94894340d39a7b5d88, type: 2}
   m_sharedMaterial: {fileID: 5064063392872720861, guid: 5e11e008a2c3ce94894340d39a7b5d88, type: 2}
@@ -10611,7 +10614,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -10835,7 +10838,6 @@ RectTransform:
   - {fileID: 1609656548596462471}
   - {fileID: 3403421318189663294}
   - {fileID: 2264013416739415430}
-  - {fileID: 2549963782027688770}
   - {fileID: 1901789656249356752}
   m_Father: {fileID: 7702493061161667724}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -10894,9 +10896,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3db5ff3b92c7d69565448d052e075df7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StreamOn.Minigames.Runner.BroadcastLeaderboardPanel
-  settings: {fileID: 0}
-  provider: {fileID: 0}
-  gameId: 0
+  settings: {fileID: 11400000, guid: 59be096373b140e79a9144aec542c1c6, type: 2}
+  provider: {fileID: 922294099474835786}
+  gameId: 2
   followerLeaderboard: 0
   titleText: {fileID: 0}
   rowTexts: []
@@ -10967,7 +10969,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uB9E4\uB2C8\uC800 Lv.2"
+  m_text: "<size=18><b>\uC77C\uBC18 \uB9E4\uB2C8\uC800</b></size>\n<size=12>\uBD84\uD0D5 65% / \uCE5C\uBAA9 50%</size>\n<size=12>\uD574\uAE08 180,000\uC6D0 / \uC77C\uAE09 20,000\uC6D0</size>"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 5e11e008a2c3ce94894340d39a7b5d88, type: 2}
   m_sharedMaterial: {fileID: 5064063392872720861, guid: 5e11e008a2c3ce94894340d39a7b5d88, type: 2}
@@ -11641,8 +11643,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3db5ff3b92c7d69565448d052e075df7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StreamOn.Minigames.Runner.BroadcastLeaderboardPanel
-  settings: {fileID: 0}
-  provider: {fileID: 0}
+  settings: {fileID: 11400000, guid: 59be096373b140e79a9144aec542c1c6, type: 2}
+  provider: {fileID: 922294099474835786}
   gameId: 0
   followerLeaderboard: 0
   titleText: {fileID: 0}
@@ -12044,6 +12046,82 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!1 &9100000000000000001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 9100000000000000002}
+  - component: {fileID: 9100000000000000003}
+  - component: {fileID: 9100000000000000004}
+  m_Layer: 5
+  m_Name: Stat Tooltip Background
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!224 &9100000000000000002
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9100000000000000001}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 2549963782027688770}
+  m_Father: {fileID: 1389711168715104893}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 390, y: 76}
+  m_Pivot: {x: 0, y: 0}
+--- !u!222 &9100000000000000003
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9100000000000000001}
+  m_CullTransparentMesh: 1
+--- !u!114 &9100000000000000004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9100000000000000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.015, g: 0.02, b: 0.03, a: 0.94}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &9152282484640542246
 GameObject:
   m_ObjectHideFlags: 0

@@ -75,8 +75,8 @@ namespace StreamOn.Minigames.Runner
 
         public void ConfigureEquipment(int microphoneLevel, int interiorLevel)
         {
-            _microphoneLevel = Mathf.Clamp(microphoneLevel, 1, 3);
-            _interiorLevel = Mathf.Clamp(interiorLevel, 1, 3);
+            _microphoneLevel = Mathf.Clamp(microphoneLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+            _interiorLevel = Mathf.Clamp(interiorLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
         }
 
         public void BeginBroadcast(int followers, int gameSkill, int talkingSkill, int mentalLevel)
@@ -87,10 +87,11 @@ namespace StreamOn.Minigames.Runner
             _talkingSkill = 1;
             _mentalLevel = 1;
             Hype = _settings.startingHype;
-            CurrentViewers = Mathf.Max(0, Mathf.RoundToInt(_settings.baseDiscoveryViewers
-                + _followers * _settings.followerNotificationRate
-                + Mathf.Max(0, _interiorLevel - 1) * (_gameManager != null && _gameManager.CampaignSettings != null
-                    ? _gameManager.CampaignSettings.startingViewersPerInteriorUpgrade : 0f)));
+            RunnerCampaignSettings campaign = _gameManager != null ? _gameManager.CampaignSettings : null;
+            float followerAudience = campaign != null
+                ? _followers * campaign.ViewerRatioForWebcamLevel(_interiorLevel)
+                : _followers * _settings.followerNotificationRate;
+            CurrentViewers = Mathf.Max(0, Mathf.RoundToInt(_settings.baseDiscoveryViewers + followerAudience));
             PeakViewers = CurrentViewers;
             TotalVisitors = CurrentViewers;
             _viewerSeconds = 0f;
@@ -175,6 +176,13 @@ namespace StreamOn.Minigames.Runner
 
         public void OnModerationResult(bool correct) => AddHype(_settings == null ? 0f
             : correct ? _settings.correctModerationHype : _settings.wrongModerationHype, correct ? 1f : 0f);
+
+        public void RemoveBannedViewer()
+        {
+            if (CurrentViewers <= 0) return;
+            CurrentViewers--;
+            RefreshChatScale();
+        }
 
         public void OnFraternizationTick()
         {
@@ -290,8 +298,12 @@ namespace StreamOn.Minigames.Runner
         private void UpdateViewerCount()
         {
             if (_settings == null) return;
+            RunnerCampaignSettings campaign = _gameManager != null ? _gameManager.CampaignSettings : null;
+            float followerAudience = campaign != null
+                ? _followers * campaign.ViewerRatioForWebcamLevel(_interiorLevel)
+                : _followers * _settings.followerNotificationRate;
             float target = _settings.baseDiscoveryViewers
-                + _followers * _settings.followerNotificationRate
+                + followerAudience
                 + Hype * _settings.viewersPerHypePoint
                 ;
             float heat01 = Hype / 100f;

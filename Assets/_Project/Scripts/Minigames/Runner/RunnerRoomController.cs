@@ -153,6 +153,7 @@ namespace StreamOn.Minigames.Runner
                 mainRoomCamera.transform.position, targetPosition, blend);
         }
 
+
         private void InitializeSelectedSlot()
         {
             if (!RunnerCampaignSaveStore.TryLoad(settings, out _save))
@@ -164,10 +165,10 @@ namespace StreamOn.Minigames.Runner
             _save.talkingSkill = Mathf.Clamp(_save.talkingSkill, 1, settings.maximumTalkingSkill);
             _save.healthStat = Mathf.Clamp(_save.healthStat > 0 ? _save.healthStat : settings.startingHealthStat, 1, settings.maximumHealthStat);
             _save.mentalLevel = Mathf.Clamp(_save.mentalLevel > 0 ? _save.mentalLevel : settings.startingMentalLevel, 1, settings.maximumMentalLevel);
-            _save.pcLevel = Mathf.Clamp(_save.pcLevel, 1, 3);
-            _save.microphoneLevel = Mathf.Clamp(_save.microphoneLevel, 1, 3);
-            _save.fitnessLevel = Mathf.Clamp(_save.fitnessLevel, 1, 3);
-            _save.interiorLevel = Mathf.Clamp(_save.interiorLevel, 1, 3);
+            _save.pcLevel = Mathf.Clamp(_save.pcLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+            _save.microphoneLevel = Mathf.Clamp(_save.microphoneLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+            _save.fitnessLevel = Mathf.Clamp(_save.fitnessLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
+            _save.interiorLevel = Mathf.Clamp(_save.interiorLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
             if (_save.awaitingAdvance)
             {
                 _save.day++;
@@ -228,10 +229,8 @@ namespace StreamOn.Minigames.Runner
             }
             bool roomModalOpen = _transitioning || (_slotPanel != null && _slotPanel.activeSelf)
                 || gameSelectionOpen
-                || growthPanelOpen;
-            if (!roomModalOpen && Keyboard.current != null && Keyboard.current.iKey.wasPressedThisFrame
-                && debugPanel != null)
-                debugPanel.SetActive(!debugPanel.activeSelf);
+                || growthPanelOpen
+                || (_equipmentShop != null && _equipmentShop.IsOpen);
             if (growthPanelOpen && Keyboard.current != null
                 && (Keyboard.current.escapeKey.wasPressedThisFrame
                     || Keyboard.current.eKey.wasPressedThisFrame))
@@ -245,6 +244,12 @@ namespace StreamOn.Minigames.Runner
                 SetLaptopPromptVisible(false);
                 return;
             }
+            // The lock is turned on at several places but only turned off at some of them,
+            // so any panel closed by a route other than its own handler (a scene reload
+            // mid-flow, ShowOnlyRoomModal hiding it, a broadcast returning) used to strand
+            // the player with movement dead and nothing on screen. Nothing is open here by
+            // definition, so derive the unlock instead of trusting every close path.
+            SetPlayerLocked(false);
             if (_save != null && Keyboard.current != null && Keyboard.current.f5Key.wasPressedThisFrame)
             {
                 _notice = ManualSave() ? "수동 저장 완료" : "수동 저장 실패";
@@ -413,17 +418,19 @@ namespace StreamOn.Minigames.Runner
             SetPlayerLocked(true);
         }
 
-        public void SelectRunnerGame() => RequestGameLaunch("Runner.exe", "runner",
+        // These must read as the file names shown on the explorer tiles. The tile labels
+        // wrap onto two lines for layout; the dialog says them on one.
+        public void SelectRunnerGame() => RequestGameLaunch("INHUMANIA_RUNNER.exe", "runner",
             string.IsNullOrWhiteSpace(settings.runnerMenuSceneName)
                 ? (string.IsNullOrWhiteSpace(settings.runnerSceneName) ? settings.broadcastSceneName : settings.runnerSceneName)
                 : settings.runnerMenuSceneName);
 
-        public void SelectTileArenaGame() => RequestGameLaunch("TileArena.exe", "tile_arena",
+        public void SelectTileArenaGame() => RequestGameLaunch("TILE_ARENA.exe", "tile_arena",
             string.IsNullOrWhiteSpace(settings.tileArenaMenuSceneName)
                 ? settings.tileArenaSceneName
                 : settings.tileArenaMenuSceneName);
 
-        public void SelectPlasticKnightmareGame() => RequestGameLaunch("PlasticKnightmare.exe", "plastic_knightmare",
+        public void SelectPlasticKnightmareGame() => RequestGameLaunch("PLASTIC_KNIGHTMARE.exe", "plastic_knightmare",
             string.IsNullOrWhiteSpace(settings.plasticKnightmareMenuSceneName)
                 ? settings.plasticKnightmareSceneName
                 : settings.plasticKnightmareMenuSceneName);

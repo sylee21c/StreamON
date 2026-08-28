@@ -113,6 +113,7 @@ namespace StreamOn.Minigames.Runner
         private int _liveDonationWon;
         private float _socialFollowerPenalty;
         private int _moderationFollowerBonus;
+        private int _webcamLevel = 1;
         private readonly RunnerBroadcastPerformanceMeter _performanceMeter = new RunnerBroadcastPerformanceMeter();
         private bool _cleanMistakeProtectionUsed;
         private bool _largePenaltyProtectionUsed;
@@ -158,8 +159,10 @@ namespace StreamOn.Minigames.Runner
             _night = 1;
             _daySecondsRemaining = Mathf.Max(1f, settings.plasticDayPreparationSeconds);
             _startingFollowers = _save.subscribers;
+            _webcamLevel = Mathf.Clamp(_save.interiorLevel, 1, RunnerCampaignSettings.MaximumEquipmentLevel);
             _heat = growthSettings != null ? growthSettings.startingHype : 50f;
-            _currentViewers = Mathf.Max(0, settings.plasticStartingViewers);
+            _currentViewers = Mathf.Max(0, Mathf.RoundToInt(settings.plasticStartingViewers
+                + _startingFollowers * settings.ViewerRatioForWebcamLevel(_webcamLevel)));
             _peakViewers = _currentViewers;
             _totalVisitors = _currentViewers;
             _nextViewerUpdateAt = Time.unscaledTime;
@@ -390,6 +393,15 @@ namespace StreamOn.Minigames.Runner
             if (correct) _moderationFollowerBonus++;
         }
 
+        public void RemoveBannedViewer()
+        {
+            if (_currentViewers <= 0) return;
+            _currentViewers--;
+            RefreshChatScale();
+            RefreshHud();
+            PushChatSnapshot(_nightStarted ? SharedChatGameState.Playing : SharedChatGameState.Ready);
+        }
+
         public void OnFraternizationTick()
         {
             AddHeat(fraternizationHeatPerTick);
@@ -539,7 +551,7 @@ namespace StreamOn.Minigames.Runner
             if (growthSettings == null || settings == null) return;
             _nextViewerUpdateAt = Time.unscaledTime + Mathf.Max(.5f, growthSettings.viewerUpdateInterval);
             float target = settings.plasticStartingViewers
-                + _startingFollowers * growthSettings.followerNotificationRate
+                + _startingFollowers * settings.ViewerRatioForWebcamLevel(_webcamLevel)
                 + _heat * growthSettings.viewersPerHypePoint
                 + Mathf.Max(0, _night - 1) * settings.plasticViewersPerNight;
             float heat01 = _heat / 100f;

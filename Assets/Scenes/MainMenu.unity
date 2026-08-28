@@ -549,6 +549,7 @@ MonoBehaviour:
   fadeImage: {fileID: 2147004893}
   tutorialButton: {fileID: 1176387772}
   tutorialPanel: {fileID: 9154141526728007913}
+  tutorialCloseButton: {fileID: 2684915399249054963}
   backgroundMusic: {fileID: 8300000, guid: 856afc08a7c173349b9cc71fe9332da1, type: 3}
   uiButtonSound: {fileID: 8300000, guid: c18dcba6507ab644abcfca03fad160ae, type: 3}
   backgroundMusicVolume: 0.7
@@ -3009,11 +3010,10 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
-        m_TargetAssemblyTypeName: StreamOn.Broadcast.BroadcastGameMainMenuController,
-          Assembly-CSharp
+      - m_Target: {fileID: 6001}
+        m_TargetAssemblyTypeName: MainMenuController, Assembly-CSharp
         m_MethodName: CloseTutorial
-        m_Mode: 0
+        m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: 
